@@ -4,13 +4,18 @@
 
 namespace MUnique.OpenMU.GameLogic
 {
+    using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Linq;
-
+    using System.Threading;
     using log4net;
     using MUnique.OpenMU.DataModel.Configuration;
+    using MUnique.OpenMU.GameLogic.NPC;
     using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.World;
+    using MUnique.OpenMU.Pathfinding;
+    using MUnique.OpenMU.Persistence;
 
     /// <summary>
     /// The game map which contains instances of players, npcs, drops, and more.
@@ -19,20 +24,23 @@ namespace MUnique.OpenMU.GameLogic
     {
         private static readonly ILog Log = LogManager.GetLogger(typeof(GameMap));
 
-        private readonly IDictionary<ushort, ILocateable> objectsInMap = new Dictionary<ushort, ILocateable>();
+        private readonly IDictionary<ushort, ILocateable> objectsInMap = new ConcurrentDictionary<ushort, ILocateable>();
 
         private readonly IAreaOfInterestManager areaOfInterestManager;
 
-        private readonly ConcurrentBag<ushort> freeDropIds;
+        private readonly IdGenerator objectIdGenerator;
+
+        private readonly IdGenerator dropIdGenerator;
+
+        private int playerCount;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="GameMap"/> class.
+        /// Initializes a new instance of the <see cref="GameMap" /> class.
         /// </summary>
         /// <param name="mapDefinition">The map definition.</param>
         /// <param name="itemDropDuration">Duration of the item drop.</param>
         /// <param name="chunkSize">Size of the chunk.</param>
-        /// <param name="itemIdStart">The item identifier start.</param>
-        public GameMap(GameMapDefinition mapDefinition, int itemDropDuration, byte chunkSize, ushort itemIdStart)
+        public GameMap(GameMapDefinition mapDefinition, int itemDropDuration, byte chunkSize)
         {
             this.Definition = mapDefinition;
             this.ItemDropDuration = itemDropDuration;
@@ -40,8 +48,19 @@ namespace MUnique.OpenMU.GameLogic
             this.Terrain = new GameMapTerrain(this.Definition);
 
             this.areaOfInterestManager = new BucketAreaOfInterestManager(chunkSize);
-            this.freeDropIds = new ConcurrentBag<ushort>(Enumerable.Range(itemIdStart, (ushort)(short.MaxValue - itemIdStart)).Select(id => (ushort)id));
+            this.objectIdGenerator = new IdGenerator(ViewExtensions.ConstantPlayerId + 1, 0x7FFF);
+            this.dropIdGenerator = new IdGenerator(0, ViewExtensions.ConstantPlayerId - 1);
         }
+
+        /// <summary>
+        /// Occurs when an object was added to the map.
+        /// </summary>
+        public event EventHandler<GameMapEventArgs> ObjectAdded;
+
+        /// <summary>
+        /// Occurs when an object was removed from the map.
+        /// </summary>
+        public event EventHandler<GameMapEventArgs> ObjectRemoved;
 
         /// <summary>
         /// Gets the map identifier.
@@ -75,15 +94,14 @@ namespace MUnique.OpenMU.GameLogic
         }
 
         /// <summary>
-        /// Gets the attackables in range of the specified coordinate.
+        /// Gets the attackables in range of the specified coordinates.
         /// </summary>
-        /// <param name="x">The x coordinate.</param>
-        /// <param name="y">The y coordinate.</param>
+        /// <param name="point">The coordinates.</param>
         /// <param name="range">The range.</param>
         /// <returns>The attackables in range of the specified coordinate.</returns>
-        public IEnumerable<IAttackable> GetAttackablesInRange(int x, int y, int range)
+        public IEnumerable<IAttackable> GetAttackablesInRange(Point point, int range)
         {
-            return this.areaOfInterestManager.GetInRange(x, y, range, RangeType.Quadratic).OfType<IAttackable>().ToList();
+            return this.areaOfInterestManager.GetInRange(point, range).OfType<IAttackable>().ToList();
         }
 
         /// <summary>
@@ -103,49 +121,82 @@ namespace MUnique.OpenMU.GameLogic
         /// <param name="locateable">The locateable.</param>
         public void Remove(ILocateable locateable)
         {
-            if (this.objectsInMap.Remove(locateable.Id) && locateable.Id != 0 && locateable is DroppedItem)
-            {
-                this.freeDropIds.Add(locateable.Id);
-            }
-
             this.areaOfInterestManager.RemoveObject(locateable);
+            if (this.objectsInMap.Remove(locateable.Id) && locateable.Id != 0)
+            {
+                if (locateable is DroppedItem)
+                {
+                    this.dropIdGenerator.GiveBack(locateable.Id);
+                }
+                else
+                {
+                    this.objectIdGenerator.GiveBack(locateable.Id);
+                }
+
+                if (locateable is Player player)
+                {
+                    player.Id = 0;
+                    Interlocked.Decrement(ref this.playerCount);
+                }
+
+                this.ObjectRemoved?.Invoke(this, new GameMapEventArgs(this, locateable));
+            }
         }
 
         /// <summary>
         /// Adds the locateable to the map.
         /// </summary>
-        /// <param name="locateable">The player.</param>
+        /// <param name="locateable">The locateable object.</param>
         public void Add(ILocateable locateable)
         {
-            if (locateable is DroppedItem droppedItem)
+            switch (locateable)
             {
-                if (this.freeDropIds.TryTake(out ushort dropId))
-                {
-                    droppedItem.Id = dropId;
-                    Log.DebugFormat("{0}: AddDrop {1}", this.Definition, droppedItem.Id);
-                }
-                else
-                {
-                    Log.Warn("No free drop id available");
-                    return;
-                }
+                case DroppedItem droppedItem:
+                    droppedItem.Id = (ushort)this.dropIdGenerator.GetId();
+                    Log.DebugFormat("{0}: Added drop {1}, {2}", this.Definition, droppedItem.Id, droppedItem.Item);
+                    break;
+                case Player player:
+                    player.Id = (ushort)this.objectIdGenerator.GetId();
+                    Log.DebugFormat("{0}: Added player {1}, {2}, ", this.Definition, player.Id, player);
+                    Interlocked.Increment(ref this.playerCount);
+                    break;
+                case NonPlayerCharacter npc:
+                    npc.Id = (ushort)this.objectIdGenerator.GetId();
+                    Log.DebugFormat("{0}: Added npc {1}, {2}", this.Definition, npc.Id, npc.Definition.Designation);
+                    break;
+                case ISupportIdUpdate idUpdate:
+                    idUpdate.Id = (ushort)this.objectIdGenerator.GetId();
+                    Log.DebugFormat("{0}: Added {1}", this.Definition, locateable);
+                    break;
+                default:
+                    throw new ArgumentException($"Adding an object of type {locateable.GetType()} is not supported.");
             }
 
             this.objectsInMap.Add(locateable.Id, locateable);
             this.areaOfInterestManager.AddObject(locateable);
+            this.ObjectAdded?.Invoke(this, new GameMapEventArgs(this, locateable));
         }
 
         /// <summary>
-        /// Moves the locateable on the map.
+        /// Moves the locatable on the map.
         /// </summary>
-        /// <param name="locateable">The monster.</param>
-        /// <param name="newX">The new x coordinate.</param>
-        /// <param name="newY">The new y coordinate.</param>
+        /// <param name="locatable">The monster.</param>
+        /// <param name="target">The new coordinates.</param>
         /// <param name="moveLock">The move lock.</param>
         /// <param name="moveType">Type of the move.</param>
-        public void Move(ILocateable locateable, byte newX, byte newY, object moveLock, MoveType moveType)
+        public void Move(ILocateable locatable, Point target, object moveLock, MoveType moveType)
         {
-            this.areaOfInterestManager.MoveObject(locateable, newX, newY, moveLock, moveType);
+            this.areaOfInterestManager.MoveObject(locatable, target, moveLock, moveType);
+        }
+
+        /// <summary>
+        /// Respawns the specified locateable.
+        /// </summary>
+        /// <param name="locateable">The locateable.</param>
+        public void Respawn(ILocateable locateable)
+        {
+            this.areaOfInterestManager.RemoveObject(locateable);
+            this.areaOfInterestManager.AddObject(locateable);
         }
     }
 }

@@ -6,12 +6,12 @@ namespace MUnique.OpenMU.Tests
 {
     using System.Collections.Generic;
     using System.Linq;
+    using Moq;
     using MUnique.OpenMU.DataModel.Configuration;
     using MUnique.OpenMU.DataModel.Configuration.Items;
     using MUnique.OpenMU.GameLogic;
     using MUnique.OpenMU.GameLogic.Attributes;
     using NUnit.Framework;
-    using Rhino.Mocks;
 
     /// <summary>
     /// Tests the drop generator.
@@ -27,25 +27,8 @@ namespace MUnique.OpenMU.Tests
         {
             var config = this.GetGameConfig();
             var generator = new DefaultDropGenerator(config, this.GetRandomizer(9999));
-            var item = generator.GetItemDropsOrAddMoney(this.GetMonster(1), 0, TestHelper.GetPlayer(0)).FirstOrDefault();
+            var item = generator.GetItemDropsOrAddMoney(this.GetMonster(1), 0, TestHelper.GetPlayer()).FirstOrDefault();
             Assert.That(item, Is.Null);
-        }
-
-        /// <summary>
-        /// Tests if the drop of the item succeeds.
-        /// </summary>
-        [Test]
-        public void TestBaseItemDropItem()
-        {
-            var config = this.GetGameConfig();
-            var generator = new DefaultDropGenerator(config, this.GetRandomizer(0));
-            var item = generator.GetItemDropsOrAddMoney(this.GetMonster(1), 0, TestHelper.GetPlayer(0)).FirstOrDefault();
-
-            var possibleItemDefinition = config.BaseDropItemGroups.First().PossibleItems.First();
-            Assert.That(item, Is.Not.Null);
-
-            // ReSharper disable once PossibleNullReferenceException
-            Assert.That(item.Definition, Is.SameAs(possibleItemDefinition));
         }
 
         /// <summary>
@@ -58,7 +41,7 @@ namespace MUnique.OpenMU.Tests
             var experience = 1;
             var moneyDrop = experience + DefaultDropGenerator.BaseMoneyDrop;
 
-            var player = TestHelper.GetPlayer();
+            var player = TestHelper.GetPlayer().WithBasicDropItemGroups();
             player.GameContext.Configuration.MaximumInventoryMoney = int.MaxValue;
             player.Money = startMoney;
             var config = this.GetGameConfig();
@@ -77,14 +60,16 @@ namespace MUnique.OpenMU.Tests
         {
             var config = this.GetGameConfig();
             var monster = this.GetMonster(1);
-            monster.DropItemGroups.Add(this.GetDropItemGroup(3000, SpecialItemType.Ancient, true));
+            monster.DropItemGroups.AddBasicDropItemGroups();
+            monster.DropItemGroups.Add(3000, SpecialItemType.Ancient, true);
+
             var generator = new DefaultDropGenerator(config, this.GetRandomizer2(0, 0.5));
-            var item = generator.GetItemDropsOrAddMoney(monster, 1, TestHelper.GetPlayer(0)).FirstOrDefault();
+            var item = generator.GetItemDropsOrAddMoney(monster, 1, TestHelper.GetPlayer()).FirstOrDefault();
 
             Assert.That(item, Is.Not.Null);
 
             // ReSharper disable once PossibleNullReferenceException
-            Assert.That(item.Definition, Is.SameAs(monster.DropItemGroups.First().PossibleItems.First()));
+            Assert.That(item.Definition, Is.EqualTo(monster.DropItemGroups.Last().PossibleItems.First()));
         }
 
         /// <summary>
@@ -105,64 +90,37 @@ namespace MUnique.OpenMU.Tests
 
         private MonsterDefinition GetMonster(int numberOfDrops)
         {
-            var monster = MockRepository.GenerateStub<MonsterDefinition>();
-            monster.Stub(m => m.DropItemGroups).Return(new List<DropItemGroup>());
-
-            monster.NumberOfMaximumItemDrops = numberOfDrops;
-            monster.Stub(m => m.Attributes).Return(new List<MonsterAttribute>());
-            monster.Attributes.Add(new MonsterAttribute { AttributeDefinition = Stats.Level, Value = 0 });
-            return monster;
+            var monster = new Mock<MonsterDefinition>();
+            monster.SetupAllProperties();
+            monster.Setup(m => m.DropItemGroups).Returns(new List<DropItemGroup>());
+            monster.Setup(m => m.Attributes).Returns(new List<MonsterAttribute>());
+            monster.Object.NumberOfMaximumItemDrops = numberOfDrops;
+            monster.Object.Attributes.Add(new MonsterAttribute { AttributeDefinition = Stats.Level, Value = 0 });
+            return monster.Object;
         }
 
         private IRandomizer GetRandomizer(int randomValue)
         {
-            var randomizer = MockRepository.GenerateMock<IRandomizer>();
-            randomizer.Stub(r => r.NextInt(0, 0)).IgnoreArguments().Return(randomValue).Repeat.Any();
-            randomizer.Stub(r => r.NextDouble()).Return(randomValue / 10000.0).Repeat.Any();
-            return randomizer;
+            var randomizer = new Mock<IRandomizer>();
+            randomizer.Setup(r => r.NextInt(It.IsAny<int>(), It.IsAny<int>())).Returns(randomValue);
+            randomizer.Setup(r => r.NextDouble()).Returns(randomValue / 10000.0);
+            return randomizer.Object;
         }
 
         private IRandomizer GetRandomizer2(int integerValue, double doubleValue)
         {
-            var randomizer = MockRepository.GenerateMock<IRandomizer>();
-            randomizer.Stub(r => r.NextInt(0, 0)).IgnoreArguments().Return(integerValue);
-            randomizer.Stub(r => r.NextDouble()).Return(doubleValue);
+            var randomizer = new Mock<IRandomizer>();
+            randomizer.Setup(r => r.NextInt(It.IsAny<int>(), It.IsAny<int>())).Returns(integerValue);
+            randomizer.Setup(r => r.NextDouble()).Returns(doubleValue);
 
-            return randomizer;
+            return randomizer.Object;
         }
 
         private GameConfiguration GetGameConfig()
         {
-            var gameConfiguration = MockRepository.GenerateStub<GameConfiguration>();
-            var itemGroups = new List<DropItemGroup>
-            {
-                this.GetDropItemGroup(1, SpecialItemType.RandomItem, true),
-                this.GetDropItemGroup(1000, SpecialItemType.Excellent, true),
-                this.GetDropItemGroup(3000, SpecialItemType.Money, true)
-            };
-            gameConfiguration.Stub(c => c.BaseDropItemGroups).Return(itemGroups);
-            gameConfiguration.Stub(c => c.Items)
-                .Return(gameConfiguration.BaseDropItemGroups.SelectMany(g => g.PossibleItems).ToList());
-            return gameConfiguration;
-        }
-
-        private DropItemGroup GetDropItemGroup(int chance, SpecialItemType itemType, bool addItem)
-        {
-            var dropItemGroup = MockRepository.GenerateStub<DropItemGroup>();
-            dropItemGroup.Chance = chance / 10000.0;
-            dropItemGroup.ItemType = itemType;
-            var itemList = new List<ItemDefinition>();
-            dropItemGroup.Stub(g => g.PossibleItems).Return(itemList);
-            if (addItem)
-            {
-                var itemDefinition = MockRepository.GenerateStub<ItemDefinition>();
-                itemDefinition.DropsFromMonsters = true;
-                itemDefinition.Stub(d => d.PossibleItemSetGroups).Return(new List<ItemSetGroup>());
-                itemDefinition.Stub(d => d.PossibleItemOptions).Return(new List<ItemOptionDefinition>());
-                itemList.Add(itemDefinition);
-            }
-
-            return dropItemGroup;
+            var gameConfiguration = new Mock<GameConfiguration>();
+            gameConfiguration.Setup(c => c.Items).Returns(new List<ItemDefinition>());
+            return gameConfiguration.Object;
         }
     }
 }

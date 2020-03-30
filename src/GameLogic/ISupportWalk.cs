@@ -5,7 +5,6 @@
 namespace MUnique.OpenMU.GameLogic
 {
     using System;
-    using System.Collections.Generic;
     using MUnique.OpenMU.DataModel.Configuration;
     using MUnique.OpenMU.Pathfinding;
 
@@ -25,20 +24,29 @@ namespace MUnique.OpenMU.GameLogic
         TimeSpan StepDelay { get; }
 
         /// <summary>
-        /// Gets the next walking steps.
+        /// Gets the walk target coordinate.
         /// </summary>
-        Stack<WalkingStep> NextDirections { get; }
+        Point WalkTarget { get; }
 
         /// <summary>
-        /// Gets or sets the walk target coordinate.
+        /// Gets the steps which are about to happen next by writing them into the given span.
         /// </summary>
-        Point WalkTarget { get; set; }
+        /// <param name="steps">The steps.</param>
+        /// <returns>The number of written steps.</returns>
+        int GetSteps(Span<WalkingStep> steps);
+
+        /// <summary>
+        /// Gets the directions of the steps which are about to happen next by writing them into the given span.
+        /// </summary>
+        /// <param name="directions">The directions.</param>
+        /// <returns>The number of written directions.</returns>
+        int GetDirections(Span<Direction> directions);
     }
 
     /// <summary>
     /// A walking step information.
     /// </summary>
-    public struct WalkingStep
+    public struct WalkingStep : IEquatable<WalkingStep>
     {
         /// <summary>
         /// Gets or sets point from where the step originates.
@@ -54,5 +62,12 @@ namespace MUnique.OpenMU.GameLogic
         /// Gets or sets the direction (1 - 8).
         /// </summary>
         public Direction Direction { get; set; }
+
+        /// <inheritdoc/>
+        public bool Equals(WalkingStep other)
+        {
+            return this.From == other.From
+                   && this.Direction == other.Direction;
+        }
     }
 }

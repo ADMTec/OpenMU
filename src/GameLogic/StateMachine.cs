@@ -84,14 +84,11 @@ namespace MUnique.OpenMU.GameLogic
 
             lock (this.lockObject)
             {
-                if (this.CurrentState.PossibleTransitions.Contains(nextState))
+                if (this.CurrentState.PossibleTransitions.Contains(nextState) && this.OnStateChanging(nextState))
                 {
-                    if (this.OnStateChanging(nextState))
-                    {
-                        this.CurrentState = nextState;
-                        this.OnStateChanged();
-                        return true;
-                    }
+                    this.CurrentState = nextState;
+                    this.OnStateChanged();
+                    return true;
                 }
             }
 
@@ -111,7 +108,7 @@ namespace MUnique.OpenMU.GameLogic
                 this.OnStateChanged();
             })
             {
-                Allowed = this.CurrentState.PossibleTransitions.Contains(nextState) && this.OnStateChanging(nextState)
+                Allowed = this.CurrentState.PossibleTransitions.Contains(nextState) && this.OnStateChanging(nextState),
             };
 
             return context;

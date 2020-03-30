@@ -21,7 +21,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
         /// <returns>The logger.</returns>
         public NpgsqlLogger CreateLogger(string name)
         {
-            var logger = LogManager.GetLogger(name);
+            var logger = LogManager.GetLogger(typeof(NpgsqlLog4NetLoggingProvider).Assembly, name);
             return new NpgsqlLog4NetLogger(logger);
         }
 
@@ -59,9 +59,9 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
                         return this.logger.IsErrorEnabled;
                     case NpgsqlLogLevel.Fatal:
                         return this.logger.IsFatalEnabled;
+                    default:
+                        return false;
                 }
-
-                return false;
             }
 
             public override void Log(NpgsqlLogLevel level, int connectorId, string msg, Exception exception = null)
@@ -82,6 +82,9 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
                         break;
                     case NpgsqlLogLevel.Fatal:
                         this.logger.Fatal(msg, exception);
+                        break;
+                    default:
+                        // log nothing
                         break;
                 }
             }

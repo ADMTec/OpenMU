@@ -1,6 +1,6 @@
 ﻿# ChatServer ExDB Connector
 
-This is not directly a part of the OpenMU project. It's more like a side product to make the ChatServer available to users of the 'classical' private MU Servers.
+This isn't directly a part of the OpenMU project. It's more like a side product to make the ChatServer available to users of the 'classical' private MU Servers.
 They have - or maybe had :) - the problem that they are bound to use the original closed source ChatServer of Webzen, if they get it working at all.
 
 So to offer an open source alternative to the original ChatServer of Webzen, you can use this project to connect the OpenMU-ChatServer with your 'classic' ExDB server.
@@ -43,7 +43,7 @@ When the ChatServer connects to the ExDB server, it sends a data packet to regis
 
 Example: C1 3A 00 02 AC DA 43 68 61 74 53 65 72 76 65 72 00
 
-From now, the ChatServer will receive chat room creation and invitation requests from the ExDB Server, which were previosly requested by the players.
+From now, the ChatServer will receive chat room creation and invitation requests from the ExDB Server, which were previously requested by the players.
 
 ### Chat Room Creation Request
 When a client requests to create a new chat room, the following data packet is sent from the ExDB Server to the ChatServer.
@@ -51,12 +51,17 @@ When a client requests to create a new chat room, the following data packet is s
 |  Length  | Data type | Value | Description |
 |----------|---------|-------------|---------|
 | 1 | byte | 0xC1   | Packet header - type |
-| 1 | byte | 0x17   | Packet header - length of the packet |
+| 1 | byte | 0x25   | Packet header - length of the packet |
 | 1 | byte | 0xA0   | Packet Type 'chat room creation' |
-| 10 | string |    | Name of the character who wants to create the room |
-| 10 | string |    | Name of the character who should be invited to the room  |
+| 10 | string |     | Name of the character who wants to create the room |
+| 10 | string |     | Name of the character who should be invited to the room  |
+| 1 | byte | 0x01   | "Type", not relevant? |
+| 2 | ushort |      | Player id of the character who wants to create the room, big endian  |
+| 2 | ushort |      | Server id of the character who wants to create the room, big endian  |
+| 2 | ushort |      | Player id of the character who should be invited, big endian |
+| 2 | ushort |      | Server id of the character who should be invited, big endian |
 
-Example: C1 17 A0 41 42 43 44 45 46 47 48 49 4A 50 51 52 53 54 55 56 57 58 59
+Example: C1 25 A0 41 42 43 44 45 46 47 48 49 4A 50 51 52 53 54 55 56 57 58 59 01 20 01 00 01 20 02 00 01
 
 ### Chat Room Creation Responses
 For each of both players, there is one data packet sent back to the ExDB Server:
@@ -67,16 +72,20 @@ For each of both players, there is one data packet sent back to the ExDB Server:
 | 1 | byte | 0x2C   | Packet header - length of the packet |
 | 1 | byte | 0xA0   | Packet Type 'chat room creation' |
 | 1 | byte | 0x01   | Success flag |
-| 2 | ushort |    | Chat room id |
+| 2 | ushort |    | Chat room id, big endian |
 | 10 | string |    | Name of the character to which a chat room invitation should be sent |
 | 10 | string |    | Name of the chat partner character |
-| 6 |  |    | Don't know |
-| 4 | uint |  ‭‬  | Authentication token, big endian |
-| 8 |  |    | Don't know |
+| 2 | ushort |    | Player id of the character to which a chat room invitation should be sent, big endian |
+| 2 | ushort |     | Server id of the character to which a chat room invitation should be sent, big endian  |
+| 2 | byte |    | Padding bytes for the alignment of the following authentication token |
+| 4 | uint |  ‭‬  | Authentication token of the character to which a chat room invitation should be sent, big endian |
+| 4 | uint |  ‭‬  | Authentication token of the chat partner, big endian |
+| 1 | byte |    | 'Type' |
+| 3 | byte |    | Don't know - padding?|
 
-Example First Player: C1 2C A0 01 00 00 41 42 43 44 45 46 47 48 49 4A 50 51 52 53 54 55 56 57 58 59 00 00 00 00 CC CC 00 00 11 04 CC CC CC CC 00 CC CC CC
+Example First Player: C1 2C A0 01 00 00 41 42 43 44 45 46 47 48 49 4A 50 51 52 53 54 55 56 57 58 59 00 00 00 00 CC CC 00 00 11 04 01 00 BB 05 00 CC CC CC
 
-Example Second Player: C1 2C A0 01 00 00 50 51 52 53 54 55 56 57 58 59 41 42 43 44 45 46 47 48 49 4A 00 00 00 00 CC CC 01 00 BB 05 CC CC CC CC 01 CC CC CC
+Example Second Player: C1 2C A0 01 00 00 50 51 52 53 54 55 56 57 58 59 41 42 43 44 45 46 47 48 49 4A 00 00 00 00 CC CC 01 00 BB 05 00 00 11 04  01 CC CC CC
 
 
 ### Chat Room Invitation Request
@@ -87,12 +96,15 @@ When a client requests to invite another friend to an existing chat room, the fo
 | 1 | byte | 0xC1   | Packet header - type |
 | 1 | byte | 0x16   | Packet header - length of the packet |
 | 1 | byte | 0xA1   | Packet Type 'chat room invitation' |
-| 1 | byte | 0x00   | ? |
-| 2 | ushort |  | Chat Room Id |
+| 1 | byte | 0x00   | Padding |
+| 2 | ushort |  | Chat room id, big endian |
 | 10 | string |    | Name of the character who should be invited to the room  |
+| 2 | ushort |    | Player id of the character to which a chat room invitation should be sent, big endian |
+| 2 | ushort |     | Server id of the character to which a chat room invitation should be sent, big endian  |
+| 1 | byte |    | 'Type' |
 
-Example: C1 10 A1 00 00 00 61 62 63 64 65 66 67 68 69 6F
+Example: C1 15 A1 00 00 00 61 62 63 64 65 66 67 68 69 6F 01 20 01 00 57
 
 The ChatServer answers this with the same packet as above, but without filling the second character name - no wonder, there is more than one player in the room already.
 
-Example: C1 2C A0 01 00 00 61 62 63 64 65 66 67 68 69 6F CC CC CC CC CC CC CC CC CC CC 53 54 55 56 CC CC 02 00 C6 05 CC CC CC CC 57 CC CC CC
+Example: C1 2C A0 01 00 00 61 62 63 64 65 66 67 68 69 6F CC CC CC CC CC CC CC CC CC CC 01 20 01 00 CC CC 02 00 C6 05 CC CC CC CC 57 CC CC CC

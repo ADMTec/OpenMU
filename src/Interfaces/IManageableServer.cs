@@ -4,10 +4,13 @@
 
 namespace MUnique.OpenMU.Interfaces
 {
+    using System;
+    using System.ComponentModel;
+
     /// <summary>
-    /// General interface for a server which provides some informations and functions to manage it from outside.
+    /// General interface for a server which provides some information and functions to manage it from outside.
     /// </summary>
-    public interface IManageableServer
+    public interface IManageableServer : INotifyPropertyChanged
     {
         /// <summary>
         /// Gets the identifier of the server.
@@ -15,9 +18,19 @@ namespace MUnique.OpenMU.Interfaces
         int Id { get; }
 
         /// <summary>
+        /// Gets the identifier of the configuration of the server.
+        /// </summary>
+        Guid ConfigurationId { get; }
+
+        /// <summary>
         /// Gets the description.
         /// </summary>
         string Description { get; }
+
+        /// <summary>
+        /// Gets the type.
+        /// </summary>
+        ServerType Type { get; }
 
         /// <summary>
         /// Gets the current state of the server.

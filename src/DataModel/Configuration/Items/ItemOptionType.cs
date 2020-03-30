@@ -28,6 +28,11 @@ namespace MUnique.OpenMU.DataModel.Configuration.Items
         public string Description { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether this item option is visible to other players.
+        /// </summary>
+        public bool IsVisible { get; set; }
+
+        /// <summary>
         /// Implements the operator ==.
         /// </summary>
         /// <param name="lhs">The LHS.</param>
@@ -42,7 +47,7 @@ namespace MUnique.OpenMU.DataModel.Configuration.Items
                 return true;
             }
 
-            if (ReferenceEquals(lhs, null) || ReferenceEquals(rhs, null))
+            if (lhs is null || rhs is null)
             {
                 return false;
             }

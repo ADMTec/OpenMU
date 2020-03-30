@@ -11,6 +11,9 @@ namespace MUnique.OpenMU.ConnectServer
     using System.Threading.Tasks;
     using log4net;
     using MUnique.OpenMU.ConnectServer.PacketHandler;
+    using MUnique.OpenMU.Interfaces;
+    using MUnique.OpenMU.Network;
+    using Pipelines.Sockets.Unofficial;
 
     /// <summary>
     /// The listener which is waiting for new connecting clients.
@@ -18,11 +21,9 @@ namespace MUnique.OpenMU.ConnectServer
     internal class ClientListener
     {
         private static readonly ILog Logger = LogManager.GetLogger(typeof(ClientListener));
-
-        private readonly ClientPool clientPool;
         private readonly object clientListLock = new object();
-        private readonly Settings settings;
-
+        private readonly IConnectServerSettings connectServerSettings;
+        private readonly IPacketHandler<Client> packetHandler;
         private TcpListener clientListener;
 
         /// <summary>
@@ -31,12 +32,17 @@ namespace MUnique.OpenMU.ConnectServer
         /// <param name="connectServer">The connect server.</param>
         public ClientListener(IConnectServer connectServer)
         {
-            this.settings = connectServer.Settings;
-            this.clientPool = new ClientPool(new ClientPacketHandler(connectServer), connectServer.Settings);
+            this.connectServerSettings = connectServer.Settings;
+            this.packetHandler = new ClientPacketHandler(connectServer);
             this.Clients = new List<Client>();
             this.ClientSocketAcceptPlugins = new List<IAfterSocketAcceptPlugin>();
             this.ClientSocketDisconnectPlugins = new List<IAfterDisconnectPlugin>();
         }
+
+        /// <summary>
+        /// Occurs when the number of connected clients changed.
+        /// </summary>
+        public event EventHandler ConnectedClientsChanged;
 
         /// <summary>
         /// Gets the connected clients.
@@ -58,10 +64,10 @@ namespace MUnique.OpenMU.ConnectServer
         /// </summary>
         public void StartListener()
         {
-            this.clientListener = new TcpListener(IPAddress.Any, this.settings.ClientListenerPort);
-            this.clientListener.Start(this.settings.ListenerBacklog);
+            this.clientListener = new TcpListener(IPAddress.Any, this.connectServerSettings.ClientListenerPort);
+            this.clientListener.Start(this.connectServerSettings.ListenerBacklog);
             Task.Run(this.BeginAccept);
-            Logger.InfoFormat("Client Listener started, Port {0}", this.settings.ClientListenerPort);
+            Logger.InfoFormat("Client Listener started, Port {0}", this.connectServerSettings.ClientListenerPort);
         }
 
         /// <summary>
@@ -79,11 +85,11 @@ namespace MUnique.OpenMU.ConnectServer
             Socket newClient;
             try
             {
-                newClient = await this.clientListener.AcceptSocketAsync();
+                newClient = await this.clientListener.AcceptSocketAsync().ConfigureAwait(false);
             }
-            catch (ObjectDisposedException ex)
+            catch (ObjectDisposedException)
             {
-                Logger.Warn("gslistener has been disposed", ex);
+                // this exception is expected when the clientListener got disposed. In this case we don't want to spam the log.
                 return;
             }
             catch (Exception ex)
@@ -113,28 +119,26 @@ namespace MUnique.OpenMU.ConnectServer
             }
 
             this.AddClient(socket);
+            this.ConnectedClientsChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private void AddClient(Socket socket)
         {
-            var client = this.clientPool.GetClient(socket);
-            if (client != null)
-            {
-                lock (this.clientListLock)
-                {
-                    this.Clients.Add(client);
-                }
+            var client = new Client(new Connection(SocketConnection.Create(socket), null, null), this.connectServerSettings.Timeout, this.packetHandler, this.connectServerSettings.MaximumReceiveSize);
+            var ipEndpoint = (IPEndPoint)socket.RemoteEndPoint;
+            client.Address = ipEndpoint.Address;
+            client.Port = ipEndpoint.Port;
+            client.Timeout = this.connectServerSettings.Timeout;
 
-                client.Connection.Disconnected += (sender, e) => this.OnClientDisconnect(client);
-                Logger.DebugFormat("Client connected: {0}, current client count: {1}", socket.RemoteEndPoint, this.Clients.Count);
-                client.SendHello();
-                client.Connection.BeginReceive();
-            }
-            else
+            lock (this.clientListLock)
             {
-                Logger.WarnFormat("Client object could not get created for: {0}, current client count: {1}", socket.RemoteEndPoint, this.Clients.Count);
-                socket.Dispose();
+                this.Clients.Add(client);
             }
+
+            client.Connection.Disconnected += (sender, e) => this.OnClientDisconnect(client);
+            Logger.DebugFormat("Client connected: {0}, current client count: {1}", socket.RemoteEndPoint, this.Clients.Count);
+            client.SendHello();
+            client.Connection.BeginReceive();
         }
 
         private void OnClientDisconnect(Client client)
@@ -150,7 +154,7 @@ namespace MUnique.OpenMU.ConnectServer
                 this.Clients.Remove(client);
             }
 
-            this.clientPool.Add(client);
+            this.ConnectedClientsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 }

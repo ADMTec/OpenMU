@@ -51,7 +51,10 @@ namespace MUnique.OpenMU.GameLogic.NPC
         /// <inheritdoc/>
         public void RegisterHit(IAttackable attacker)
         {
-            // this ai does not care if it gets hit.
+            if (this.currentTarget == null)
+            {
+                this.currentTarget = attacker;
+            }
         }
 
         private IAttackable SearchNextTarget()
@@ -72,7 +75,7 @@ namespace MUnique.OpenMU.GameLogic.NPC
 
             foreach (var attackable in tempObservers.OfType<IAttackable>())
             {
-                if (this.map.Terrain.SafezoneMap[attackable.X, attackable.Y])
+                if (this.map.Terrain.SafezoneMap[attackable.Position.X, attackable.Position.Y])
                 {
                     continue;
                 }
@@ -119,7 +122,7 @@ namespace MUnique.OpenMU.GameLogic.NPC
             {
                 // Old Target out of Range?
                 if (!this.currentTarget.Alive
-                    || this.map.Terrain.SafezoneMap[this.currentTarget.X, this.currentTarget.Y]
+                    || this.currentTarget.IsAtSafezone()
                     || !this.IsTargetInObservers())
                 {
                     this.currentTarget = this.SearchNextTarget();

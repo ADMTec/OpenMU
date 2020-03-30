@@ -4,6 +4,8 @@
 
 namespace MUnique.OpenMU.GameLogic
 {
+    using MUnique.OpenMU.Pathfinding;
+
     /// <summary>
     /// Interface for an object which has a location on a map.
     /// </summary>
@@ -15,14 +17,9 @@ namespace MUnique.OpenMU.GameLogic
         GameMap CurrentMap { get; }
 
         /// <summary>
-        /// Gets or sets the x coordinate on the map.
+        /// Gets or sets the coordinates on the map.
         /// </summary>
-        byte X { get; set; }
-
-        /// <summary>
-        /// Gets or sets the y coordinate on the map.
-        /// </summary>
-        byte Y { get; set; }
+        Point Position { get; set; }
     }
 
     /// <summary>
@@ -31,10 +28,17 @@ namespace MUnique.OpenMU.GameLogic
     public interface IHasBucketInformation
     {
         /// <summary>
-        /// Gets or sets the current bucket where this instance currently is in.
+        /// Gets or sets the current bucket where this instance currently moves at.
         /// This is helpful for other objects to determine if the observation should
         /// be continued or not.
         /// </summary>
-        Bucket<ILocateable> CurrentBucket { get; set; }
+        Bucket<ILocateable> NewBucket { get; set; }
+
+        /// <summary>
+        /// Gets or sets the bucket where this instance currently moves away.
+        /// This is helpful for other objects to determine if the observation should
+        /// be continued or not.
+        /// </summary>
+        Bucket<ILocateable> OldBucket { get; set; }
     }
 }

@@ -5,39 +5,67 @@
 namespace MUnique.OpenMU.GameServer.RemoteView
 {
     using System;
+    using System.Buffers;
     using log4net;
     using MUnique.OpenMU.GameLogic;
+    using MUnique.OpenMU.GameLogic.Views;
     using MUnique.OpenMU.GameServer.MessageHandler;
     using MUnique.OpenMU.Network;
+    using MUnique.OpenMU.Network.PlugIns;
+    using MUnique.OpenMU.PlugIns;
 
     /// <summary>
-    /// A player which is playing though a remote connection.
+    /// A player which is playing through a remote connection.
     /// </summary>
-    public class RemotePlayer : Player
+    public class RemotePlayer : Player, IClientVersionProvider
     {
         private static readonly ILog Logger = LogManager.GetLogger(typeof(RemotePlayer));
+
+        private readonly byte[] packetBuffer = new byte[0xFF];
+
+        private ClientVersion clientVersion;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RemotePlayer"/> class.
         /// </summary>
-        /// <param name="id">The identifier.</param>
         /// <param name="gameContext">The game context.</param>
-        /// <param name="packetHandler">The packet handler.</param>
         /// <param name="connection">The remote connection.</param>
-        public RemotePlayer(ushort id, IGameServerContext gameContext, IPacketHandler packetHandler, IConnection connection)
-            : base(id, gameContext, null)
+        /// <param name="clientVersion">The expected client version of the connected player.</param>
+        public RemotePlayer(IGameServerContext gameContext, IConnection connection, ClientVersion clientVersion)
+            : base(gameContext)
         {
-            this.PlayerView = new RemoteView(connection, this, gameContext, new AppearanceSerializer());
             this.Connection = connection;
-            this.MainPacketHandler = packetHandler;
+            this.clientVersion = clientVersion;
+            this.MainPacketHandler = new MainPacketHandlerPlugInContainer(this, gameContext.PlugInManager);
+            this.MainPacketHandler.Initialize();
             this.Connection.PacketReceived += (sender, packet) => this.PacketReceived(packet);
             this.Connection.Disconnected += (sender, packet) => this.Disconnect();
         }
+
+        /// <inheritdoc />
+        public event EventHandler ClientVersionChanged;
 
         /// <summary>
         /// Gets the game server context.
         /// </summary>
         public IGameServerContext GameServerContext => this.GameContext as IGameServerContext;
+
+        /// <inheritdoc />
+        public ClientVersion ClientVersion
+        {
+            get => this.clientVersion;
+
+            set
+            {
+                if (value == this.ClientVersion)
+                {
+                    return;
+                }
+
+                this.clientVersion = value;
+                this.ClientVersionChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
 
         /// <summary>
         /// Gets the connection.
@@ -45,43 +73,27 @@ namespace MUnique.OpenMU.GameServer.RemoteView
         internal IConnection Connection { get; private set; }
 
         /// <summary>
-        /// Gets or sets the main packet handler.
+        /// Gets the currently effective appearance serializer.
         /// </summary>
-        internal IPacketHandler MainPacketHandler { get; set; }
+        internal IAppearanceSerializer AppearanceSerializer => this.ViewPlugIns.GetPlugIn<IAppearanceSerializer>();
 
         /// <summary>
-        /// Is getting called when a packet got received from the connection of the player.
+        /// Gets the currently effective item serializer.
         /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        public void PacketReceived(byte[] buffer)
+        internal IItemSerializer ItemSerializer => this.ViewPlugIns.GetPlugIn<IItemSerializer>();
+
+        /// <summary>
+        /// Gets the main packet handler.
+        /// </summary>
+        /// <value>
+        /// The main packet handler.
+        /// </value>
+        internal MainPacketHandlerPlugInContainer MainPacketHandler { get; }
+
+        /// <inheritdoc />
+        protected override ICustomPlugInContainer<IViewPlugIn> CreateViewPlugInContainer()
         {
-            using (this.PushServerLogContext())
-            using (log4net.ThreadContext.Stacks["connection"].Push(this.Connection.ToString()))
-            using (log4net.ThreadContext.Stacks["account"].Push(this.GetAccountName()))
-            using (log4net.ThreadContext.Stacks["character"].Push(this.GetSelectedCharacterName()))
-            {
-                try
-                {
-                    if (Logger.IsDebugEnabled)
-                    {
-                       Logger.DebugFormat("[C->S] {0}", buffer.AsString());
-                    }
-
-                    if (this.MainPacketHandler != null)
-                    {
-                        this.MainPacketHandler.HandlePacket(this, buffer);
-                    }
-
-                    if (buffer[0] == 0xC1 && buffer[1] == 0xB8 && buffer[2] == 1) ////Experimental
-                    {
-                        this.ClientReadyAfterMapChange();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error(ex);
-                }
-            }
+            return new ViewPlugInContainer(this, this.ClientVersion, this.GameContext.PlugInManager);
         }
 
         /// <inheritdoc/>
@@ -93,6 +105,53 @@ namespace MUnique.OpenMU.GameServer.RemoteView
                 this.Connection.Disconnect();
                 this.Connection.Dispose();
                 this.Connection = null;
+            }
+        }
+
+        /// <summary>
+        /// Is getting called when a packet got received from the connection of the player.
+        /// </summary>
+        /// <param name="sequence">The packet.</param>
+        private void PacketReceived(ReadOnlySequence<byte> sequence)
+        {
+            using (this.PushServerLogContext())
+            using (log4net.ThreadContext.Stacks["connection"].Push(this.Connection.ToString()))
+            using (log4net.ThreadContext.Stacks["account"].Push(this.GetAccountName()))
+            using (log4net.ThreadContext.Stacks["character"].Push(this.GetSelectedCharacterName()))
+            {
+                try
+                {
+                    Span<byte> buffer;
+                    IMemoryOwner<byte> owner = null;
+                    if (sequence.Length <= this.packetBuffer.Length)
+                    {
+                        sequence.CopyTo(this.packetBuffer);
+                        buffer = this.packetBuffer.AsSpan(0, this.packetBuffer.GetPacketSize());
+                    }
+                    else
+                    {
+                        owner = MemoryPool<byte>.Shared.Rent((int)sequence.Length);
+                        buffer = owner.Memory.Slice(0, (int)sequence.Length).Span;
+                    }
+
+                    try
+                    {
+                        if (Logger.IsDebugEnabled)
+                        {
+                            Logger.DebugFormat("[C->S] {0}", buffer.ToArray().AsString());
+                        }
+
+                        this.MainPacketHandler.HandlePacket(this, buffer);
+                    }
+                    finally
+                    {
+                        owner?.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex);
+                }
             }
         }
 

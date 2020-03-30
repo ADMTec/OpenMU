@@ -9,31 +9,29 @@ namespace MUnique.OpenMU.GameLogic.NPC
     using System.Threading;
 
     using MUnique.OpenMU.DataModel.Configuration;
-    using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.World;
     using MUnique.OpenMU.Pathfinding;
 
     /// <summary>
     /// The implementation of a non-player-character (Monster) which can not be attacked or attack.
     /// </summary>
-    public class NonPlayerCharacter : IObservable, IRotateable, ILocateable, IHasBucketInformation, IDisposable
+    public class NonPlayerCharacter : IObservable, IRotatable, ILocateable, IHasBucketInformation, IDisposable
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="NonPlayerCharacter"/> class.
         /// </summary>
         /// <param name="spawnInfo">The spawn information.</param>
         /// <param name="stats">The stats.</param>
-        /// <param name="id">The identifier.</param>
         /// <param name="map">The map on which this instance will spawn.</param>
-        public NonPlayerCharacter(MonsterSpawnArea spawnInfo, MonsterDefinition stats, ushort id, GameMap map)
+        public NonPlayerCharacter(MonsterSpawnArea spawnInfo, MonsterDefinition stats, GameMap map)
         {
-            this.Id = id;
             this.SpawnArea = spawnInfo;
             this.Definition = stats;
             this.CurrentMap = map;
         }
 
         /// <inheritdoc/>
-        public ushort Id { get; }
+        public ushort Id { get; set; }
 
         /// <summary>
         /// Gets or sets the stats of this instance.
@@ -41,10 +39,7 @@ namespace MUnique.OpenMU.GameLogic.NPC
         public MonsterDefinition Definition { get; set; }
 
         /// <inheritdoc/>
-        public byte X { get; set; }
-
-        /// <inheritdoc/>
-        public byte Y { get; set; }
+        public virtual Point Position { get; set; }
 
         /// <inheritdoc/>
         public Direction Rotation { get; set; }
@@ -66,31 +61,27 @@ namespace MUnique.OpenMU.GameLogic.NPC
         public MonsterSpawnArea SpawnArea { get; protected set; }
 
         /// <inheritdoc/>
-        public Bucket<ILocateable> CurrentBucket { get; set; }
+        public Bucket<ILocateable> NewBucket { get; set; }
+
+        /// <inheritdoc/>
+        public Bucket<ILocateable> OldBucket { get; set; }
 
         /// <summary>
-        /// Respawns this instance.
+        /// Initializes this instance.
         /// </summary>
-        public virtual void Respawn()
+        public virtual void Initialize()
         {
             var spawnPoint = this.GetNewSpawnPoint(this.SpawnArea);
-            var newx = spawnPoint.X;
-            var newy = spawnPoint.Y;
             if (this.SpawnArea.Quantity > 1)
             {
-                while (!(!this.CurrentMap.Terrain.SafezoneMap[newx, newy] && this.CurrentMap.Terrain.WalkMap[newx, newy]))
+                while (!(!this.CurrentMap.Terrain.SafezoneMap[spawnPoint.X, spawnPoint.Y] && this.CurrentMap.Terrain.WalkMap[spawnPoint.X, spawnPoint.Y]))
                 {
                     spawnPoint = this.GetNewSpawnPoint(this.SpawnArea);
-                    newx = spawnPoint.X;
-                    newy = spawnPoint.Y;
                 }
             }
 
-            this.X = newx;
-            this.Y = newy;
+            this.Position = spawnPoint;
             this.Rotation = GetSpawnDirection(this.SpawnArea.Direction);
-
-            this.CurrentMap.Add(this);
         }
 
         /// <inheritdoc/>
@@ -122,22 +113,9 @@ namespace MUnique.OpenMU.GameLogic.NPC
         }
 
         /// <inheritdoc/>
-        public override bool Equals(object obj)
-        {
-            var otherObj = obj as NonPlayerCharacter;
-            return this.Id == otherObj?.Id;
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            return this.Id;
-        }
-
-        /// <inheritdoc/>
         public override string ToString()
         {
-            return $"{this.Definition.Designation} - Id: {this.Id} - Position: {this.X}/{this.Y}";
+            return $"{this.Definition.Designation} - Id: {this.Id} - Position: {this.Position}";
         }
 
         /// <inheritdoc/>
@@ -151,9 +129,9 @@ namespace MUnique.OpenMU.GameLogic.NPC
         /// <summary>
         /// Releases unmanaged and - optionally - managed resources.
         /// </summary>
-        /// <param name="dispose"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
+        /// <param name="managed"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2213:DisposableFieldsShouldBeDisposed", MessageId = "<ObserverLock>k__BackingField", Justification = "Can't access backing field.")]
-        protected virtual void Dispose(bool dispose)
+        protected virtual void Dispose(bool managed)
         {
             this.ObserverLock.Dispose();
         }
@@ -161,10 +139,9 @@ namespace MUnique.OpenMU.GameLogic.NPC
         /// <summary>
         /// Moves the instance to the specified position.
         /// </summary>
-        /// <param name="newx">The new x coordinate.</param>
-        /// <param name="newy">The new y coordinate.</param>
+        /// <param name="target">The new coordinates.</param>
         /// <param name="type">The type of moving.</param>
-        protected virtual void Move(byte newx, byte newy, MoveType type)
+        protected virtual void Move(Point target, MoveType type)
         {
             throw new NotSupportedException("NPCs can't be moved");
         }

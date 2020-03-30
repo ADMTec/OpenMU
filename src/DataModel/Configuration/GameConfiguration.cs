@@ -6,12 +6,15 @@ namespace MUnique.OpenMU.DataModel.Configuration
 {
     using System.Collections.Generic;
     using MUnique.OpenMU.AttributeSystem;
+    using MUnique.OpenMU.DataModel.Composition;
     using MUnique.OpenMU.DataModel.Configuration.Items;
+    using MUnique.OpenMU.PlugIns;
 
     /// <summary>
     /// Defines the game configuration.
     /// A game configuration contains the whole configuration of a game, directly or indirectly.
     /// </summary>
+    [AggregateRoot]
     public class GameConfiguration
     {
         /// <summary>
@@ -38,6 +41,11 @@ namespace MUnique.OpenMU.DataModel.Configuration
         public int MaximumInventoryMoney { get; set; }
 
         /// <summary>
+        /// Gets or sets the maximum vault money value.
+        /// </summary>
+        public int MaximumVaultMoney { get; set; }
+
+        /// <summary>
         /// Gets or sets the experience table. Index is the player level, value the needed experience to reach that level.
         /// </summary>
         public long[] ExperienceTable { get; set; }
@@ -58,6 +66,11 @@ namespace MUnique.OpenMU.DataModel.Configuration
         public int MaximumLetters { get; set; }
 
         /// <summary>
+        /// Gets or sets the price of sending a letter.
+        /// </summary>
+        public int LetterSendPrice { get; set; }
+
+        /// <summary>
         /// Gets or sets the maximum number of characters per account.
         /// </summary>
         public byte MaximumCharactersPerAccount { get; set; }
@@ -66,7 +79,7 @@ namespace MUnique.OpenMU.DataModel.Configuration
         /// Gets or sets the character name regex.
         /// </summary>
         /// <remarks>
-        /// "^[a-zA-Z0-9]{3,10}$";
+        /// "^[a-zA-Z0-9]{3,10}$";.
         /// </remarks>
         public string CharacterNameRegex { get; set; }
 
@@ -83,76 +96,97 @@ namespace MUnique.OpenMU.DataModel.Configuration
         /// <summary>
         /// Gets or sets the possible jewel mixes.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<JewelMix> JewelMixes { get; protected set; }
 
         /// <summary>
         /// Gets or sets the warp list.
         /// </summary>
-        public IDictionary<ushort, WarpInfo> WarpList { get; protected set; }
+        [MemberOfAggregate]
+        public virtual ICollection<WarpInfo> WarpList { get; protected set; }
 
         /// <summary>
-        /// Gets or sets the base drop item groups which are valid for the whole game.
+        /// Gets or sets the drop item groups which can be assigned to maps and characters.
         /// </summary>
-        public virtual ICollection<DropItemGroup> BaseDropItemGroups { get; protected set; }
+        [MemberOfAggregate]
+        public virtual ICollection<DropItemGroup> DropItemGroups { get; protected set; }
 
         /// <summary>
         /// Gets or sets the skills of this game configuration.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<Skill> Skills { get; protected set; }
 
         /// <summary>
         /// Gets or sets the character classes.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<CharacterClass> CharacterClasses { get; protected set; }
 
         /// <summary>
         /// Gets or sets the item definitions.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<ItemDefinition> Items { get; protected set; }
 
         /// <summary>
         /// Gets or sets the item slot types.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<ItemSlotType> ItemSlotTypes { get; protected set; }
 
         /// <summary>
         /// Gets or sets the item option definitions.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<ItemOptionDefinition> ItemOptions { get; protected set; }
 
         /// <summary>
         /// Gets or sets the item option types.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<ItemOptionType> ItemOptionTypes { get; protected set; }
 
         /// <summary>
         /// Gets or sets the item set groups.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<ItemSetGroup> ItemSetGroups { get; protected set; }
 
         /// <summary>
         /// Gets or sets the map definitions.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<GameMapDefinition> Maps { get; protected set; }
 
         /// <summary>
         /// Gets or sets the monster definitions.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<MonsterDefinition> Monsters { get; protected set; }
 
         /// <summary>
         /// Gets or sets the attributes.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<AttributeDefinition> Attributes { get; protected set; }
 
         /// <summary>
         /// Gets or sets the magic effects.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<MagicEffectDefinition> MagicEffects { get; protected set; }
 
         /// <summary>
         /// Gets or sets the master skill roots.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<MasterSkillRoot> MasterSkillRoots { get; protected set; }
+
+        /// <summary>
+        /// Gets or sets the plug in configurations.
+        /// </summary>
+        [MemberOfAggregate]
+        public virtual ICollection<PlugInConfiguration> PlugInConfigurations { get; protected set; }
     }
 }

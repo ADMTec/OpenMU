@@ -5,6 +5,7 @@
 namespace MUnique.OpenMU.DataModel.Entities
 {
     using System.Collections.Generic;
+    using MUnique.OpenMU.DataModel.Composition;
 
     /// <summary>
     /// A storage where items can be stored.
@@ -12,20 +13,20 @@ namespace MUnique.OpenMU.DataModel.Entities
     public class ItemStorage
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="ItemStorage"/> class.
-        /// </summary>
-        public ItemStorage()
-        {
-        }
-
-        /// <summary>
         /// Gets or sets the items which are stored.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<Item> Items { get; protected set; }
 
         /// <summary>
         /// Gets or sets the money which is stored.
         /// </summary>
         public int Money { get; set; }
+
+        /// <inheritdoc />
+        public override string ToString()
+        {
+            return $"{this.Items?.Count ?? 0} Items, {this.Money} Money";
+        }
     }
 }

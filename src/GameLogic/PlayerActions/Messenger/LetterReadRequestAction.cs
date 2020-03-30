@@ -4,7 +4,7 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Messenger
 {
-    using MUnique.OpenMU.DataModel.Entities;
+    using MUnique.OpenMU.GameLogic.Views.Messenger;
 
     /// <summary>
     /// Action to read a letter.
@@ -12,17 +12,6 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Messenger
     public class LetterReadRequestAction
     {
         private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(LetterReadRequestAction));
-
-        private readonly IGameContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LetterReadRequestAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public LetterReadRequestAction(IGameContext gameContext)
-        {
-            this.gameContext = gameContext;
-        }
 
         /// <summary>
         /// Requests the letter which should be shown to the player.
@@ -40,14 +29,11 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Messenger
             var letter = player.SelectedCharacter.Letters[letterIndex];
             if (letter != null)
             {
-                using (this.gameContext.RepositoryManager.UseContext(player.PersistenceContext))
+                var letterBody = player.PersistenceContext.GetLetterBodyByHeaderId(letter.Id);
+                if (letterBody != null)
                 {
-                    var letterBody = this.gameContext.RepositoryManager.GetRepository<LetterBody>().GetById(letter.Id);
-                    if (letterBody != null)
-                    {
-                        letter.ReadFlag = true;
-                        player.PlayerView.MessengerView.ShowLetter(letterBody);
-                    }
+                    letter.ReadFlag = true;
+                    player.ViewPlugIns.GetPlugIn<IShowLetterPlugIn>()?.ShowLetter(letterBody);
                 }
             }
             else

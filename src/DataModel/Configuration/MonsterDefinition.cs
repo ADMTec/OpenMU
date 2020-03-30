@@ -8,6 +8,7 @@ namespace MUnique.OpenMU.DataModel.Configuration
     using System.Collections.Generic;
     using System.Linq;
     using MUnique.OpenMU.AttributeSystem;
+    using MUnique.OpenMU.DataModel.Composition;
     using MUnique.OpenMU.DataModel.Entities;
 
     /// <summary>
@@ -207,14 +208,14 @@ namespace MUnique.OpenMU.DataModel.Configuration
         /// Gets or sets the attribute.
         /// Not sure what this is.
         /// Maybe the maximum numbers of concurrent additional attributes / magic effects?
-        /// TODO
+        /// TODO.
         /// </summary>
         public byte Attribute { get; set; }
 
         /// <summary>
         /// Gets or sets the skill.
         /// TODO Not sure what this means yet.
-        /// I guess it is the magic effect, like stunning (skill 23 @ Dark Elf)
+        /// I guess it is the magic effect, like stunning (skill 23 @ Dark Elf).
         /// </summary>
         public short Skill { get; set; }
 
@@ -236,11 +237,13 @@ namespace MUnique.OpenMU.DataModel.Configuration
         /// <summary>
         /// Gets or sets the items of the merchant store. Is only relevant for merchant NPCs.
         /// </summary>
-        public virtual ItemStorage MerchantStore { get; protected set; }
+        [MemberOfAggregate]
+        public virtual ItemStorage MerchantStore { get; set; }
 
         /// <summary>
         /// Gets or sets the item craftings. Is only relevant for crafting NPCs (chaos goblin etc.).
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<ItemCrafting.ItemCrafting> ItemCraftings { get; protected set; }
 
         /// <summary>
@@ -252,7 +255,7 @@ namespace MUnique.OpenMU.DataModel.Configuration
         /// <summary>
         /// Gets or sets the attributes of this monster.
         /// </summary>
-        //// public IDictionary<AttributeDefinition, float> Attributes { get; }
+        [MemberOfAggregate]
         public virtual ICollection<MonsterAttribute> Attributes { get; protected set; }
 
         /// <summary>

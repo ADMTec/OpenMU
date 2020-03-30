@@ -1,12 +1,13 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <log4net debug="false">
-    <appender name="ColoredConsoleAppender" type="log4net.Appender.ColoredConsoleAppender" >
+    <appender name="ColoredConsoleAppender" type="log4net.Appender.ManagedColoredConsoleAppender" >
         <layout type="log4net.Layout.PatternLayout">
             <conversionPattern value="[%-5level] %date [%logger] [%property{gameserver}] - %message%newline" />
         </layout>
+        <threshold value="INFO" />
         <mapping>
             <level value="ERROR" />
-            <foreColor value="Purple, HighIntensity" />
+            <foreColor value="Magenta" />
         </mapping>
         <mapping>
             <level value="WARN" />
@@ -29,11 +30,9 @@
             <conversionPattern value="%date [%thread] %-5level %logger [%property{NDC}] - %message%newline" />
         </layout>
     </appender>
-    <appender name="SignalrAppender1" type="log4net.SignalR.SignalrAppender, log4net.SignalR">
-        <!--<ProxyUrl>http://localhost:1234/</ProxyUrl>-->
-        <!--<HubName>SignalrAppenderHub</HubName>-->
-        <HubName>FooBarHub</HubName>
+    <appender name="SignalrAppender1" type="MUnique.Log4Net.CoreSignalR.SignalrAppender, MUnique.Log4Net.CoreSignalR">
         <GroupName>MyGroup</GroupName>
+        <HubUrl>http://localhost:1234/signalr/hubs/logHub</HubUrl>
         <layout type="log4net.Layout.PatternLayout">
             <conversionPattern value="%date %-5level - %message%newline" />
         </layout>
@@ -61,6 +60,11 @@
 
   <logger name="MUnique.OpenMU.Network.Connection">
     <level value="OFF" />
+  </logger>
+
+  <logger name="Microsoft">
+    <!-- Unfortunately, Kestrel logs a lot of errors - if you wanna see them, just change the log level here -->
+    <level value="FATAL" />
   </logger>
 
   <root>

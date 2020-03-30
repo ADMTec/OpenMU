@@ -4,13 +4,14 @@
 
 namespace MUnique.OpenMU.Tests
 {
+    using System;
     using System.Collections.Generic;
+    using Moq;
     using MUnique.OpenMU.DataModel.Configuration.Items;
     using MUnique.OpenMU.DataModel.Entities;
     using MUnique.OpenMU.GameLogic;
     using MUnique.OpenMU.GameLogic.Attributes;
     using NUnit.Framework;
-    using Rhino.Mocks;
 
     /// <summary>
     /// Tests the <see cref="ItemPriceCalculator"/> with some exemplary data.
@@ -32,11 +33,74 @@ namespace MUnique.OpenMU.Tests
         /// </summary>
         /// <param name="level">The level.</param>
         /// <param name="price">The price.</param>
-        [TestCase(0, 60)]
-        [TestCase(1, 120)]
+        [TestCase(0, 20)]
+        [TestCase(1, 40)]
         public void Apple(byte level, int price)
         {
-            this.CheckPrice(0, 1, 3, 1, 1, 14, 5, level, price);
+            this.CheckPrice(0, 1, 1, 1, 1, 14, 5, level, price);
+        }
+
+        /// <summary>
+        /// Tests if the small heal potion price is calculated correctly.
+        /// </summary>
+        /// <param name="level">The level.</param>
+        /// <param name="price">The price.</param>
+        [TestCase(0, 80)]
+        [TestCase(1, 160)]
+        public void SmallHealPotion(byte level, int price)
+        {
+            this.CheckPrice(1, 40, 1, 1, 1, 14, 10, level, price);
+        }
+
+        /// <summary>
+        /// Tests if the heal potion price is calculated correctly.
+        /// </summary>
+        /// <param name="level">The level.</param>
+        /// <param name="price">The price.</param>
+        [TestCase(0, 330)]
+        [TestCase(1, 660)]
+        public void HealPotion(byte level, int price)
+        {
+            this.CheckPrice(2, 40, 1, 1, 1, 14, 20, level, price);
+        }
+
+        /// <summary>
+        /// Tests if the large heal potion price is calculated correctly.
+        /// </summary>
+        /// <param name="level">The level.</param>
+        /// <param name="price">The price.</param>
+        [TestCase(0, 1500)]
+        [TestCase(1, 3000)]
+        public void LargeHealPotion(byte level, int price)
+        {
+            this.CheckPrice(3, 40, 1, 1, 1, 14, 30, level, price);
+        }
+
+        /// <summary>
+        /// Tests if the small shield potion price is calculated correctly.
+        /// </summary>
+        [Test]
+        public void SmallShieldPotion()
+        {
+            this.CheckPrice(35, 40, 1, 1, 1, 14, 50, 0, 2000);
+        }
+
+        /// <summary>
+        /// Tests if the shield potion price is calculated correctly.
+        /// </summary>
+        [Test]
+        public void ShieldPotion()
+        {
+            this.CheckPrice(36, 40, 1, 1, 1, 14, 80, 0, 4000);
+        }
+
+        /// <summary>
+        /// Tests if the shield potion price is calculated correctly.
+        /// </summary>
+        [Test]
+        public void LargeShieldPotion()
+        {
+            this.CheckPrice(37, 40, 1, 1, 1, 14, 100, 0, 6000);
         }
 
         /// <summary>
@@ -241,7 +305,7 @@ namespace MUnique.OpenMU.Tests
         /// buckler+1+5+s+l      2300
         /// horn+2+5+l       2600
         /// kite+3+5+l       5500
-        /// skull+3+5+s+l        18800
+        /// skull+3+5+s+l        18800.
         /// </remarks>
         [TestCase(0, 0, 3, 22, 2, 2, false, 230, Description = "small shield+0+5+l")]
         [TestCase(4, 1, 6, 24, 2, 2, true, 2300, Description = "buckler+1+5+s+l")]
@@ -310,7 +374,12 @@ namespace MUnique.OpenMU.Tests
 
         private void CheckPrice(byte id, byte dropLevel, byte maxDurability, byte height, byte width, byte group, int value, byte level, long price, bool luck = false, bool option = false, bool skill = false)
         {
-            var itemDefinition = MockRepository.GenerateStub<ItemDefinition>();
+            var itemDefinitionMock = new Mock<ItemDefinition>();
+            itemDefinitionMock.SetupAllProperties();
+            itemDefinitionMock.Setup(d => d.BasePowerUpAttributes).Returns(new List<ItemBasePowerUpDefinition>());
+
+            var itemDefinition = itemDefinitionMock.Object;
+
             itemDefinition.DropLevel = dropLevel;
             itemDefinition.Durability = maxDurability;
             itemDefinition.Height = height;
@@ -318,27 +387,33 @@ namespace MUnique.OpenMU.Tests
             itemDefinition.Group = group;
             itemDefinition.Value = value;
             itemDefinition.Number = id;
-            itemDefinition.Stub(d => d.BasePowerUpAttributes).Return(new List<ItemBasePowerUpDefinition>());
+            if (group <= 11)
+            {
+                itemDefinition.ItemSlot = new ItemSlotType();
+            }
+
             if (group < 6)
             {
                 // weapons should have a min dmg attribute
                 itemDefinition.BasePowerUpAttributes.Add(new ItemBasePowerUpDefinition { TargetAttribute = Stats.MinimumPhysBaseDmg });
             }
 
-            var item = MockRepository.GenerateStub<Item>();
+            var itemMock = new Mock<Item>();
+            itemMock.SetupAllProperties();
+            itemMock.Setup(i => i.ItemOptions).Returns(new List<ItemOptionLink>());
+            var item = itemMock.Object;
             item.Definition = itemDefinition;
-            item.Durability = itemDefinition.Durability;
             item.Level = level;
-            item.Stub(i => i.ItemOptions).Return(new List<ItemOptionLink>());
+            item.Durability = Math.Max(item.GetMaximumDurabilityOfOnePiece(), maxDurability);
 
             if (luck)
             {
                 var optionLink = new ItemOptionLink
                 {
-                    ItemOption = new ItemOption
+                    ItemOption = new IncreasableItemOption
                     {
-                        OptionType = ItemOptionTypes.Luck
-                    }
+                        OptionType = ItemOptionTypes.Luck,
+                    },
                 };
                 item.ItemOptions.Add(optionLink);
             }
@@ -347,10 +422,10 @@ namespace MUnique.OpenMU.Tests
             {
                 var optionLink = new ItemOptionLink
                 {
-                    ItemOption = new ItemOption
+                    ItemOption = new IncreasableItemOption
                     {
-                        OptionType = ItemOptionTypes.Option
-                    }
+                        OptionType = ItemOptionTypes.Option,
+                    },
                 };
                 item.ItemOptions.Add(optionLink);
             }

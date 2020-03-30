@@ -6,9 +6,10 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Messenger
 {
     using System;
     using System.Linq;
-
+    using log4net;
     using MUnique.OpenMU.DataModel.Entities;
     using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.Messenger;
     using MUnique.OpenMU.Interfaces;
     using MUnique.OpenMU.Persistence;
 
@@ -17,26 +18,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Messenger
     /// </summary>
     public class LetterSendAction
     {
-        /// <summary>
-        /// The price of sending a letter. TODO: Letter price should be configurable.
-        /// </summary>
-        private const int LetterSendCost = 1000;
-
-        private readonly IGameContext gameContext;
-
-        private readonly IFriendServer friendServer;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LetterSendAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        /// <param name="friendServer">The friend server.</param>
-        /// <exception cref="System.ArgumentNullException">appearanceSerializer</exception>
-        public LetterSendAction(IGameContext gameContext, IFriendServer friendServer)
-        {
-            this.gameContext = gameContext;
-            this.friendServer = friendServer;
-        }
+        private static readonly ILog Log = LogManager.GetLogger(typeof(LetterSendAction));
 
         /// <summary>
         /// Sends the letter.
@@ -47,70 +29,70 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Messenger
         /// <param name="title">The title.</param>
         /// <param name="rotation">The rotation.</param>
         /// <param name="animation">The animation.</param>
-        public void SendLetter(Player player, string receiver, string message, string title, byte rotation, byte animation)
+        /// <param name="letterId">The client side letter id.</param>
+        public void SendLetter(Player player, string receiver, string message, string title, byte rotation, byte animation, uint letterId)
         {
-            if (player.SelectedCharacter.Money < LetterSendCost)
+            var sendPrice = player.GameContext.Configuration.LetterSendPrice;
+            if (player.Money < sendPrice)
             {
-                player.PlayerView.ShowMessage("Not enough Zen to send a letter.", MessageType.BlueNormal);
-                player.PlayerView.MessengerView.LetterSendResult(LetterSendSuccess.TryAgain);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Not enough Zen to send a letter.", MessageType.BlueNormal);
+                player.ViewPlugIns.GetPlugIn<ILetterSendResultPlugIn>()?.LetterSendResult(LetterSendSuccess.NotEnoughMoney, letterId);
                 return;
             }
 
-            if (player.Money >= LetterSendCost)
+            LetterHeader letter = null;
+            try
             {
-                player.TryAddMoney(-LetterSendCost); // Checked before if enough money is there
-                player.PlayerView.MessengerView.LetterSendResult(LetterSendSuccess.Success);
+                using (var context = player.GameContext.PersistenceContextProvider.CreateNewPlayerContext(player.GameContext.Configuration))
+                {
+                    letter = this.CreateLetter(context, player, receiver, message, title, rotation, animation);
+                    if (!context.CanSaveLetter(letter))
+                    {
+                        player.ViewPlugIns.GetPlugIn<ILetterSendResultPlugIn>()?.LetterSendResult(LetterSendSuccess.ReceiverNotExists, letterId);
+                        return;
+                    }
+
+                    context.SaveChanges();
+                }
+
+                player.ViewPlugIns.GetPlugIn<ILetterSendResultPlugIn>()?.LetterSendResult(LetterSendSuccess.Success, letterId);
+                player.TryAddMoney(-sendPrice);
             }
-            else
+            catch (Exception ex)
             {
-                player.PlayerView.MessengerView.LetterSendResult(LetterSendSuccess.TryAgain);
-                player.PlayerView.ShowMessage("Oops, some error happened during sending the Letter.", MessageType.BlueNormal);
+                Log.Error("Unexpected error when trying to send a letter", ex);
+                player.ViewPlugIns.GetPlugIn<ILetterSendResultPlugIn>()?.LetterSendResult(LetterSendSuccess.TryAgain, letterId);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Oops, some error happened during sending the Letter.", MessageType.BlueNormal);
             }
 
             // Try to forward it to the player, if he is online
-            var receiverPlayer = this.gameContext.GetPlayerByCharacterName(receiver);
+            var receiverPlayer = player.GameContext.GetPlayerByCharacterName(receiver);
             if (receiverPlayer != null)
             {
-                using (this.gameContext.RepositoryManager.UseContext(receiverPlayer.PersistenceContext))
-                {
-                    var letter = this.CreateLetter(player, receiver, message, title, rotation, animation);
-                    var newLetterIndex = receiverPlayer.SelectedCharacter.Letters.Count;
-                    receiverPlayer.SelectedCharacter.Letters.Add(letter);
-                    receiverPlayer.PlayerView.MessengerView.AddToLetterList(letter, (ushort)newLetterIndex, true);
-                }
+                receiverPlayer.PersistenceContext.Attach(letter);
+                receiverPlayer.SelectedCharacter.Letters.Add(letter);
+                receiverPlayer.ViewPlugIns.GetPlugIn<IAddToLetterListPlugIn>()?.AddToLetterList(letter, (ushort)(receiverPlayer.SelectedCharacter.Letters.Count - 1), true);
             }
             else
             {
-                using (var context = this.gameContext.RepositoryManager.UseTemporaryContext())
-                {
-                    var letter = this.CreateLetter(player, receiver, message, title, rotation, animation);
-
-                    if (!context.SaveChanges())
-                    {
-                        player.PlayerView.MessengerView.LetterSendResult(LetterSendSuccess.ReceiverNotExists);
-                    }
-                    else
-                    {
-                        this.friendServer.ForwardLetter(letter);
-                    }
-                }
+                (player.GameContext as IGameServerContext)?.FriendServer?.ForwardLetter(letter);
             }
         }
 
-        private LetterHeader CreateLetter(Player player, string receiver, string message, string title, byte rotation, byte animation)
+        private LetterHeader CreateLetter(IContext context, Player player, string receiver, string message, string title, byte rotation, byte animation)
         {
-            var letterHeader = this.gameContext.RepositoryManager.CreateNew<LetterHeader>();
+            var letterHeader = context.CreateNew<LetterHeader>();
             letterHeader.LetterDate = DateTime.Now;
-            letterHeader.Sender = player.SelectedCharacter.Name;
-            letterHeader.Receiver = receiver;
+            letterHeader.SenderName = player.SelectedCharacter.Name;
+            letterHeader.ReceiverName = receiver;
             letterHeader.Subject = title;
 
-            var letterBody = this.gameContext.RepositoryManager.CreateNew<LetterBody>();
+            var letterBody = context.CreateNew<LetterBody>();
             letterBody.Header = letterHeader;
             letterBody.Message = message;
-            letterBody.SenderAppearance = this.gameContext.RepositoryManager.CreateNew<AppearanceData>();
+            letterBody.SenderAppearance = context.CreateNew<AppearanceData>();
             letterBody.SenderAppearance.CharacterClass = player.AppearanceData.CharacterClass;
-            letterBody.SenderAppearance.EquippedItems = player.AppearanceData.EquippedItems.ToList();
+            player.AppearanceData.EquippedItems.Select(i => i.MakePersistent(context)).ForEach(letterBody.SenderAppearance.EquippedItems.Add);
             letterBody.Rotation = rotation;
             letterBody.Animation = animation;
             return letterHeader;

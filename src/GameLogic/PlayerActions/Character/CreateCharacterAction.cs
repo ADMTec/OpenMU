@@ -11,6 +11,8 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
     using MUnique.OpenMU.AttributeSystem;
     using MUnique.OpenMU.DataModel.Configuration;
     using MUnique.OpenMU.DataModel.Entities;
+    using MUnique.OpenMU.GameLogic.PlugIns;
+    using MUnique.OpenMU.GameLogic.Views.Character;
 
     /// <summary>
     /// Action to create a new character in the character selection screen.
@@ -18,17 +20,6 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
     public class CreateCharacterAction
     {
         private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(CreateCharacterAction));
-
-        private readonly IGameContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="CreateCharacterAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public CreateCharacterAction(IGameContext gameContext)
-        {
-            this.gameContext = gameContext;
-        }
 
         /// <summary>
         /// Tries to create a new character.
@@ -44,18 +35,18 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
                 return;
             }
 
-            CharacterClass characterClass = this.gameContext.Configuration.CharacterClasses.FirstOrDefault(c => c.Number == characterClassId);
+            CharacterClass characterClass = player.GameContext.Configuration.CharacterClasses.FirstOrDefault(c => c.Number == characterClassId);
             if (characterClass != null)
             {
                 var character = this.CreateCharacter(player, characterName, characterClass);
                 if (character != null)
                 {
-                    player.PlayerView.ShowCreatedCharacter(character);
+                    player.ViewPlugIns.GetPlugIn<IShowCreatedCharacterPlugIn>()?.ShowCreatedCharacter(character);
                 }
             }
             else
             {
-                player.PlayerView.ShowCharacterCreationFailed();
+                player.ViewPlugIns.GetPlugIn<IShowCharacterCreationFailedPlugIn>()?.ShowCharacterCreationFailed();
             }
         }
 
@@ -69,14 +60,14 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
             }
 
             Log.DebugFormat("Enter CreateCharacter: {0} {1} {2}", account.LoginName, name, charclass);
-            var isValidName = Regex.IsMatch(name, this.gameContext.Configuration.CharacterNameRegex);
+            var isValidName = Regex.IsMatch(name, player.GameContext.Configuration.CharacterNameRegex);
             Log.DebugFormat("CreateCharacter: Character Name matches = {0}", isValidName);
             if (!isValidName)
             {
                 return null;
             }
 
-            var freeSlot = this.GetFreeSlot(account);
+            var freeSlot = this.GetFreeSlot(player);
             if (freeSlot == null)
             {
                 return null;
@@ -87,27 +78,29 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
                 return null;
             }
 
-            using (this.gameContext.RepositoryManager.UseContext(player.PersistenceContext))
-            {
-                var character = this.gameContext.RepositoryManager.CreateNew<Character>();
-                character.CharacterClass = charclass;
-                character.Name = name;
-                character.CharacterSlot = freeSlot.Value;
-                character.CreateDate = DateTime.Now;
-                character.KeyConfiguration = new byte[30];
-                var attributes = character.CharacterClass.StatAttributes.Select(a => this.gameContext.RepositoryManager.CreateNew<StatAttribute>(a.Attribute, a.BaseValue)).ToList();
-                attributes.ForEach(character.Attributes.Add);
-                character.CurrentMap = charclass.HomeMap;
-                account.Characters.Add(character);
-                Log.Debug("Creating Character Complete.");
-                return character;
-            }
+            var character = player.PersistenceContext.CreateNew<Character>();
+            character.CharacterClass = charclass;
+            character.Name = name;
+            character.CharacterSlot = freeSlot.Value;
+            character.CreateDate = DateTime.Now;
+            character.KeyConfiguration = new byte[30];
+            var attributes = character.CharacterClass.StatAttributes.Select(a => player.PersistenceContext.CreateNew<StatAttribute>(a.Attribute, a.BaseValue)).ToList();
+            attributes.ForEach(character.Attributes.Add);
+            character.CurrentMap = charclass.HomeMap;
+            var randomSpawnGate = character.CurrentMap.ExitGates.Where(g => g.IsSpawnGate).SelectRandom();
+            character.PositionX = (byte)Rand.NextInt(randomSpawnGate.X1, randomSpawnGate.X2);
+            character.PositionY = (byte)Rand.NextInt(randomSpawnGate.Y1, randomSpawnGate.Y2);
+            character.Inventory = player.PersistenceContext.CreateNew<ItemStorage>();
+            account.Characters.Add(character);
+            player.GameContext.PlugInManager.GetPlugInPoint<ICharacterCreatedPlugIn>()?.CharacterCreated(player, character);
+            Log.Debug("Creating Character Complete.");
+            return character;
         }
 
-        private byte? GetFreeSlot(Account account)
+        private byte? GetFreeSlot(Player player)
         {
-            var usedSlots = account.Characters.Select(c => (int)c.CharacterSlot);
-            var freeSlots = Enumerable.Range(0, this.gameContext.Configuration.MaximumCharactersPerAccount).Except(usedSlots).ToList();
+            var usedSlots = player.Account.Characters.Select(c => (int)c.CharacterSlot);
+            var freeSlots = Enumerable.Range(0, player.GameContext.Configuration.MaximumCharactersPerAccount).Except(usedSlots).ToList();
             if (freeSlots.Any())
             {
                 return (byte)freeSlots.First();

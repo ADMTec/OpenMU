@@ -9,24 +9,24 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
 
     using MUnique.OpenMU.DataModel.Configuration.ItemCrafting;
     using MUnique.OpenMU.DataModel.Entities;
+    using MUnique.OpenMU.GameLogic.PlugIns;
+    using MUnique.OpenMU.GameLogic.Views.Inventory;
 
     /// <summary>
     /// The simple item crafting handler which can be configured to handle the most crafting requirements.
     /// </summary>
     public class SimpleItemCraftingHandler : IItemCraftingHandler
     {
-        private readonly SimpleCraftingSettings settings;
+        private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(SimpleItemCraftingHandler));
 
-        private readonly IGameContext gameContext;
+        private readonly SimpleCraftingSettings settings;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SimpleItemCraftingHandler"/> class.
         /// </summary>
-        /// <param name="gameContext">The game context.</param>
         /// <param name="settings">The settings.</param>
-        public SimpleItemCraftingHandler(IGameContext gameContext, SimpleCraftingSettings settings)
+        public SimpleItemCraftingHandler(SimpleCraftingSettings settings)
         {
-            this.gameContext = gameContext;
             this.settings = settings;
         }
 
@@ -47,7 +47,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
 
                 if (foundItems.Count < requiredItems.MinAmount)
                 {
-                    // TODO: Logging... possible hacker action
+                    Log.WarnFormat("Suspicious action for player with name: {0}, could be hack attempt.", player.Name);
                     return false;
                 }
 
@@ -58,17 +58,17 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
             var success = Rand.NextRandomBool(successRate);
             if (success)
             {
-                this.DoTheMix(items, player.TemporaryStorage, player);
+                this.DoTheMix(items, player);
             }
             else
             {
-                items.ForEach(i => this.RequiredItemChange(player.TemporaryStorage, i, false));
+                items.ForEach(i => this.RequiredItemChange(player, i, false));
             }
 
             return success;
         }
 
-        private void DoTheMix(IList<CraftingRequiredItemLink> items, IStorage storage, Player player)
+        private void DoTheMix(IList<CraftingRequiredItemLink> items, Player player)
         {
             var referencedItems = new List<CraftingRequiredItemLink>();
 
@@ -79,7 +79,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
                     referencedItems.Add(i);
                 }
 
-                this.RequiredItemChange(storage, i, true);
+                this.RequiredItemChange(player, i, true);
             }
 
             foreach (var i in this.settings.ResultItems)
@@ -90,23 +90,29 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
                 }
 
                 // Create new Item
-                var resultItem = this.gameContext.RepositoryManager.CreateNew<Item>();
+                var resultItem = player.PersistenceContext.CreateNew<Item>();
                 resultItem.Definition = i.ItemDefinition;
                 resultItem.Level = (byte)Rand.NextInt(i.RandLvlMin, i.RandLvlMax);
                 resultItem.Durability = resultItem.GetMaximumDurabilityOfOnePiece(); // TODO: I think sometimes that's not correct, e.g. Potions of Bless/Soul!
-                player.PlayerView.InventoryView.ItemAppear(resultItem); // TODO: item appear needs to know in which storage the item appears
+                player.ViewPlugIns.GetPlugIn<IItemAppearPlugIn>()?.ItemAppear(resultItem); // TODO: item appear needs to know in which storage the item appears
             }
         }
 
-        private void RequiredItemChange(IStorage storage, CraftingRequiredItemLink i, bool success)
+        private void RequiredItemChange(Player player, CraftingRequiredItemLink i, bool success)
         {
             MixResult mr = success ? i.ItemRequirement.SuccessResult : i.ItemRequirement.FailResult;
 
             switch (mr)
             {
                 case MixResult.Disappear:
-                    i.StoredItem.ForEach(storage.RemoveItem);
-                    //// TODO: Delete item?
+                    var point = player.GameContext.PlugInManager.GetPlugInPoint<IItemDestroyedPlugIn>();
+                    foreach (var item in i.StoredItem)
+                    {
+                        player.TemporaryStorage.RemoveItem(item);
+                        player.PersistenceContext.Delete(item);
+                        point.ItemDestroyed(item);
+                    }
+
                     //// TODO: Send ItemDisappear?
                     break;
                 case MixResult.DowngradedRandom:
@@ -118,6 +124,9 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
                     i.StoredItem.ForEach(item => item.Level = 0);
 
                     // TODO: Send item updated
+                    break;
+                default:
+                    // The item stays as is.
                     break;
             }
         }

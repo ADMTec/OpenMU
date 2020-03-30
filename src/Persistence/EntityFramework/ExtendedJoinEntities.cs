@@ -14,28 +14,6 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
     using System.Collections.Generic;
     using System.ComponentModel.DataAnnotations.Schema;
     
-    [Table("GameConfigurationWarpInfo", Schema = "config")]
-    internal partial class GameConfigurationWarpInfo : IDictionaryEntity<UInt16, WarpInfo>
-    {
-        public UInt16 Key { get; set; }
-
-        public Guid ValueId { get; set; }
-
-        [ForeignKey("ValueId")]
-        public WarpInfo Value { get; set; }
-    }
-
-    [Table("SkillPowerUpDefinition", Schema = "config")]
-    internal partial class SkillPowerUpDefinition : IDictionaryEntity<Int32, PowerUpDefinition>
-    {
-        public Int32 Key { get; set; }
-
-        public Guid ValueId { get; set; }
-
-        [ForeignKey("ValueId")]
-        public PowerUpDefinition Value { get; set; }
-    }
-
     [Table("AccountCharacterClass", Schema = "data")]
     internal partial class AccountCharacterClass 
     {
@@ -48,7 +26,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
 
     internal partial class Account
     {
-        public ICollection<AccountCharacterClass> JoinedCharacterClasss { get; } = new List<AccountCharacterClass>();
+        public ICollection<AccountCharacterClass> JoinedUnlockedCharacterClasses { get; } = new List<AccountCharacterClass>();
     }
 
     [Table("CharacterDropItemGroup", Schema = "data")]
@@ -81,6 +59,21 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
         public ICollection<ItemItemSetGroup> JoinedItemSetGroups { get; } = new List<ItemItemSetGroup>();
     }
 
+    [Table("ItemAppearanceItemOptionType", Schema = "data")]
+    internal partial class ItemAppearanceItemOptionType 
+    {
+        public Guid ItemAppearanceId { get; set; }
+        public ItemAppearance ItemAppearance { get; set; }
+
+        public Guid ItemOptionTypeId { get; set; }
+        public ItemOptionType ItemOptionType { get; set; }
+    }
+
+    internal partial class ItemAppearance
+    {
+        public ICollection<ItemAppearanceItemOptionType> JoinedVisibleOptions { get; } = new List<ItemAppearanceItemOptionType>();
+    }
+
     [Table("DropItemGroupItemDefinition", Schema = "config")]
     internal partial class DropItemGroupItemDefinition 
     {
@@ -93,37 +86,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
 
     internal partial class DropItemGroup
     {
-        public ICollection<DropItemGroupItemDefinition> JoinedItemDefinitions { get; } = new List<DropItemGroupItemDefinition>();
-    }
-
-    [Table("MasterSkillDefinitionSkill", Schema = "config")]
-    internal partial class MasterSkillDefinitionSkill 
-    {
-        public Guid MasterSkillDefinitionId { get; set; }
-        public MasterSkillDefinition MasterSkillDefinition { get; set; }
-
-        public Guid SkillId { get; set; }
-        public Skill Skill { get; set; }
-    }
-
-    internal partial class MasterSkillDefinition
-    {
-        public ICollection<MasterSkillDefinitionSkill> JoinedSkills { get; } = new List<MasterSkillDefinitionSkill>();
-    }
-
-    [Table("MonsterDefinitionDropItemGroup", Schema = "config")]
-    internal partial class MonsterDefinitionDropItemGroup 
-    {
-        public Guid MonsterDefinitionId { get; set; }
-        public MonsterDefinition MonsterDefinition { get; set; }
-
-        public Guid DropItemGroupId { get; set; }
-        public DropItemGroup DropItemGroup { get; set; }
-    }
-
-    internal partial class MonsterDefinition
-    {
-        public ICollection<MonsterDefinitionDropItemGroup> JoinedDropItemGroups { get; } = new List<MonsterDefinitionDropItemGroup>();
+        public ICollection<DropItemGroupItemDefinition> JoinedPossibleItems { get; } = new List<DropItemGroupItemDefinition>();
     }
 
     [Table("GameMapDefinitionDropItemGroup", Schema = "config")]
@@ -141,6 +104,51 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
         public ICollection<GameMapDefinitionDropItemGroup> JoinedDropItemGroups { get; } = new List<GameMapDefinitionDropItemGroup>();
     }
 
+    [Table("GameServerConfigurationGameMapDefinition", Schema = "config")]
+    internal partial class GameServerConfigurationGameMapDefinition 
+    {
+        public Guid GameServerConfigurationId { get; set; }
+        public GameServerConfiguration GameServerConfiguration { get; set; }
+
+        public Guid GameMapDefinitionId { get; set; }
+        public GameMapDefinition GameMapDefinition { get; set; }
+    }
+
+    internal partial class GameServerConfiguration
+    {
+        public ICollection<GameServerConfigurationGameMapDefinition> JoinedMaps { get; } = new List<GameServerConfigurationGameMapDefinition>();
+    }
+
+    [Table("MasterSkillDefinitionSkill", Schema = "config")]
+    internal partial class MasterSkillDefinitionSkill 
+    {
+        public Guid MasterSkillDefinitionId { get; set; }
+        public MasterSkillDefinition MasterSkillDefinition { get; set; }
+
+        public Guid SkillId { get; set; }
+        public Skill Skill { get; set; }
+    }
+
+    internal partial class MasterSkillDefinition
+    {
+        public ICollection<MasterSkillDefinitionSkill> JoinedRequiredMasterSkills { get; } = new List<MasterSkillDefinitionSkill>();
+    }
+
+    [Table("MonsterDefinitionDropItemGroup", Schema = "config")]
+    internal partial class MonsterDefinitionDropItemGroup 
+    {
+        public Guid MonsterDefinitionId { get; set; }
+        public MonsterDefinition MonsterDefinition { get; set; }
+
+        public Guid DropItemGroupId { get; set; }
+        public DropItemGroup DropItemGroup { get; set; }
+    }
+
+    internal partial class MonsterDefinition
+    {
+        public ICollection<MonsterDefinitionDropItemGroup> JoinedDropItemGroups { get; } = new List<MonsterDefinitionDropItemGroup>();
+    }
+
     [Table("SkillCharacterClass", Schema = "config")]
     internal partial class SkillCharacterClass 
     {
@@ -153,22 +161,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
 
     internal partial class Skill
     {
-        public ICollection<SkillCharacterClass> JoinedCharacterClasss { get; } = new List<SkillCharacterClass>();
-    }
-
-    [Table("SkillMasterSkillDefinition", Schema = "config")]
-    internal partial class SkillMasterSkillDefinition 
-    {
-        public Guid SkillId { get; set; }
-        public Skill Skill { get; set; }
-
-        public Guid MasterSkillDefinitionId { get; set; }
-        public MasterSkillDefinition MasterSkillDefinition { get; set; }
-    }
-
-    internal partial class Skill
-    {
-        public ICollection<SkillMasterSkillDefinition> JoinedMasterSkillDefinitions { get; } = new List<SkillMasterSkillDefinition>();
+        public ICollection<SkillCharacterClass> JoinedQualifiedCharacters { get; } = new List<SkillCharacterClass>();
     }
 
     [Table("ItemDefinitionCharacterClass", Schema = "config")]
@@ -183,7 +176,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
 
     internal partial class ItemDefinition
     {
-        public ICollection<ItemDefinitionCharacterClass> JoinedCharacterClasss { get; } = new List<ItemDefinitionCharacterClass>();
+        public ICollection<ItemDefinitionCharacterClass> JoinedQualifiedCharacters { get; } = new List<ItemDefinitionCharacterClass>();
     }
 
     [Table("ItemDefinitionItemSetGroup", Schema = "config")]
@@ -198,22 +191,22 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
 
     internal partial class ItemDefinition
     {
-        public ICollection<ItemDefinitionItemSetGroup> JoinedItemSetGroups { get; } = new List<ItemDefinitionItemSetGroup>();
+        public ICollection<ItemDefinitionItemSetGroup> JoinedPossibleItemSetGroups { get; } = new List<ItemDefinitionItemSetGroup>();
     }
 
-    [Table("ItemSetGroupItemOption", Schema = "config")]
-    internal partial class ItemSetGroupItemOption 
+    [Table("ItemDefinitionItemOptionDefinition", Schema = "config")]
+    internal partial class ItemDefinitionItemOptionDefinition 
     {
-        public Guid ItemSetGroupId { get; set; }
-        public ItemSetGroup ItemSetGroup { get; set; }
+        public Guid ItemDefinitionId { get; set; }
+        public ItemDefinition ItemDefinition { get; set; }
 
-        public Guid ItemOptionId { get; set; }
-        public ItemOption ItemOption { get; set; }
+        public Guid ItemOptionDefinitionId { get; set; }
+        public ItemOptionDefinition ItemOptionDefinition { get; set; }
     }
 
-    internal partial class ItemSetGroup
+    internal partial class ItemDefinition
     {
-        public ICollection<ItemSetGroupItemOption> JoinedItemOptions { get; } = new List<ItemSetGroupItemOption>();
+        public ICollection<ItemDefinitionItemOptionDefinition> JoinedPossibleItemOptions { get; } = new List<ItemDefinitionItemOptionDefinition>();
     }
 
     [Table("ItemCraftingRequiredItemItemOptionType", Schema = "config")]
@@ -228,7 +221,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
 
     internal partial class ItemCraftingRequiredItem
     {
-        public ICollection<ItemCraftingRequiredItemItemOptionType> JoinedItemOptionTypes { get; } = new List<ItemCraftingRequiredItemItemOptionType>();
+        public ICollection<ItemCraftingRequiredItemItemOptionType> JoinedRequiredItemOptions { get; } = new List<ItemCraftingRequiredItemItemOptionType>();
     }
 
 }

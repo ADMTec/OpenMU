@@ -32,8 +32,8 @@ namespace MUnique.OpenMU.GameLogic.Attributes
                 throw new ArgumentException($"targetAttribute [{targetAttribute}] is not composable");
             }
 
-            this.parentAttribute.AddElement(this);
             this.element = element;
+            this.parentAttribute.AddElement(this);
             this.element.ValueChanged += this.OnValueChanged;
         }
 
@@ -47,12 +47,12 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         public AggregateType AggregateType => this.element.AggregateType;
 
         /// <summary>
-        /// Creates elements by a power up defintion.
+        /// Creates elements by a <see cref="PowerUpDefinition"/>.
         /// </summary>
         /// <param name="powerUpDef">The power up definition.</param>
         /// <param name="attributeHolder">The attribute holder.</param>
-        /// <returns>The elements which represent the powerup.</returns>
-        public static IEnumerable<PowerUpWrapper> CreateByPowerUpDefintion(PowerUpDefinition powerUpDef, AttributeSystem attributeHolder)
+        /// <returns>The elements which represent the power-up.</returns>
+        public static IEnumerable<PowerUpWrapper> CreateByPowerUpDefinition(PowerUpDefinition powerUpDef, AttributeSystem attributeHolder)
         {
             if (powerUpDef.Boost.ConstantValue != null)
             {

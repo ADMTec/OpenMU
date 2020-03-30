@@ -4,36 +4,37 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Messenger
 {
+    using MUnique.OpenMU.GameLogic.Views.Messenger;
+
     /// <summary>
     /// Action to respond to a friend request.
     /// </summary>
     public class AddResponseAction
     {
-        private readonly IGameServerContext gameContext;
-
         /// <summary>
-        /// Initializes a new instance of the <see cref="AddResponseAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public AddResponseAction(IGameServerContext gameContext)
-        {
-            this.gameContext = gameContext;
-        }
-
-        /// <summary>
-        /// Proceeds the reponse.
+        /// Proceeds the response.
         /// </summary>
         /// <param name="player">The player.</param>
         /// <param name="requesterName">Name of the requester.</param>
         /// <param name="accepted">if set to <c>true</c> the request has been accepted.</param>
-        public void ProceedReponse(Player player, string requesterName, bool accepted)
+        public void ProceedResponse(Player player, string requesterName, bool accepted)
         {
-            if (accepted)
+            if (string.IsNullOrEmpty(requesterName))
             {
-                player.PlayerView.MessengerView.FriendAdded(requesterName);
+                // this happens after a letter has been sent to an unknown character
+                return;
             }
 
-            this.gameContext.FriendServer.FriendResponse(player.SelectedCharacter.Name, requesterName, accepted);
+            var friendServer = (player.GameContext as IGameServerContext)?.FriendServer;
+            if (friendServer != null)
+            {
+                if (accepted)
+                {
+                    player.ViewPlugIns.GetPlugIn<IFriendAddedPlugIn>()?.FriendAdded(requesterName);
+                }
+
+                friendServer.FriendResponse(player.SelectedCharacter.Name, requesterName, accepted);
+            }
         }
     }
 }

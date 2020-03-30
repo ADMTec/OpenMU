@@ -4,7 +4,7 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
 {
-    using log4net;
+    using MUnique.OpenMU.GameLogic.Views.Guild;
     using MUnique.OpenMU.Interfaces;
 
     /// <summary>
@@ -12,19 +12,6 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
     /// </summary>
     public class GuildRequestAction
     {
-        private static ILog log = LogManager.GetLogger(typeof(GuildRequestAction));
-
-        private readonly IGameServerContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GuildRequestAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public GuildRequestAction(IGameServerContext gameContext)
-        {
-            this.gameContext = gameContext;
-        }
-
         /// <summary>
         /// Requests the guild from the guild master player with the specified id.
         /// </summary>
@@ -32,30 +19,34 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
         /// <param name="guildMasterId">The guild master identifier.</param>
         public void RequestGuild(Player player, ushort guildMasterId)
         {
-            Player guildmaster = player.CurrentMap.GetObject(guildMasterId) as Player;
-            if (guildmaster == null)
+            if (player.Level < 6)
             {
-                return; // player not found
-            }
-
-            if (guildmaster.SelectedCharacter.GuildMemberInfo == null)
-            {
-                return; // not even in a guild
-            }
-
-            if (guildmaster.SelectedCharacter.GuildMemberInfo.Status != DataModel.Entities.GuildPosition.GuildMaster)
-            {
-                return; // not a guildmaster
-            }
-
-            if (guildmaster.LastGuildRequester != null)
-            {
-                player.PlayerView.ShowMessage("The Guild Master is busy.", MessageType.BlueNormal);
+                player.ViewPlugIns.GetPlugIn<IGuildJoinResponsePlugIn>()?.ShowGuildJoinResponse(GuildRequestAnswerResult.MinimumLevel6);
                 return;
             }
 
-            guildmaster.LastGuildRequester = player;
-            guildmaster.PlayerView.GuildView.ShowGuildJoinRequest(player);
+            if (player.GuildStatus != null)
+            {
+                player.ViewPlugIns.GetPlugIn<IGuildJoinResponsePlugIn>()?.ShowGuildJoinResponse(GuildRequestAnswerResult.AlreadyHaveGuild);
+                return;
+            }
+
+            Player guildMaster = player.CurrentMap.GetObject(guildMasterId) as Player;
+
+            if (guildMaster?.GuildStatus?.Position != GuildPosition.GuildMaster)
+            {
+                player.ViewPlugIns.GetPlugIn<IGuildJoinResponsePlugIn>()?.ShowGuildJoinResponse(GuildRequestAnswerResult.NotTheGuildMaster);
+                return; // targeted player not in a guild or not the guild master
+            }
+
+            if (guildMaster.LastGuildRequester != null || player.PlayerState.CurrentState != PlayerState.EnteredWorld)
+            {
+                player.ViewPlugIns.GetPlugIn<IGuildJoinResponsePlugIn>()?.ShowGuildJoinResponse(GuildRequestAnswerResult.GuildMasterOrRequesterIsBusy);
+                return;
+            }
+
+            guildMaster.LastGuildRequester = player;
+            guildMaster.ViewPlugIns.GetPlugIn<IShowGuildJoinRequestPlugIn>()?.ShowGuildJoinRequest(player);
         }
     }
 }

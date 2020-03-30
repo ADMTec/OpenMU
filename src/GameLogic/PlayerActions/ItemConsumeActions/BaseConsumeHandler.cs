@@ -6,36 +6,62 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
 {
+    using MUnique.OpenMU.DataModel.Entities;
+
     /// <summary>
-    /// Base class of an item consumation handler.
+    /// Base class of an item consumption handler.
     /// </summary>
     public class BaseConsumeHandler : IItemConsumeHandler
     {
         /// <inheritdoc/>
-        public virtual bool ConsumeItem(Player player, byte itemSlot, byte targetSlot)
+        public virtual bool ConsumeItem(Player player, Item item, Item targetItem)
         {
-            if (player.PlayerState.CurrentState != PlayerState.EnteredWorld)
+            if (!this.CheckPreconditions(player, item, targetItem))
             {
                 return false;
             }
 
-            var item = player.Inventory.GetItem(itemSlot);
-            if (item != null)
+            this.ConsumeSourceItem(player, item);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Consumes the source item.
+        /// </summary>
+        /// <param name="player">The player.</param>
+        /// <param name="item">The item.</param>
+        protected void ConsumeSourceItem(Player player, Item item)
+        {
+            if (item.Durability > 0)
             {
-                if (item.Durability > 0)
-                {
-                    item.Durability -= 1;
-                }
-
-                if (item.Durability == 0)
-                {
-                    player.Inventory.RemoveItem(item);
-                }
-
-                return true;
+                item.Durability -= 1;
             }
 
-            return false;
+            if (item.Durability == 0)
+            {
+                player.Inventory.RemoveItem(item);
+                player.PersistenceContext.Delete(item);
+            }
+        }
+
+        /// <summary>
+        /// Checks the preconditions.
+        /// </summary>
+        /// <param name="player">The player.</param>
+        /// <param name="item">The item.</param>
+        /// <param name="targetItem">The target item.</param>
+        /// <returns><c>True</c>, if preconditions are met.</returns>
+        protected bool CheckPreconditions(Player player, Item item, Item targetItem)
+        {
+            if (player.PlayerState.CurrentState != PlayerState.EnteredWorld
+                || item == null
+                || item.Durability == 0)
+            {
+                return false;
+            }
+
+            return true;
         }
     }
 }

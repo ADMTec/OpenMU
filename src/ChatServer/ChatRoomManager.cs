@@ -4,16 +4,17 @@
 
 namespace MUnique.OpenMU.ChatServer
 {
+    using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
 
     /// <summary>
-    /// The Chat Room Manager manages the creation and destruction of chatrooms.
+    /// The Chat Room Manager manages the creation and destruction of chat rooms.
     /// </summary>
     internal class ChatRoomManager
     {
         /// <summary>
-        /// All currently used chatrooms.
+        /// All currently used chat rooms.
         /// </summary>
         private readonly IDictionary<ushort, ChatRoom> rooms = new ConcurrentDictionary<ushort, ChatRoom>();
 
@@ -49,18 +50,18 @@ namespace MUnique.OpenMU.ChatServer
                 return roomId;
             }
 
-            return ushort.MaxValue;
+            throw new InvalidOperationException("There is no free room id, so the chat room couldn't be created.");
         }
 
         /// <summary>
-        /// Returns the chatroom with the corresponding Room-ID.
+        /// Returns the chat room with the corresponding Room-ID.
         /// Returns null, if ChatRoom wasn't found.
         /// </summary>
-        /// <param name="roomid">Room-ID</param>
+        /// <param name="roomId">Room-ID.</param>
         /// <returns>ChatRoom or null.</returns>
-        internal ChatRoom GetChatRoom(ushort roomid)
+        internal ChatRoom GetChatRoom(ushort roomId)
         {
-            this.rooms.TryGetValue(roomid, out ChatRoom room);
+            this.rooms.TryGetValue(roomId, out ChatRoom room);
             return room;
         }
 

@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
 {
+    using MUnique.OpenMU.DataModel.Configuration;
     using MUnique.OpenMU.DataModel.Entities;
 
     /// <summary>
@@ -11,51 +12,47 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
     /// </summary>
     public class LearnablesConsumeHandler : IItemConsumeHandler
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LearnablesConsumeHandler"/> class.
-        /// </summary>
-        public LearnablesConsumeHandler()
-        {
-        }
-
         /// <inheritdoc/>
-        public bool ConsumeItem(Player player, byte itemSlot, byte targetSlot)
+        public bool ConsumeItem(Player player, Item item, Item targetItem)
         {
             if (player.PlayerState.CurrentState != PlayerState.EnteredWorld)
             {
                 return false;
             }
 
-            Item item = player.Inventory.GetItem(itemSlot);
             if (item == null)
             {
                 return false;
             }
 
-            var learnable = item.Definition;
-
             // Check Requirements
-            if (!player.CompliesRequirements(learnable))
-            {
-                // TODO:Send unsuccessful packet
-                return false;
-            }
-
-            if (player.SkillList.ContainsSkill(learnable.Skill.SkillID.ToUnsigned()))
+            if (!player.CompliesRequirements(item))
             {
                 return false;
             }
 
-            if (learnable != null && learnable.Skill != null)
+            var skill = this.GetLearnableSkill(item, player.GameContext.Configuration);
+
+            if (skill == null || player.SkillList.ContainsSkill(skill.Number.ToUnsigned()))
             {
-                var skillIndex = player.SkillList.SkillCount;
-                player.SkillList.AddLearnedSkill(learnable.Skill);
-                player.PlayerView.AddSkill(learnable.Skill, skillIndex);
-                player.Inventory.RemoveItem(item);
-                return true;
+                return false;
             }
 
-            return false;
+            player.SkillList.AddLearnedSkill(skill);
+            player.Inventory.RemoveItem(item);
+            player.PersistenceContext.Delete(item);
+            return true;
+        }
+
+        /// <summary>
+        /// Gets the learnable skill.
+        /// </summary>
+        /// <param name="item">The item.</param>
+        /// <param name="gameConfiguration">The game configuration.</param>
+        /// <returns>The skill to learn.</returns>
+        protected virtual Skill GetLearnableSkill(Item item, GameConfiguration gameConfiguration)
+        {
+            return item.Definition.Skill;
         }
     }
 }

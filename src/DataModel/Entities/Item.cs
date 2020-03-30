@@ -7,6 +7,7 @@ namespace MUnique.OpenMU.DataModel.Entities
     using System.Collections.Generic;
     using System.Linq;
     using System.Text;
+    using MUnique.OpenMU.DataModel.Composition;
     using MUnique.OpenMU.DataModel.Configuration.Items;
 
     /// <summary>
@@ -15,12 +16,7 @@ namespace MUnique.OpenMU.DataModel.Entities
     public class Item
     {
         /// <summary>
-        /// Gets or sets the storage where the item is stored.
-        /// </summary>
-        public virtual ItemStorage Storage { get; set; }
-
-        /// <summary>
-        /// Gets or sets the item slot in the <see cref="Storage"/>.
+        /// Gets or sets the item slot in the <see cref="ItemStorage"/>.
         /// </summary>
         public byte ItemSlot { get; set; }
 
@@ -47,6 +43,7 @@ namespace MUnique.OpenMU.DataModel.Entities
         /// <summary>
         /// Gets or sets the item options.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<ItemOptionLink> ItemOptions { get; protected set; }
 
         /// <summary>
@@ -58,6 +55,11 @@ namespace MUnique.OpenMU.DataModel.Entities
         /// Gets or sets the socket count. This limits the amount of socket options in the <see cref="ItemOptions"/>.
         /// </summary>
         public int SocketCount { get; set; }
+
+        /// <summary>
+        /// Gets or sets the price which was set by the player for his personal store.
+        /// </summary>
+        public int? StorePrice { get; set; }
 
         /// <summary>
         /// Assigns the values of another item to this item.
@@ -92,15 +94,28 @@ namespace MUnique.OpenMU.DataModel.Entities
         public override string ToString()
         {
             var stringBuilder = new StringBuilder();
+            stringBuilder.Append("Slot ").Append(this.ItemSlot).Append(": ");
+
+            if (this.ItemOptions.Any(o => o.ItemOption.OptionType == ItemOptionTypes.Excellent))
+            {
+                stringBuilder.Append("Excellent ");
+            }
+
+            var ancientSet = this.ItemSetGroups.FirstOrDefault(s => s.AncientSetDiscriminator != 0);
+            if (ancientSet != null)
+            {
+                stringBuilder.Append(ancientSet.Name).Append(" ");
+            }
+
             stringBuilder.Append(this.Definition.Name);
             if (this.Level > 0)
             {
                 stringBuilder.Append("+").Append(this.Level);
             }
 
-            foreach (var option in this.ItemOptions.Where(o => o.ItemOption.OptionType == ItemOptionTypes.Option))
+            foreach (var option in this.ItemOptions.OrderBy(o => o.ItemOption.OptionType == ItemOptionTypes.Option))
             {
-                stringBuilder.Append("+").Append(option.ItemOption.PowerUpDefinition.ToString());
+                stringBuilder.Append("+").Append(option.ItemOption.PowerUpDefinition);
             }
 
             if (this.HasSkill)

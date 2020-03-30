@@ -4,9 +4,11 @@
 
 namespace MUnique.OpenMU.GameLogic
 {
+    using System;
     using System.Collections.Generic;
     using MUnique.OpenMU.DataModel.Configuration;
     using MUnique.OpenMU.Persistence;
+    using MUnique.OpenMU.PlugIns;
 
     /// <summary>
     /// The context of the game.
@@ -14,9 +16,19 @@ namespace MUnique.OpenMU.GameLogic
     public interface IGameContext
     {
         /// <summary>
+        /// Occurs when a game map got created.
+        /// </summary>
+        event EventHandler<GameMapEventArgs> GameMapCreated;
+
+        /// <summary>
+        /// Occurs when a game map got removed.
+        /// </summary>
+        event EventHandler<GameMapEventArgs> GameMapRemoved;
+
+        /// <summary>
         /// Gets the repository manager. Used to retrieve data, e.g. from a database.
         /// </summary>
-        IRepositoryManager RepositoryManager { get; }
+        IPersistenceContextProvider PersistenceContextProvider { get; }
 
         /// <summary>
         /// Gets the item power up factory.
@@ -29,14 +41,21 @@ namespace MUnique.OpenMU.GameLogic
         GameConfiguration Configuration { get; }
 
         /// <summary>
-        /// Gets the maps which are hosted by the game.
+        /// Gets the plug in manager.
         /// </summary>
-        IDictionary<ushort, GameMap> MapList { get; }
+        PlugInManager PlugInManager { get; }
 
         /// <summary>
         /// Gets the players of the game in a list.
         /// </summary>
         IList<Player> PlayerList { get; }
+
+        /// <summary>
+        /// Gets the maps which is meant to be hosted by the game.
+        /// </summary>
+        /// <param name="mapId">The map identifier.</param>
+        /// <returns>The hosted GameMap instance.</returns>
+        GameMap GetMap(ushort mapId);
 
         /// <summary>
         /// Gets the player object by character name.

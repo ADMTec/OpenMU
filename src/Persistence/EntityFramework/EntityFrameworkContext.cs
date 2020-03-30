@@ -7,44 +7,29 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
     using Microsoft.EntityFrameworkCore;
 
     /// <summary>
-    /// Implementation of <see cref="IContext"/> for the entity framework <see cref="RepositoryManager"/>.
+    /// A implementation of <see cref="EntityFrameworkContextBase"/> which doesn't cache and always asks the database for objects.
     /// </summary>
-    internal sealed class EntityFrameworkContext : IContext
+    public class EntityFrameworkContext : EntityFrameworkContextBase
     {
-        private readonly bool isOwner;
+        /// <summary>
+        /// Initializes a new instance of the <see cref="EntityFrameworkContext"/> class.
+        /// </summary>
+        /// <param name="context">The context.</param>
+        public EntityFrameworkContext(DbContext context)
+            : base (context, new RepositoryManager(), true)
+        {
+            this.RepositoryManager.RegisterRepositories();
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EntityFrameworkContext" /> class.
         /// </summary>
-        /// <param name="context">The context.</param>
-        /// <param name="isOwner">if set to <c>true</c> this instance owns the <paramref name="context" />.</param>
-        public EntityFrameworkContext(DbContext context, bool isOwner = true)
+        /// <param name="context">The db context.</param>
+        /// <param name="repositoryManager">The repository manager.</param>
+        /// <param name="isOwner">If set to <c>true</c>, this instance owns the <see cref="EntityFrameworkContextBase.Context" />. That means it will be disposed when this instance will be disposed.</param>
+        public EntityFrameworkContext(DbContext context, RepositoryManager repositoryManager, bool isOwner)
+            : base(context, repositoryManager, isOwner)
         {
-            this.Context = context;
-            this.isOwner = isOwner;
-        }
-
-        /// <summary>
-        /// Gets the entity framework context.
-        /// </summary>
-        public DbContext Context { get; private set; }
-
-        /// <inheritdoc/>
-        public bool SaveChanges()
-        {
-            this.Context.SaveChanges();
-            return true;
-        }
-
-        /// <inheritdoc/>
-        public void Dispose()
-        {
-            if (this.Context != null && this.isOwner)
-            {
-                this.Context.Dispose();
-            }
-
-            this.Context = null;
         }
     }
 }

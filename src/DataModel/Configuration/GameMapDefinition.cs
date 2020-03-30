@@ -5,6 +5,8 @@
 namespace MUnique.OpenMU.DataModel.Configuration
 {
     using System.Collections.Generic;
+    using MUnique.OpenMU.DataModel.Composition;
+    using MUnique.OpenMU.DataModel.Configuration.Items;
 
     /// <summary>
     /// Configuration of a map. Contains all information to create an instance of a GameMap.
@@ -44,12 +46,14 @@ namespace MUnique.OpenMU.DataModel.Configuration
         /// <summary>
         /// Gets or sets the defined monster spawn areas.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<MonsterSpawnArea> MonsterSpawns { get; protected set; }
 
         /// <summary>
         /// Gets or sets the enter gates, though which the player can move to other maps.
         /// </summary>
-        public virtual ICollection<EnterGate> Gates { get; protected set; }
+        [MemberOfAggregate]
+        public virtual ICollection<EnterGate> EnterGates { get; protected set; }
 
         /// <summary>
         /// Gets or sets the exp multiplier for this map.
@@ -60,18 +64,16 @@ namespace MUnique.OpenMU.DataModel.Configuration
         public double ExpMultiplier { get; set; }
 
         /// <summary>
-        /// Gets or sets the gate to which the player will be brought when he died. Is contained in <see cref="SpawnGates"/>.
+        /// Gets or sets the game map to which the player will be brought when it died.
+        /// One of the <see cref="ExitGates"/> where <see cref="ExitGate.IsSpawnGate"/> is selected.
         /// </summary>
-        /// <remarks>
-        /// NO-DO: Instead of this property, add a flag to ExitGate. Problem: Safezone of a map can be in another map!
-        /// Examples: Player dies in the Dungeon map, respawns in Lorencia. Or Player dies in Kalima 1-6, respawns in Devias.
-        /// </remarks>
-        public virtual ExitGate DeathSafezone { get; set; }
+        public virtual GameMapDefinition SafezoneMap { get; set; }
 
         /// <summary>
         /// Gets or sets the spawn gates.
         /// </summary>
-        public virtual ICollection<ExitGate> SpawnGates { get; protected set; }
+        [MemberOfAggregate]
+        public virtual ICollection<ExitGate> ExitGates { get; protected set; }
 
         /// <summary>
         /// Gets or sets the DropItemGroup of this map.
@@ -79,10 +81,16 @@ namespace MUnique.OpenMU.DataModel.Configuration
         /// </summary>
         public virtual ICollection<DropItemGroup> DropItemGroups { get; protected set; }
 
+        /// <summary>
+        /// Gets or sets the map requirements for player to use this map.
+        /// </summary>
+        [MemberOfAggregate]
+        public virtual ICollection<AttributeRequirement> MapRequirements { get; protected set; }
+
         /// <inheritdoc/>
         public override string ToString()
         {
-            return string.Format("{0} - {1}", this.Number, this.Name);
+            return $"{this.Number} - {this.Name}";
         }
     }
 }

@@ -14,7 +14,7 @@ namespace MUnique.OpenMU.ClientLauncher
     /// <summary>
     /// The default launcher, which writes host and port into the registry before starting the main.exe.
     /// </summary>
-    internal class Launcher : ILauncher
+    public class Launcher : ILauncher
     {
         /// <summary>
         /// Gets or sets the host ip.
@@ -36,17 +36,21 @@ namespace MUnique.OpenMU.ClientLauncher
         /// </summary>
         public void LaunchClient()
         {
-            var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\WebZen\Mu\Connection");
-            key.SetValue("Key", Environment.TickCount, RegistryValueKind.DWord);
-            key.SetValue("ParameterA", this.HostEncode(), RegistryValueKind.String);
-            key.SetValue("ParameterB", this.PortEncode(), RegistryValueKind.DWord);
+            using (var localMachineKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
+            using (var key = localMachineKey.CreateSubKey(@"SOFTWARE\WebZen\Mu\Connection"))
+            {
+                key.SetValue("Key", Environment.TickCount, RegistryValueKind.DWord);
+                key.SetValue("ParameterA", this.HostEncode(), RegistryValueKind.String);
+                key.SetValue("ParameterB", this.PortEncode(), RegistryValueKind.DWord);
+            }
+
             var info = new DirectoryInfo(this.MainExePath);
             var startInfo = new ProcessStartInfo(this.MainExePath, "connect")
             {
                 WorkingDirectory = info.Parent.FullName,
                 UseShellExecute = true,
                 LoadUserProfile = true,
-                Verb = "open"
+                Verb = "open",
             };
             Process.Start(startInfo);
         }
@@ -75,9 +79,10 @@ namespace MUnique.OpenMU.ClientLauncher
                 case 3:
                     port += (0x13 - ((port % 4) * 2)) - (((port / 0x10) % 2) * 0x20);
                     return port;
+                default:
+                    // we'll hopefully never run into this one
+                    return port;
             }
-
-            return port;
         }
 
         /// <summary>
@@ -109,6 +114,9 @@ namespace MUnique.OpenMU.ClientLauncher
                     case 4:
                         encodedCharacter = (char)(ch + '\x0013');
                         counter = 0;
+                        break;
+                    default:
+                        // we should not run into this case, since it's always 1 to 4.
                         break;
                 }
 

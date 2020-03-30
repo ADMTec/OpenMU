@@ -11,17 +11,6 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Party
     /// </summary>
     public class PartyResponseAction
     {
-        private readonly IGameContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PartyResponseAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public PartyResponseAction(IGameContext gameContext)
-        {
-            this.gameContext = gameContext;
-        }
-
         /// <summary>
         /// Handles the response of the party request of <see cref="IPartyMember.LastPartyRequester"/>.
         /// </summary>
@@ -52,11 +41,11 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Party
             if (player.LastPartyRequester.Party != null)
             {
                 // The Requester got a party already, so add him to his party
-                player.LastPartyRequester.Party.Add(player.LastPartyRequester);
+                player.LastPartyRequester.Party.Add(player);
             }
             else
             {
-                player.LastPartyRequester.Party = new Party(this.gameContext.Configuration.MaximumPartySize);
+                player.LastPartyRequester.Party = new Party(player.GameContext.Configuration.MaximumPartySize);
                 player.LastPartyRequester.Party.Add(player.LastPartyRequester); // Party Master first
                 player.LastPartyRequester.Party.Add(player);
             }

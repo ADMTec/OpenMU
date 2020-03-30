@@ -6,6 +6,7 @@ namespace MUnique.OpenMU.DataModel.Configuration
 {
     using System.Collections.Generic;
     using MUnique.OpenMU.AttributeSystem;
+    using MUnique.OpenMU.DataModel.Composition;
     using MUnique.OpenMU.DataModel.Entities;
 
     /// <summary>
@@ -44,7 +45,7 @@ namespace MUnique.OpenMU.DataModel.Configuration
         /// 1 = Summoner
         /// 2 = Dark Lord
         /// 4 = Magic Gladiator
-        /// 8 = Rage Fighter
+        /// 8 = Rage Fighter.
         /// </remarks>
         public byte CreationAllowedFlag { get; set; }
 
@@ -70,19 +71,27 @@ namespace MUnique.OpenMU.DataModel.Configuration
         public int LevelWarpRequirementReductionPercent { get; set; }
 
         /// <summary>
+        /// Gets or sets the fruit calculation strategy.
+        /// </summary>
+        public FruitCalculationStrategy FruitCalculation { get; set; }
+
+        /// <summary>
         /// Gets or sets the stat attributes.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<StatAttributeDefinition> StatAttributes { get; protected set; }
 
         /// <summary>
         /// Gets or sets the attribute combinations.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<AttributeRelationship> AttributeCombinations { get; protected set; }
 
         /// <summary>
         /// Gets or sets the base attribute values.
         /// For example the amount of health a character got without any added stat point.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<ConstValueAttribute> BaseAttributeValues { get; protected set; }
 
         /// <summary>

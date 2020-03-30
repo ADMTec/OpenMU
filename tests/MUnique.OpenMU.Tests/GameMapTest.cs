@@ -6,10 +6,12 @@ namespace MUnique.OpenMU.Tests
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
+    using Moq;
     using MUnique.OpenMU.DataModel.Configuration;
     using MUnique.OpenMU.GameLogic;
+    using MUnique.OpenMU.Pathfinding;
     using NUnit.Framework;
-    using Rhino.Mocks;
 
     /// <summary>
     /// Tests for the game map.
@@ -22,7 +24,7 @@ namespace MUnique.OpenMU.Tests
         /// <summary>
         /// An interface which combines several other interfaces which are needed in combination for this test.
         /// </summary>
-        public interface ITestPlayer : ILocateable, IBucketMapObserver, IObservable
+        public interface ITestPlayer : ILocateable, IBucketMapObserver, IObservable, ISupportIdUpdate
         {
         }
 
@@ -32,20 +34,16 @@ namespace MUnique.OpenMU.Tests
         [Test]
         public void TestPlayerEntersMap()
         {
-            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize, 0);
+            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize);
             var player1 = this.GetPlayer();
-            player1.Stub(p => p.Id).Return(1);
-            player1.X = 100;
-            player1.Y = 100;
-            map.Add(player1);
+            player1.Object.Position = new Point(100, 100);
+            map.Add(player1.Object);
             var player2 = this.GetPlayer();
-            player2.Stub(p => p.Id).Return(2);
-            player2.X = 101;
-            player2.Y = 100;
-            map.Add(player2);
-            player1.AssertWasCalled(p => p.NewLocateablesInScope(null), o => o.IgnoreArguments());
-            player2.AssertWasCalled(p => p.NewLocateablesInScope(null), o => o.IgnoreArguments());
-            player1.AssertWasCalled(p => p.LocateableAdded(null, null), o => o.IgnoreArguments());
+            player2.Object.Position = new Point(101, 100);
+            map.Add(player2.Object);
+            player1.Verify(p => p.NewLocateablesInScope(It.Is<IEnumerable<ILocateable>>(n => n.Contains(player2.Object))), Times.Once);
+            player2.Verify(p => p.NewLocateablesInScope(It.Is<IEnumerable<ILocateable>>(n => n.Contains(player1.Object))), Times.Once);
+            player1.Verify(p => p.LocateableAdded(It.IsAny<object>(), It.IsAny<BucketItemEventArgs<ILocateable>>()), Times.Once);
         }
 
         /// <summary>
@@ -55,21 +53,20 @@ namespace MUnique.OpenMU.Tests
         [Test]
         public void TestPlayerMovesInMap()
         {
-            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize, 0);
+            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize);
             var player1 = this.GetPlayer();
-            player1.Stub(p => p.Id).Return(1);
 
-            map.Add(player1);
+            map.Add(player1.Object);
             var player2 = this.GetPlayer();
-            player2.Stub(p => p.Id).Return(2);
-            player2.X = 101;
-            player2.Y = 100;
-            map.Add(player2);
+            player2.Object.Position = new Point(101, 100);
+            map.Add(player2.Object);
 
-            map.Move(player1, 100, 100, new object(), 0);
-            player1.AssertWasCalled(p => p.NewLocateablesInScope(null), o => o.IgnoreArguments().Repeat.Times(2));
-            player2.AssertWasCalled(p => p.NewLocateablesInScope(null), o => o.IgnoreArguments().Repeat.Times(1));
-            player2.AssertWasCalled(p => p.LocateableAdded(null, null), o => o.IgnoreArguments().Repeat.Once());
+            map.Move(player1.Object, new Point(100, 100), new object(), 0);
+
+            player1.Verify(p => p.NewLocateablesInScope(It.Is<IEnumerable<ILocateable>>(n => n.Contains(player2.Object))), Times.Once);
+            player1.Verify(p => p.NewLocateablesInScope(It.Is<IEnumerable<ILocateable>>(n => n.Contains(player1.Object))), Times.Once);
+            player2.Verify(p => p.NewLocateablesInScope(It.Is<IEnumerable<ILocateable>>(n => n.Contains(player1.Object))), Times.Once);
+            player2.Verify(p => p.LocateableAdded(It.IsAny<object>(), It.IsAny<BucketItemEventArgs<ILocateable>>()), Times.Once);
         }
 
         /// <summary>
@@ -79,21 +76,49 @@ namespace MUnique.OpenMU.Tests
         [Test]
         public void PlayerMovesOutOfRange()
         {
-            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize, 0);
+            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize);
             var player1 = this.GetPlayer();
-            player1.Stub(p => p.Id).Return(1);
-            player1.X = 101;
-            player1.Y = 100;
-            map.Add(player1);
+            player1.Object.Position = new Point(101, 100);
+            map.Add(player1.Object);
             var player2 = this.GetPlayer();
-            player2.Stub(p => p.Id).Return(2);
-            player2.X = 101;
-            player2.Y = 100;
-            map.Add(player2);
+            player2.Object.Position = new Point(101, 100);
+            map.Add(player2.Object);
 
-            map.Move(player1, 100, 130, new object(), 0);
-            player1.AssertWasCalled(p => p.LocateablesOutOfScope(null), o => o.IgnoreArguments());
-            player2.AssertWasCalled(p => p.LocateableRemoved(null, null), o => o.IgnoreArguments());
+            map.Move(player1.Object, new Point(100, 130), new object(), 0);
+            player1.Verify(p => p.LocateablesOutOfScope(It.Is<IEnumerable<ILocateable>>(n => n.Contains(player2.Object))), Times.Once);
+            player2.Verify(p => p.LocateableRemoved(It.IsAny<object>(), It.IsAny<BucketItemEventArgs<ILocateable>>()), Times.Once);
+        }
+
+        /// <summary>
+        /// Tests if movements of a player into and out of the view range of another player causes
+        /// that the players get notified about it.
+        /// </summary>
+        [Test]
+        public void PlayerMovesOutAndIntoTheRange()
+        {
+            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize);
+            var player1 = this.GetPlayer();
+            player1.Object.Position = new Point(101, 100);
+            map.Add(player1.Object);
+            var player2 = this.GetPlayer();
+            player2.Object.Position = new Point(101, 100);
+            map.Add(player2.Object);
+
+            player1.Verify(p => p.NewLocateablesInScope(It.Is<IEnumerable<ILocateable>>(n => n.Contains(player2.Object))), Times.Once);
+            player2.Verify(p => p.NewLocateablesInScope(It.Is<IEnumerable<ILocateable>>(n => n.Contains(player1.Object))), Times.Once);
+            player1.Verify(p => p.LocateableAdded(It.IsAny<object>(), It.IsAny<BucketItemEventArgs<ILocateable>>()), Times.Once);
+            player1.Invocations.Clear();
+            player2.Invocations.Clear();
+
+            map.Move(player1.Object, new Point(100, 130), new object(), 0);
+            player1.Verify(p => p.LocateablesOutOfScope(It.Is<IEnumerable<ILocateable>>(n => n.Contains(player2.Object))), Times.Once);
+            player2.Verify(p => p.LocateableRemoved(It.IsAny<object>(), It.IsAny<BucketItemEventArgs<ILocateable>>()), Times.Once);
+            player1.Invocations.Clear();
+            player2.Invocations.Clear();
+
+            map.Move(player2.Object, new Point(101, 130), new object(), 0);
+            player2.Verify(p => p.NewLocateablesInScope(It.Is<IEnumerable<ILocateable>>(n => n.Contains(player1.Object))), Times.Once);
+            player1.Verify(p => p.LocateableAdded(It.IsAny<object>(), It.IsAny<BucketItemEventArgs<ILocateable>>()), Times.Once);
         }
 
         /// <summary>
@@ -102,23 +127,19 @@ namespace MUnique.OpenMU.Tests
         /// [Test]
         public void TestPerformanceMove()
         {
-            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize, 0);
+            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize);
             var player1 = this.GetPlayer();
-            player1.Stub(p => p.Id).Return(1);
-
-            map.Add(player1);
+            map.Add(player1.Object);
             var player2 = this.GetPlayer();
-            player2.Stub(p => p.Id).Return(2);
-            player2.X = 101;
-            player2.Y = 100;
-            map.Add(player2);
+            player2.Object.Position = new Point(101, 100);
+            map.Add(player2.Object);
 
             var sw = new System.Diagnostics.Stopwatch();
             sw.Start();
             var moveLock = new object();
             for (int i = 0; i < 1000; i++)
             {
-                map.Move(player1, (byte)(100 + (i % 30)), (byte)(100 + (i % 30)), moveLock, 0);
+                map.Move(player1.Object, new Point((byte)(100 + (i % 30)), (byte)(100 + (i % 30))), moveLock, 0);
             }
 
             sw.Stop();
@@ -131,29 +152,33 @@ namespace MUnique.OpenMU.Tests
         [Test]
         public void TestPlayerLeavesMap()
         {
-            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize, 0);
+            var map = new GameMap(new GameMapDefinition(), 60, ChunkSize);
             var player1 = this.GetPlayer();
-            player1.Stub(p => p.Id).Return(1);
-            player1.X = 100;
-            player1.Y = 100;
-            map.Add(player1);
+            player1.Object.Position = new Point(100, 100);
+            map.Add(player1.Object);
             var player2 = this.GetPlayer();
-            player2.Stub(p => p.Id).Return(2);
-            player2.X = 101;
-            player2.Y = 100;
-            map.Add(player2);
-            map.Remove(player2);
-            player1.AssertWasCalled(p => p.LocateableRemoved(null, null), o => o.IgnoreArguments());
-            Assert.AreEqual(player2.ObservingBuckets.Count, 0);
+            player2.Object.Position = new Point(101, 100);
+            map.Add(player2.Object);
+            map.Remove(player2.Object);
+            Assert.AreEqual(player2.Object.ObservingBuckets.Count, 0);
+            player1.Verify(p => p.LocateableRemoved(It.IsAny<object>(), It.IsAny<BucketItemEventArgs<ILocateable>>()), Times.Once);
+            player2.Verify(p => p.LocateableRemoved(It.IsAny<object>(), It.IsAny<BucketItemEventArgs<ILocateable>>()), Times.Once);
+            Assert.That(player1.Object.Observers.Count, Is.EqualTo(0));
+            Assert.That(player2.Object.Observers.Count, Is.EqualTo(0));
         }
 
-        private ITestPlayer GetPlayer()
+        private Mock<ITestPlayer> GetPlayer()
         {
-            var player = MockRepository.GenerateStub<ITestPlayer>();
-            player.Stub(p => p.ObservingBuckets).Return(new List<Bucket<ILocateable>>());
-            player.Stub(p => p.Observers).Return(new HashSet<IWorldObserver>());
-            player.Stub(p => p.ObserverLock).Return(new System.Threading.ReaderWriterLockSlim());
-            player.Stub(p => p.InfoRange).Return(20);
+            var player = new Mock<ITestPlayer>();
+            player.SetupAllProperties();
+            player.As<ILocateable>().SetupGet(p => p.Id).Returns(() => (player.Object as ISupportIdUpdate).Id);
+
+            player.Setup(p => p.ObservingBuckets).Returns(new List<Bucket<ILocateable>>());
+            player.Setup(p => p.Observers).Returns(new HashSet<IWorldObserver>());
+            player.Setup(p => p.ObserverLock).Returns(new System.Threading.ReaderWriterLockSlim());
+            player.Setup(p => p.InfoRange).Returns(20);
+            player.Setup(p => p.AddObserver(It.IsAny<IWorldObserver>())).Callback<IWorldObserver>(o => player.Object.Observers.Add(o));
+            player.Setup(p => p.RemoveObserver(It.IsAny<IWorldObserver>())).Callback<IWorldObserver>(o => player.Object.Observers.Remove(o));
             return player;
         }
     }

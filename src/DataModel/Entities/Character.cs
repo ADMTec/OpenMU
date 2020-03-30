@@ -6,8 +6,11 @@ namespace MUnique.OpenMU.DataModel.Entities
 {
     using System;
     using System.Collections.Generic;
+    using System.ComponentModel.DataAnnotations;
     using MUnique.OpenMU.AttributeSystem;
+    using MUnique.OpenMU.DataModel.Composition;
     using MUnique.OpenMU.DataModel.Configuration;
+    using MUnique.OpenMU.Interfaces;
 
     /// <summary>
     /// The hero state of a player. Given enough time, the state converges to <see cref="Normal"/>.
@@ -23,11 +26,6 @@ namespace MUnique.OpenMU.DataModel.Entities
         /// The character is a hero.
         /// </summary>
         Hero,
-
-        /// <summary>
-        /// The character is a hero, but it's some time ago.
-        /// </summary>
-        MediumHero,
 
         /// <summary>
         /// The character is a hero, but the hero state is almost gone.
@@ -52,7 +50,54 @@ namespace MUnique.OpenMU.DataModel.Entities
         /// <summary>
         /// The character killed more than two characters, and has hard restrictions.
         /// </summary>
-        PlayerKiller2ndStage
+        PlayerKiller2ndStage,
+    }
+
+    /// <summary>
+    /// The Character Status of a player.
+    /// </summary>
+    public enum CharacterStatus
+    {
+        /// <summary>
+        /// The character is normal
+        /// </summary>
+        Normal = 0,
+
+        /// <summary>
+        /// The character is banned
+        /// </summary>
+        Banned = 1,
+
+        /// <summary>
+        /// The character is a GameMaster (have mu logo on the head)
+        /// </summary>
+        GameMaster = 32,
+    }
+
+    /// <summary>
+    /// The character pose.
+    /// </summary>
+    public enum CharacterPose : byte
+    {
+        /// <summary>
+        /// The character is standing (normal).
+        /// </summary>
+        Standing = 0,
+
+        /// <summary>
+        /// The character is sitting on an object.
+        /// </summary>
+        Sitting = 2,
+
+        /// <summary>
+        /// The character is leaning towards something (wall etc).
+        /// </summary>
+        Leaning = 3,
+
+        /// <summary>
+        /// The character is hanging on something.
+        /// </summary>
+        Hanging = 4,
     }
 
     /// <summary>
@@ -68,11 +113,13 @@ namespace MUnique.OpenMU.DataModel.Entities
         /// <summary>
         /// Gets or sets the name.
         /// </summary>
+        [Required]
         public string Name { get; set; }
 
         /// <summary>
         /// Gets or sets the character class.
         /// </summary>
+        [Required]
         public virtual CharacterClass CharacterClass { get; set; }
 
         /// <summary>
@@ -106,11 +153,6 @@ namespace MUnique.OpenMU.DataModel.Entities
         public int MasterLevelUpPoints { get; set; }
 
         /// <summary>
-        /// Gets or sets the amount of money.
-        /// </summary>
-        public int Money { get; set; }
-
-        /// <summary>
         /// Gets or sets the current game map.
         /// </summary>
         public virtual GameMapDefinition CurrentMap { get; set; }
@@ -141,6 +183,16 @@ namespace MUnique.OpenMU.DataModel.Entities
         public HeroState State { get; set; }
 
         /// <summary>
+        /// Gets or sets the character status.
+        /// </summary>
+        public CharacterStatus CharacterStatus { get; set; }
+
+        /// <summary>
+        /// Gets or sets the pose.
+        /// </summary>
+        public CharacterPose Pose { get; set; }
+
+        /// <summary>
         /// Gets or sets the quest info. Don't know yet what its content is.
         /// </summary>
         public byte[] QuestInfo { get; set; }
@@ -168,31 +220,36 @@ namespace MUnique.OpenMU.DataModel.Entities
         /// <summary>
         /// Gets or sets the stat attributes.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<StatAttribute> Attributes { get; protected set; }
-
-        /// <summary>
-        /// Gets or sets the guild member information.
-        /// </summary>
-        public virtual GuildMemberInfo GuildMemberInfo { get; set; }
 
         /// <summary>
         /// Gets or sets the letters.
         /// </summary>
+        [MemberOfAggregate]
         public virtual IList<LetterHeader> Letters { get; protected set; }
 
         /// <summary>
         /// Gets or sets the learned skills.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<SkillEntry> LearnedSkills { get; protected set; }
 
         /// <summary>
         /// Gets or sets the inventory.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ItemStorage Inventory { get; set; }
 
         /// <summary>
         /// Gets or sets the drop item groups.
         /// </summary>
         public virtual ICollection<DropItemGroup> DropItemGroups { get; protected set; }
+
+        /// <inheritdoc />
+        public override string ToString()
+        {
+            return this.Name;
+        }
     }
 }

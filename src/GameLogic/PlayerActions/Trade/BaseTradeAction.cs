@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Trade
 {
+    using MUnique.OpenMU.GameLogic.Views;
     using MUnique.OpenMU.Interfaces;
 
     /// <summary>
@@ -32,24 +33,17 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Trade
                     trader.BackupInventory.Items.ForEach(item => trader.Inventory.AddItem(item.ItemSlot, item));
                     trader.Inventory.ItemStorage.Money = trader.BackupInventory.Money;
                 }
-
-                this.ResetTrade(trader);
-
-                // TODO: Send Trade cancelled message
             }
+
+            this.ResetTradeState(trader);
         }
 
         /// <summary>
         /// Resets the trade.
         /// </summary>
         /// <param name="trader">The trader.</param>
-        protected void ResetTrade(ITrader trader)
+        protected void ResetTradeState(ITrader trader)
         {
-            if (trader is Player)
-            {
-                ((Player)trader).PlayerView.InventoryView.UpdateInventoryList();
-            }
-
             trader.TradingPartner = null;
             trader.BackupInventory = null;
             trader.TemporaryStorage.Clear();
@@ -68,7 +62,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Trade
                 return;
             }
 
-            player.PlayerView.ShowMessage(message, MessageType.BlueNormal);
+            player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage(message, MessageType.BlueNormal);
         }
     }
 }

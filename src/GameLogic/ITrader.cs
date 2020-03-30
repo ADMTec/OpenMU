@@ -4,6 +4,11 @@
 
 namespace MUnique.OpenMU.GameLogic
 {
+    using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.Interfaces;
+    using MUnique.OpenMU.Persistence;
+    using MUnique.OpenMU.PlugIns;
+
     /// <summary>
     /// Interface of a trader.
     /// </summary>
@@ -32,12 +37,12 @@ namespace MUnique.OpenMU.GameLogic
         /// <summary>
         /// Gets or sets the short guild identifier.
         /// </summary>
-        ushort ShortGuildID { get; set; }
+        GuildMemberStatus GuildStatus { get; set; }
 
         /// <summary>
         /// Gets the inventory.
         /// </summary>
-        IStorage Inventory { get; }
+        IInventoryStorage Inventory { get; }
 
         /// <summary>
         /// Gets the temporary storage, which holds the items of the trade.
@@ -58,5 +63,20 @@ namespace MUnique.OpenMU.GameLogic
         /// Gets the state of the player.
         /// </summary>
         StateMachine PlayerState { get; }
+
+        /// <summary>
+        /// Gets the persistence context of the trader. It needs to be updated when a trade finishes.
+        /// </summary>
+        IPlayerContext PersistenceContext { get; }
+
+        /// <summary>
+        /// Gets the game context of the trader.
+        /// </summary>
+        IGameContext GameContext { get; }
+
+        /// <summary>
+        /// Gets the trade view.
+        /// </summary>
+        ICustomPlugInContainer<IViewPlugIn> ViewPlugIns { get; }
     }
 }

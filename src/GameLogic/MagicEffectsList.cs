@@ -8,30 +8,31 @@ namespace MUnique.OpenMU.GameLogic
     using System.Collections;
     using System.Collections.Generic;
     using System.Linq;
+    using MUnique.OpenMU.GameLogic.Views.World;
 
     /// <summary>
-    /// The list of magic effects of a player instance. Automatically applies the powerups of the effects to the player.
+    /// The list of magic effects of a player instance. Automatically applies the power-ups of the effects to the player.
     /// </summary>
     public class MagicEffectsList
     {
         private readonly BitArray contains = new BitArray(0x100);
-        private readonly Player owner;
+        private readonly IAttackable owner;
         private readonly object addLock = new object();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="MagicEffectsList"/> class.
         /// </summary>
-        /// <param name="player">The player.</param>
-        public MagicEffectsList(Player player)
+        /// <param name="owner">The attackable which owns this list.</param>
+        public MagicEffectsList(IAttackable owner)
         {
-            this.owner = player;
-            this.ActiveEffects = new Dictionary<byte, MagicEffect>(6);
+            this.owner = owner;
+            this.ActiveEffects = new SortedList<short, MagicEffect>(6);
         }
 
         /// <summary>
         /// Gets the active effects.
         /// </summary>
-        public IDictionary<byte, MagicEffect> ActiveEffects { get; }
+        public IDictionary<short, MagicEffect> ActiveEffects { get; }
 
         /// <summary>
         /// Adds the effect and applies the power ups.
@@ -61,10 +62,10 @@ namespace MUnique.OpenMU.GameLogic
             if (added)
             {
                 effect.EffectTimeOut += this.OnEffectTimeOut;
-                this.owner.PlayerView.ActivateMagicEffect(effect, this.owner);
+                (this.owner as Player)?.ViewPlugIns.GetPlugIn<IActivateMagicEffectPlugIn>()?.ActivateMagicEffect(effect, this.owner);
                 if (effect.Definition.InformObservers)
                 {
-                    this.owner.ForEachObservingPlayer(p => p.PlayerView.ActivateMagicEffect(effect, this.owner), false);
+                    (this.owner as IObservable)?.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IActivateMagicEffectPlugIn>()?.ActivateMagicEffect(effect, this.owner), false);
                 }
             }
         }
@@ -104,10 +105,10 @@ namespace MUnique.OpenMU.GameLogic
                 this.owner.Attributes.RemoveElement(powerUp.Element, powerUp.Target);
             }
 
-            this.owner.PlayerView.DeactivateMagicEffect(effect, this.owner);
+            (this.owner as Player)?.ViewPlugIns.GetPlugIn<IDeactivateMagicEffectPlugIn>()?.DeactivateMagicEffect(effect, this.owner);
             if (effect.Definition.InformObservers)
             {
-                this.owner.ForEachObservingPlayer(p => p.PlayerView.DeactivateMagicEffect(effect, this.owner), false);
+                (this.owner as IObservable)?.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IDeactivateMagicEffectPlugIn>()?.DeactivateMagicEffect(effect, this.owner), false);
             }
         }
 
@@ -120,7 +121,7 @@ namespace MUnique.OpenMU.GameLogic
             MagicEffect magicEffect = this.ActiveEffects[effect.Id];
             if (magicEffect.Value > effect.Value)
             {
-                // no debuffing allowed
+                // no de-buffing allowed
                 return;
             }
 

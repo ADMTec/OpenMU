@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <Authors>MUnique</Authors>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <RepositoryUrl>https://github.com/MUnique/OpenMU/tree/master/src/PlugIns</RepositoryUrl>
+    <PackageProjectUrl>https://munique.net</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>MUnique OpenMU MUOnline PlugIns</PackageTags>
+    <PackageId>MUnique.OpenMU.PlugIns</PackageId>
+    <Description>
+      MUnique.OpenMU.PlugIns contains all what's required to create plugins extension points and own plugins for dependent applications.
+    </Description>
+    <PackageVersion>0.3.3</PackageVersion>
+    <Version>0.3.3</Version>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <OutputPath>..\..\bin\Debug\</OutputPath>
+    <DocumentationFile>..\..\bin\Debug\MUnique.OpenMU.PlugIns.xml</DocumentationFile>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <OutputPath>..\..\bin\Release\</OutputPath>
+    <DocumentationFile>..\..\bin\Release\MUnique.OpenMU.PlugIns.xml</DocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\SharedAssemblyInfo.cs" Link="Properties\SharedAssemblyInfo.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="..\stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="log4net" Version="2.0.8" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="3.4.0" />
+    <PackageReference Include="StyleCop.Analyzers" Version="1.1.118">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

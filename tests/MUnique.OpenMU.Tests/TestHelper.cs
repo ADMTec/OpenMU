@@ -5,14 +5,16 @@
 namespace MUnique.OpenMU.Tests
 {
     using System.Collections.Generic;
+    using Moq;
     using MUnique.OpenMU.AttributeSystem;
     using MUnique.OpenMU.DataModel.Configuration;
+    using MUnique.OpenMU.DataModel.Configuration.Items;
     using MUnique.OpenMU.DataModel.Entities;
     using MUnique.OpenMU.GameLogic;
     using MUnique.OpenMU.GameLogic.Attributes;
     using MUnique.OpenMU.GameLogic.Views;
-    using MUnique.OpenMU.Persistence;
-    using Rhino.Mocks;
+    using MUnique.OpenMU.Persistence.InMemory;
+    using MUnique.OpenMU.PlugIns;
 
     /// <summary>
     /// Some helper functions to create test objects.
@@ -20,49 +22,52 @@ namespace MUnique.OpenMU.Tests
     public static class TestHelper
     {
         /// <summary>
-        /// Gets a test player.
+        /// Gets the player.
         /// </summary>
         /// <returns>The test player.</returns>
         public static Player GetPlayer()
         {
-            return GetPlayer(0);
-        }
+            var gameConfig = new Mock<GameConfiguration>();
+            gameConfig.SetupAllProperties();
+            gameConfig.Setup(c => c.Maps).Returns(new List<GameMapDefinition>());
+            gameConfig.Setup(c => c.Items).Returns(new List<ItemDefinition>());
+            gameConfig.Setup(c => c.Skills).Returns(new List<Skill>());
+            gameConfig.Setup(c => c.PlugInConfigurations).Returns(new List<PlugInConfiguration>());
+            var map = new Mock<GameMapDefinition>();
+            map.SetupAllProperties();
+            map.Setup(m => m.DropItemGroups).Returns(new List<DropItemGroup>());
+            map.Setup(m => m.MonsterSpawns).Returns(new List<MonsterSpawnArea>());
+            gameConfig.Object.RecoveryInterval = int.MaxValue;
+            gameConfig.Object.Maps.Add(map.Object);
 
-        /// <summary>
-        /// Gets the player.
-        /// </summary>
-        /// <param name="id">The identifier.</param>
-        /// <returns>The test player.</returns>
-        public static Player GetPlayer(ushort id)
-        {
-            var gameConfig = new GameConfiguration()
-            {
-                RecoveryInterval = int.MaxValue
-            };
-            var gameContext = new GameContext(gameConfig, MockRepository.GenerateMock<IRepositoryManager>());
-            return GetPlayer(id, gameContext);
+            var mapInitializer = new MapInitializer(gameConfig.Object);
+            var gameContext = new GameContext(gameConfig.Object, new InMemoryPersistenceContextProvider(), mapInitializer);
+            return GetPlayer(gameContext);
         }
 
         /// <summary>
         /// Gets a test player.
         /// </summary>
-        /// <param name="id">The player identifier.</param>
         /// <param name="gameContext">The game context.</param>
         /// <returns>
         /// The test player.
         /// </returns>
-        public static Player GetPlayer(ushort id, IGameContext gameContext)
+        public static Player GetPlayer(IGameContext gameContext)
         {
-            var map = new GameMap(MockRepository.GenerateStub<GameMapDefinition>(), 60, 4, 0);
-            map.Definition.Stub(d => d.DropItemGroups).Return(new List<DropItemGroup>());
-            gameContext.MapList.Add(map.Definition.Number.ToUnsigned(), map);
-            var character = MockRepository.GenerateStub<Character>();
-            character.Inventory = MockRepository.GenerateStub<ItemStorage>();
-            character.Inventory.Stub(i => i.Items).Return(new List<Item>());
-            character.Stub(c => c.LearnedSkills).Return(new List<SkillEntry>());
-            character.CurrentMap = map.Definition;
-            character.CharacterClass = MockRepository.GenerateStub<CharacterClass>();
-            character.CharacterClass.Stub(c => c.StatAttributes).Return(
+            var characterMock = new Mock<Character>();
+            characterMock.SetupAllProperties();
+            characterMock.Setup(c => c.LearnedSkills).Returns(new List<SkillEntry>());
+            characterMock.Setup(c => c.Attributes).Returns(new List<StatAttribute>());
+            characterMock.Setup(c => c.DropItemGroups).Returns(new List<DropItemGroup>());
+
+            var inventoryMock = new Mock<ItemStorage>();
+            inventoryMock.Setup(i => i.Items).Returns(new List<Item>());
+
+            var character = characterMock.Object;
+            character.Inventory = inventoryMock.Object;
+            character.CurrentMap = gameContext.GetMap(0)?.Definition;
+            var characterClassMock = new Mock<CharacterClass>();
+            characterClassMock.Setup(c => c.StatAttributes).Returns(
                 new List<StatAttributeDefinition>
                 {
                     new StatAttributeDefinition(Stats.Level, 0, false),
@@ -71,15 +76,10 @@ namespace MUnique.OpenMU.Tests
                     new StatAttributeDefinition(Stats.BaseVitality, 25, true),
                     new StatAttributeDefinition(Stats.BaseEnergy, 10, true),
                     new StatAttributeDefinition(Stats.CurrentHealth, 0, false),
-                    new StatAttributeDefinition(Stats.CurrentMana, 0, false)
+                    new StatAttributeDefinition(Stats.CurrentMana, 0, false),
+                    new StatAttributeDefinition(Stats.CurrentShield, 0, false),
                 });
-            character.Stub(c => c.Attributes).Return(new List<StatAttribute>());
-            foreach (var attributeDef in character.CharacterClass.StatAttributes)
-            {
-                character.Attributes.Add(new StatAttribute(attributeDef.Attribute, attributeDef.BaseValue));
-            }
-
-            character.CharacterClass.Stub(c => c.AttributeCombinations).Return(new List<AttributeRelationship>
+            characterClassMock.Setup(c => c.AttributeCombinations).Returns(new List<AttributeRelationship>
             {
                 // Params: TargetAttribute, Multiplier, SourceAttribute
                 new AttributeRelationship(Stats.TotalStrength, 1, Stats.BaseStrength),
@@ -103,30 +103,44 @@ namespace MUnique.OpenMU.Tests
                 new AttributeRelationship(Stats.MaximumHealth, 2, Stats.Level),
                 new AttributeRelationship(Stats.MaximumHealth, 3, Stats.TotalVitality),
             });
-            character.CharacterClass.Stub(c => c.BaseAttributeValues).Return(new List<ConstValueAttribute>()
+            characterClassMock.Setup(c => c.BaseAttributeValues).Returns(new List<ConstValueAttribute>
             {
                 new ConstValueAttribute(10, Stats.MaximumMana),
                 new ConstValueAttribute(35, Stats.MaximumHealth),
                 new ConstValueAttribute(2, Stats.SkillMultiplier),
-                new ConstValueAttribute(2, Stats.AbilityRecovery),
+                new ConstValueAttribute(2, Stats.AbilityRecoveryMultiplier),
                 new ConstValueAttribute(1, Stats.DamageReceiveDecrement),
                 new ConstValueAttribute(1, Stats.AttackDamageIncrease),
-                new ConstValueAttribute(1, Stats.MoneyAmountRate)
+                new ConstValueAttribute(1, Stats.MoneyAmountRate),
             });
+            character.CharacterClass = characterClassMock.Object;
 
-            character.Stub(c => c.DropItemGroups).Return(new List<DropItemGroup>());
+            foreach (var attributeDef in character.CharacterClass.StatAttributes)
+            {
+                character.Attributes.Add(new StatAttribute(attributeDef.Attribute, attributeDef.BaseValue));
+            }
 
-            var player = new Player(id, gameContext, MockRepository.GenerateMock<IPlayerView>()) { Account = new Account() };
-            player.PlayerView.Stub(v => v.InventoryView).Return(MockRepository.GenerateMock<IInventoryView>());
-            player.PlayerView.Stub(v => v.WorldView).Return(MockRepository.GenerateMock<IWorldView>());
-            player.PlayerView.Stub(v => v.TradeView).Return(MockRepository.GenerateMock<ITradeView>());
-            player.PlayerView.Stub(v => v.GuildView).Return(MockRepository.GenerateMock<IGuildView>());
-            player.PlayerView.Stub(v => v.PartyView).Return(MockRepository.GenerateMock<IPartyView>());
+            var player = new TestPlayer(gameContext);
+            player.Account = new Account();
             player.PlayerState.TryAdvanceTo(PlayerState.LoginScreen);
             player.PlayerState.TryAdvanceTo(PlayerState.Authenticated);
             player.PlayerState.TryAdvanceTo(PlayerState.CharacterSelection);
             player.SelectedCharacter = character;
+
             return player;
+        }
+
+        private class TestPlayer : Player
+        {
+            public TestPlayer(IGameContext gameContext)
+                : base(gameContext)
+            {
+            }
+
+            protected override ICustomPlugInContainer<IViewPlugIn> CreateViewPlugInContainer()
+            {
+                return new MockViewPlugInContainer();
+            }
         }
     }
 }

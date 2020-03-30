@@ -4,8 +4,6 @@
 
 namespace MUnique.OpenMU.GameLogic
 {
-    using MUnique.OpenMU.GameLogic.Views;
-
     /// <summary>
     /// The interface for a party member.
     /// </summary>
@@ -20,11 +18,6 @@ namespace MUnique.OpenMU.GameLogic
         /// Gets or sets the last party requester.
         /// </summary>
         IPartyMember LastPartyRequester { get; set; }
-
-        /// <summary>
-        /// Gets the party view.
-        /// </summary>
-        IPartyView PartyView { get; }
 
         /// <summary>
         /// Gets the maximum health.

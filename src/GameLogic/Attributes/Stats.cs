@@ -24,6 +24,11 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         public static AttributeDefinition TotalStrength { get; } = new AttributeDefinition(new Guid("F59709A3-44B0-4147-AAEB-E90CEC251641"), "Total Strength", "The total strength of the character, which contains the base strength and additional strength powerups");
 
         /// <summary>
+        /// Gets the total strength requirement value attribute definition.
+        /// </summary>
+        public static AttributeDefinition TotalStrengthRequirementValue { get; } = new AttributeDefinition(new Guid("7BC30A84-5FDE-490B-81A4-FFECB41CA901"), "Total Strength Requirement Value", "The total strength requirement value of an item, which is used to calculate the required total strength of a character to equip an item. The required total strength depends on the options, drop level and level of the item.");
+
+        /// <summary>
         /// Gets the base agility attribute definition.
         /// </summary>
         public static AttributeDefinition BaseAgility { get; } = new AttributeDefinition(new Guid("1AE9C014-E3CD-4703-BD05-1B65F5F94CEB"), "baseAgility", string.Empty);
@@ -32,6 +37,11 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         /// Gets the total agility attribute definition.
         /// </summary>
         public static AttributeDefinition TotalAgility { get; } = new AttributeDefinition(new Guid("364F1207-00F8-485B-9F2C-74E04CB78C73"), "totalAgility", string.Empty);
+
+        /// <summary>
+        /// Gets the total agility requirement value attribute definition.
+        /// </summary>
+        public static AttributeDefinition TotalAgilityRequirementValue { get; } = new AttributeDefinition(new Guid("DFE7A14F-BF1C-414F-8B77-B8FE6FD76A7D"), "Total Agility Requirement Value", "The total agility requirement value of an item, which is used to calculate the required total agility of a character to equip an item. The required total agility depends on the options, drop level and level of the item.");
 
         /// <summary>
         /// Gets the base vitality attribute definition.
@@ -44,6 +54,11 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         public static AttributeDefinition TotalVitality { get; } = new AttributeDefinition(new Guid("6A0076E4-69DC-42E7-A92B-C8711392EF82"), "totalVitality", string.Empty);
 
         /// <summary>
+        /// Gets the total vitality requirement value attribute definition.
+        /// </summary>
+        public static AttributeDefinition TotalVitalityRequirementValue { get; } = new AttributeDefinition(new Guid("B7B77FF8-1833-4739-98EE-0C2DD7344F56"), "Total Vitality Requirement Value", "The total vitality requirement value of an item, which is used to calculate the required total vitality of a character to equip an item. The required total vitality depends on the options, drop level and level of the item.");
+
+        /// <summary>
         /// Gets the base energy attribute definition.
         /// </summary>
         public static AttributeDefinition BaseEnergy { get; } = new AttributeDefinition(new Guid("01B0EF28-F7A0-46B5-97BA-2B624A54CD75"), "baseEnergy", string.Empty);
@@ -54,6 +69,11 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         public static AttributeDefinition TotalEnergy { get; } = new AttributeDefinition(new Guid("12956B45-007C-453A-AE1F-36475B8CEBBF"), "totalEnergy", string.Empty);
 
         /// <summary>
+        /// Gets the total energy requirement value attribute definition.
+        /// </summary>
+        public static AttributeDefinition TotalEnergyRequirementValue { get; } = new AttributeDefinition(new Guid("5EF1FCD1-0C08-4087-BFCE-C655BB121CDD"), "Total Energy Requirement Value", "The total energy requirement value of an item, which is used to calculate the required total energy of a character to equip an item. The required total energy depends on the options, drop level and level of the item.");
+
+        /// <summary>
         /// Gets the base leadership attribute definition.
         /// </summary>
         public static AttributeDefinition BaseLeadership { get; } = new AttributeDefinition(new Guid("6AF2C9DF-3AE4-4721-8462-9A8EC7F56FE4"), "baseLeadership", string.Empty);
@@ -62,6 +82,11 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         /// Gets the total leadership attribute definition.
         /// </summary>
         public static AttributeDefinition TotalLeadership { get; } = new AttributeDefinition(new Guid("35E04272-63F3-4EBB-8FB5-EF2128DDB9F6"), "totalLeadership", string.Empty);
+
+        /// <summary>
+        /// Gets the total leadership requirement value attribute definition.
+        /// </summary>
+        public static AttributeDefinition TotalLeadershipRequirementValue { get; } = new AttributeDefinition(new Guid("E38A897E-ED6F-4C06-AE11-7CAA7EAEC5A9"), "Total Leadership Requirement Value", "The total leadership requirement value of an item, which is used to calculate the required total leadership of a character to equip an item. The required total leadership depends on the options, drop level and level of the item.");
 
         /// <summary>
         /// Gets the level attribute definition.
@@ -169,6 +194,11 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         public static AttributeDefinition MaximumPhysBaseDmg { get; } = new AttributeDefinition(new Guid("8A918EA2-893A-48B2-A684-3E71526CA71F"), "Maximum Physical Base Damage", string.Empty);
 
         /// <summary>
+        /// Gets the item count of maximum physical base DMG per 20 level option attribute definition.
+        /// </summary>
+        public static AttributeDefinition MaximumPhysBaseDmgPer20LevelItemCount { get; } = new AttributeDefinition(new Guid("{8788D563-5501-472D-8C48-F9EB5AFB1FD8}"), "Maximum Physical Base Damage per 20 level item count", string.Empty);
+
+        /// <summary>
         /// Gets the minimum wiz base DMG attribute definition.
         /// </summary>
         public static AttributeDefinition MinimumWizBaseDmg { get; } = new AttributeDefinition(new Guid("65583A02-AB94-4A17-9B79-86ECC82DC835"), "minimumWizBaseDmg", string.Empty);
@@ -179,6 +209,11 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         public static AttributeDefinition MaximumWizBaseDmg { get; } = new AttributeDefinition(new Guid("44B8236A-BF5B-4082-BA8B-5DEDA1458D33"), "maximumWizBaseDmg", string.Empty);
 
         /// <summary>
+        /// Gets the item count of maximum wiz base DMG per 20 level option attribute definition.
+        /// </summary>
+        public static AttributeDefinition MaximumWizBaseDmgPer20LevelItemCount { get; } = new AttributeDefinition(new Guid("99229ACA-B6F4-40EF-9835-2AB0C53C08CF"), "Maximum Wizardry Base Damage per 20 level item count", string.Empty);
+
+        /// <summary>
         /// Gets the minimum curse base DMG attribute definition.
         /// </summary>
         public static AttributeDefinition MinimumCurseBaseDmg { get; } = new AttributeDefinition(new Guid("B8AE2D6B-05CE-43A9-B2BB-3C32F288A043"), "minimumCurseBaseDmg", string.Empty);
@@ -187,6 +222,16 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         /// Gets the maximum curse base DMG attribute definition.
         /// </summary>
         public static AttributeDefinition MaximumCurseBaseDmg { get; } = new AttributeDefinition(new Guid("5E7B5B56-BB4D-4645-9593-836FE86E80EA"), "maximumCurseBaseDmg", string.Empty);
+
+        /// <summary>
+        /// Gets the item count of maximum curse base DMG per 20 level option attribute definition.
+        /// </summary>
+        public static AttributeDefinition MaximumCurseBaseDmgPer20LevelItemCount { get; } = new AttributeDefinition(new Guid("5CB9BC7B-96DA-4121-80C1-F842270E07D8"), "Maximum Curse Base Damage per 20 level item count", string.Empty);
+
+        /// <summary>
+        /// Gets the base damage bonus attribute definition.
+        /// </summary>
+        public static AttributeDefinition BaseDamageBonus { get; } = new AttributeDefinition(new Guid("BB6F0151-EAB2-4A9D-BFE3-51E145F36C52"), "Base Damage Bonus", "A bonus value which gets added to all min/max damage values during the damage calculation");
 
         /// <summary>
         /// Gets the skill multiplier attribute definition.
@@ -205,6 +250,7 @@ namespace MUnique.OpenMU.GameLogic.Attributes
 
         /// <summary>
         /// Gets the combo bonus attribute definition.
+        /// TODO.
         /// </summary>
         public static AttributeDefinition ComboBonus { get; } = new AttributeDefinition(new Guid("53A479FE-8A73-4A45-AACA-5B1AA4362CF9"), "comboBonus", string.Empty);
 
@@ -245,6 +291,7 @@ namespace MUnique.OpenMU.GameLogic.Attributes
 
         /// <summary>
         /// Gets the shield block damage decrement attribute definition.
+        /// TODO: Usage in a shield skill handler.
         /// </summary>
         public static AttributeDefinition ShieldBlockDamageDecrement { get; } = new AttributeDefinition(new Guid("DAC6690B-5922-4446-BCE5-5E701BE62EC1"), "shieldBlockDamageDecrement", string.Empty);
 
@@ -291,22 +338,48 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         /// <summary>
         /// Gets the mana recovery attribute definition.
         /// </summary>
-        public static AttributeDefinition ManaRecovery { get; } = new AttributeDefinition(new Guid("E4EC7913-5004-48FC-ACB1-E1764237A251"), "manaRecovery", string.Empty);
+        public static AttributeDefinition ManaRecoveryMultiplier { get; } = new AttributeDefinition(new Guid("E4EC7913-5004-48FC-ACB1-E1764237A251"), "manaRecovery", string.Empty);
 
         /// <summary>
         /// Gets the health recovery attribute definition.
         /// </summary>
-        public static AttributeDefinition HealthRecovery { get; } = new AttributeDefinition(new Guid("0A427A13-3708-4125-BA83-A2DF7C0753B8"), "healthRecovery", string.Empty);
+        public static AttributeDefinition HealthRecoveryMultiplier { get; } = new AttributeDefinition(new Guid("0A427A13-3708-4125-BA83-A2DF7C0753B8"), "healthRecovery", string.Empty);
 
         /// <summary>
         /// Gets the ability recovery attribute definition.
         /// </summary>
-        public static AttributeDefinition AbilityRecovery { get; } = new AttributeDefinition(new Guid("A3E274F5-FA74-4E6A-97EA-D0930AAF0374"), "abilityRecovery", string.Empty);
+        public static AttributeDefinition AbilityRecoveryMultiplier { get; } = new AttributeDefinition(new Guid("A3E274F5-FA74-4E6A-97EA-D0930AAF0374"), "abilityRecovery", string.Empty);
 
         /// <summary>
         /// Gets the shield recovery attribute definition.
         /// </summary>
-        public static AttributeDefinition ShieldRecovery { get; } = new AttributeDefinition(new Guid("6B99AA99-C1A3-413B-8C70-602567EB5163"), "shieldRecovery", string.Empty);
+        public static AttributeDefinition ShieldRecoveryMultiplier { get; } = new AttributeDefinition(new Guid("6B99AA99-C1A3-413B-8C70-602567EB5163"), "shieldRecovery", string.Empty);
+
+        /// <summary>
+        /// Gets the mana recovery absolute attribute definition.
+        /// </summary>
+        public static AttributeDefinition ManaRecoveryAbsolute { get; } = new AttributeDefinition(new Guid("33DE588D-1FAB-493A-8FB1-837BF9C5131F"), nameof(ManaRecoveryAbsolute), string.Empty);
+
+        /// <summary>
+        /// Gets the health recovery absolute attribute definition.
+        /// </summary>
+        public static AttributeDefinition HealthRecoveryAbsolute { get; } = new AttributeDefinition(new Guid("CBC4AB00-FD01-44D4-823A-D04B5E208AA0"), nameof(HealthRecoveryAbsolute), string.Empty);
+
+        /// <summary>
+        /// Gets the ability recovery absolute attribute definition.
+        /// </summary>
+        public static AttributeDefinition AbilityRecoveryAbsolute { get; } = new AttributeDefinition(new Guid("19A76D11-B7AA-4C1E-885C-2B7E29071E3F"), nameof(AbilityRecoveryAbsolute), string.Empty);
+
+        /// <summary>
+        /// Gets the shield recovery absolute attribute definition.
+        /// </summary>
+        public static AttributeDefinition ShieldRecoveryAbsolute { get; } = new AttributeDefinition(new Guid("323F479D-3205-4E24-B9BC-0A3EFC851EDF"), nameof(ShieldRecoveryAbsolute), string.Empty);
+
+        /// <summary>
+        /// Gets the shield recovery everywhere attribute definition.
+        /// By default, shield recovery is limited to the safezone only. With this attribute (value >= 1), recovery works everywhere on a map.
+        /// </summary>
+        public static AttributeDefinition ShieldRecoveryEverywhere { get; } = new AttributeDefinition(new Guid("3D0A78FF-CCD4-442E-8B4E-64E5082ABD78"), "shieldRecovery", string.Empty);
 
         /// <summary>
         /// Gets the critical damage chance attribute definition.
@@ -379,6 +452,46 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         public static AttributeDefinition MaximumGuildSize { get; } = new AttributeDefinition(new Guid("898EF69B-3965-4DBF-9783-E9709698236B"), "Maximum Guild Size", string.Empty);
 
         /// <summary>
+        /// Gets the fully recover mana after hit chance definition.
+        /// </summary>
+        public static AttributeDefinition FullyRecoverManaAfterHitChance { get; } = new AttributeDefinition(new Guid("EB06D3A2-DA82-4B81-81B9-A16D39974531"), "Chance to fully recover mana when getting hit", "3rd Wing Option");
+
+        /// <summary>
+        /// Gets the fully recover health after hit chance definition.
+        /// </summary>
+        public static AttributeDefinition FullyRecoverHealthAfterHitChance { get; } = new AttributeDefinition(new Guid("3CA72C07-9C2C-4FC5-8BCB-9BD737F83664"), "Chance to fully recover mana when getting hit", "3rd Wing Option");
+
+        /// <summary>
+        /// Gets the health loss after hit definition.
+        /// </summary>
+        public static AttributeDefinition HealthLossAfterHit { get; } = new AttributeDefinition(new Guid("D84A719B-D18E-433E-BF55-9F08A214AB00"), "Health loss after hitting a target", "Caused by wearing wings");
+
+        /// <summary>
+        /// Gets the CanFly attribute for warping to icarus.
+        /// </summary>
+        public static AttributeDefinition CanFly { get; } = new AttributeDefinition(new Guid("EC34C673-84DE-4811-8962-CD2164A2248C"), "Requirement of the Icarus map.", "You can enter Icarus only with wings, dinorant, fenrir.");
+
+        /// <summary>
+        /// Gets the MoonstonePendantEquipped attribute for warping to Karutan.
+        /// </summary>
+        public static AttributeDefinition MoonstonePendantEquipped { get; } = new AttributeDefinition(new Guid("4BC010D0-9E75-4ECB-8963-08A3697278C3"), "Requirement of the Kanturu Event Map during the event.", "You can enter the Kanturu Event only with an equipped Moonstone Pendant.");
+
+        /// <summary>
+        /// Gets the Ammo consumption rate attribute which defines how much ammo is consumed by some skills.
+        /// </summary>
+        public static AttributeDefinition AmmunitionConsumptionRate { get; } = new AttributeDefinition(new Guid("4CD0B1AE-3FE0-499B-B421-4E4078182090"), "The amount of ammo which is required to perform certain skills.", "You can only execute certain skills if you have enough ammo, or if this rate is 0.");
+
+        /// <summary>
+        /// Gets the Ammo attribute which defines how much ammo is available.
+        /// </summary>
+        public static AttributeDefinition AmmunitionAmount { get; } = new AttributeDefinition(new Guid("064543E6-2559-4033-B363-AE76214E7DEE"), "The amount of ammo which is equipped.", "You can only execute certain skills if you have enough ammo, or if the ammo consumption rate is 0.");
+
+        /// <summary>
+        /// Gets the <see cref="IsInSafezone"/> attribute which defines if the character is located in a safezone of a game map.
+        /// </summary>
+        public static AttributeDefinition IsInSafezone { get; } = new AttributeDefinition(new Guid("82044DF9-F528-4AD6-9AAA-6FEAA4C786E7"), "Flag, if the character is located in a safezone of a game map", "Characters at the safezone recover additional health and shield.");
+
+        /// <summary>
         /// Gets the attributes which are regenerated in an interval.
         /// </summary>
         public static IEnumerable<Regeneration> IntervalRegenerationAttributes
@@ -395,24 +508,32 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         /// <summary>
         /// Gets the attributes which regenerate after a monster has been killed by the player.
         /// </summary>
-        public static IEnumerable<AttributeDefinition> AfterMonsterKillRegenerationAttributes
+        public static IEnumerable<Regeneration> AfterMonsterKillRegenerationAttributes
         {
             get
             {
-                yield return ManaAfterMonsterKill;
-                yield return HealthAfterMonsterKill;
-                yield return ShieldAfterMonsterKill;
-                yield return AbilityAfterMonsterKill;
+                yield return ManaRegenerationAfterMonsterKill;
+                yield return HealthRegenerationAfterMonsterKill;
+                yield return AbilityRegenerationAfterMonsterKill;
+                yield return ShieldRegenerationAfterMonsterKill;
             }
         }
 
-        private static Regeneration ManaRegeneration { get; } = new Regeneration(ManaRecovery, MaximumMana, CurrentMana);
+        private static Regeneration ManaRegeneration { get; } = new Regeneration(ManaRecoveryMultiplier, MaximumMana, CurrentMana, ManaRecoveryAbsolute);
 
-        private static Regeneration HealthRegeneration { get; } = new Regeneration(HealthRecovery, MaximumHealth, CurrentHealth);
+        private static Regeneration HealthRegeneration { get; } = new Regeneration(HealthRecoveryMultiplier, MaximumHealth, CurrentHealth, HealthRecoveryAbsolute);
 
-        private static Regeneration AbilityRegeneration { get; } = new Regeneration(AbilityRecovery, MaximumAbility, CurrentAbility);
+        private static Regeneration AbilityRegeneration { get; } = new Regeneration(AbilityRecoveryMultiplier, MaximumAbility, CurrentAbility, AbilityRecoveryAbsolute);
 
-        private static Regeneration ShieldRegeneration { get; } = new Regeneration(ShieldRecovery, MaximumShield, CurrentShield);
+        private static Regeneration ShieldRegeneration { get; } = new Regeneration(ShieldRecoveryMultiplier, MaximumShield, CurrentShield, ShieldRecoveryAbsolute);
+
+        private static Regeneration ManaRegenerationAfterMonsterKill { get; } = new Regeneration(ManaAfterMonsterKill, MaximumMana, CurrentMana, null);
+
+        private static Regeneration HealthRegenerationAfterMonsterKill { get; } = new Regeneration(HealthAfterMonsterKill, MaximumHealth, CurrentHealth, null);
+
+        private static Regeneration AbilityRegenerationAfterMonsterKill { get; } = new Regeneration(AbilityAfterMonsterKill, MaximumAbility, CurrentAbility, null);
+
+        private static Regeneration ShieldRegenerationAfterMonsterKill { get; } = new Regeneration(ShieldAfterMonsterKill, MaximumShield, CurrentShield, null);
 
         /// <summary>
         /// A regeneration definition.
@@ -422,34 +543,41 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         public class Regeneration
         {
             /// <summary>
-            /// Initializes a new instance of the <see cref="Regeneration"/> class.
-            /// At regeneration the value of <paramref name="regenerationMultiplier"/> * <paramref name="maximumAttribute"/> is getting added to
-            /// <paramref name="currentAttribute"/>, until the value of <paramref name="maximumAttribute"/> is reached.
+            /// Initializes a new instance of the <see cref="Regeneration" /> class.
+            /// At regeneration the value of <paramref name="regenerationMultiplier" /> * <paramref name="maximumAttribute" /> is getting added to
+            /// <paramref name="currentAttribute" />, until the value of <paramref name="maximumAttribute" /> is reached.
             /// </summary>
             /// <param name="regenerationMultiplier">The regeneration multiplier.</param>
             /// <param name="maximumAttribute">The maximum attribute.</param>
             /// <param name="currentAttribute">The current attribute.</param>
-            public Regeneration(AttributeDefinition regenerationMultiplier, AttributeDefinition maximumAttribute, AttributeDefinition currentAttribute)
+            /// <param name="absoluteAttribute">The constant regeneration.</param>
+            public Regeneration(AttributeDefinition regenerationMultiplier, AttributeDefinition maximumAttribute, AttributeDefinition currentAttribute, AttributeDefinition absoluteAttribute)
             {
                 this.RegenerationMultiplier = regenerationMultiplier;
                 this.MaximumAttribute = maximumAttribute;
                 this.CurrentAttribute = currentAttribute;
+                this.AbsoluteAttribute = absoluteAttribute;
             }
 
             /// <summary>
-            /// Gets or sets the regeneration multiplier.
+            /// Gets the regeneration multiplier.
             /// </summary>
-            public AttributeDefinition RegenerationMultiplier { get; set; }
+            public AttributeDefinition RegenerationMultiplier { get; }
 
             /// <summary>
-            /// Gets or sets the maximum attribute.
+            /// Gets the absolute regeneration which is always regenerated, independently from the multiplier.
             /// </summary>
-            public AttributeDefinition MaximumAttribute { get; set; }
+            public AttributeDefinition AbsoluteAttribute { get; }
 
             /// <summary>
-            /// Gets or sets the current attribute.
+            /// Gets the maximum attribute.
             /// </summary>
-            public AttributeDefinition CurrentAttribute { get; set; }
+            public AttributeDefinition MaximumAttribute { get; }
+
+            /// <summary>
+            /// Gets the current attribute.
+            /// </summary>
+            public AttributeDefinition CurrentAttribute { get; }
         }
     }
 }

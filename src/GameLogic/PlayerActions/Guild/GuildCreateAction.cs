@@ -4,8 +4,7 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
 {
-    using MUnique.OpenMU.DataModel.Entities;
-    using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.Guild;
 
     /// <summary>
     /// Action to create a guild.
@@ -13,17 +12,6 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
     public class GuildCreateAction
     {
         private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(GuildCreateAction));
-
-        private readonly IGameServerContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GuildCreateAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public GuildCreateAction(IGameServerContext gameContext)
-        {
-            this.gameContext = gameContext;
-        }
 
         /// <summary>
         /// Creates the guild.
@@ -39,27 +27,29 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
                 return;
             }
 
-            if (this.gameContext.GuildServer.GuildExists(guildName))
+            var guildServer = (creator.GameContext as IGameServerContext)?.GuildServer;
+            if (guildServer == null)
             {
-                creator.PlayerView.GuildView.ShowGuildCreateResult(GuildCreateErrorDetail.GuildAlreadyExist);
+                Log.Error($"No guild server available");
                 return;
             }
 
-            ushort guildId;
-            GuildMemberInfo masterGuildMemberInfo;
-            var guild = this.gameContext.GuildServer.CreateGuild(guildName, creator.SelectedCharacter.Name, creator.SelectedCharacter.Id, guildEmblem, out guildId, out masterGuildMemberInfo);
-            var result = guildId > 0 ? GuildCreateErrorDetail.None : GuildCreateErrorDetail.GuildAlreadyExist;
-            creator.PlayerView.GuildView.ShowGuildCreateResult(result);
-            if (result != GuildCreateErrorDetail.None)
+            if (guildServer.GuildExists(guildName))
             {
+                creator.ViewPlugIns.GetPlugIn<IShowGuildCreateResultPlugIn>()?.ShowGuildCreateResult(GuildCreateErrorDetail.GuildAlreadyExist);
                 return;
             }
 
-            creator.ShortGuildID = guildId;
-            this.gameContext.GuildCache.RegisterShortId(guild.Id, guildId);
-            creator.SelectedCharacter.GuildMemberInfo = masterGuildMemberInfo;
+            creator.GuildStatus = guildServer.CreateGuild(guildName, creator.SelectedCharacter.Name, creator.SelectedCharacter.Id, guildEmblem, ((IGameServerContext)creator.GameContext).Id);
+            if (creator.GuildStatus == null)
+            {
+                creator.ViewPlugIns.GetPlugIn<IShowGuildCreateResultPlugIn>()?.ShowGuildCreateResult(GuildCreateErrorDetail.GuildAlreadyExist);
+                return;
+            }
 
-            this.gameContext.GuildServer.GuildMemberEnterGame(guild.Id, creator.SelectedCharacter.Name, this.gameContext.Id);
+            creator.ViewPlugIns.GetPlugIn<IShowGuildCreateResultPlugIn>()?.ShowGuildCreateResult(GuildCreateErrorDetail.None);
+            creator.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IAssignPlayersToGuildPlugIn>()?.AssignPlayerToGuild(creator, false), true);
+
             Log.InfoFormat("Guild created: [{0}], Master: [{1}]", guildName, creator.SelectedCharacter.Name);
         }
     }

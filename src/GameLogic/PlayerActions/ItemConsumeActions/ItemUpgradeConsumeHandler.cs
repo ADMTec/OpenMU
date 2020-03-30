@@ -20,10 +20,10 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
         /// <summary>
         /// Initializes a new instance of the <see cref="ItemUpgradeConsumeHandler"/> class.
         /// </summary>
-        /// <param name="repositoryManager">The repository manager.</param>
+        /// <param name="persistenceContextProvider">The persistence context provider.</param>
         /// <param name="configuration">The configuration.</param>
-        internal ItemUpgradeConsumeHandler(IRepositoryManager repositoryManager, ItemUpgradeConfiguration configuration)
-            : base(repositoryManager)
+        internal ItemUpgradeConsumeHandler(IPersistenceContextProvider persistenceContextProvider, ItemUpgradeConfiguration configuration)
+            : base(persistenceContextProvider)
         {
             this.Configuration = configuration;
         }
@@ -33,6 +33,11 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
         /// </summary>
         public enum ItemFailResult
         {
+            /// <summary>
+            /// Nothing happens.
+            /// </summary>
+            None,
+
             /// <summary>
             /// Sets the option to level one.
             /// </summary>
@@ -55,7 +60,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
         internal ItemUpgradeConfiguration Configuration { get; }
 
         /// <inheritdoc/>
-        protected override bool ModifyItem(Item item)
+        protected override bool ModifyItem(Item item, IContext persistenceContext)
         {
             if (!this.ItemCanHaveOption(item))
             {
@@ -67,7 +72,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
                 return this.TryUpgradeItemOption(item);
             }
 
-            return this.TryAddItemOption(item);
+            return this.TryAddItemOption(item, persistenceContext);
         }
 
         private bool TryUpgradeItemOption(Item item)
@@ -78,7 +83,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
             }
 
             var itemOption = item.ItemOptions.First(o => o.ItemOption.OptionType == this.Configuration.OptionType);
-            var increasableOption = itemOption.ItemOption as IncreasableItemOption;
+            var increasableOption = itemOption.ItemOption;
             var higherOptionPossible = increasableOption?.LevelDependentOptions.Any(o => o.Level > itemOption.Level) ?? false;
             if (!higherOptionPossible)
             {
@@ -115,10 +120,13 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
                 case ItemFailResult.SetOptionToLevelOne:
                     itemOption.Level = 1;
                     break;
+                default:
+                    // do nothing
+                    break;
             }
         }
 
-        private bool TryAddItemOption(Item item)
+        private bool TryAddItemOption(Item item, IContext persistenceContext)
         {
             if (!this.Configuration.AddsOption)
             {
@@ -130,13 +138,13 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
                 var possibleOptions = item.Definition.PossibleItemOptions.
                     SelectMany(o => o.PossibleOptions).
                     Where(o => o.OptionType == this.Configuration.OptionType
-                               && o.LevelDependentOptions.Any(ldo => ldo.RequiredItemLevel <= item.Level)).ToList();
+                               && (!o.LevelDependentOptions.Any() || o.LevelDependentOptions.Any(ldo => ldo.RequiredItemLevel <= item.Level))).ToList();
                 if (!possibleOptions.Any())
                 {
                     return false;
                 }
 
-                var optionLink = this.RepositoryManager.CreateNew<ItemOptionLink>();
+                var optionLink = persistenceContext.CreateNew<ItemOptionLink>();
                 optionLink.ItemOption = possibleOptions.SelectRandom();
                 optionLink.Level = 1;
                 item.ItemOptions.Add(optionLink);

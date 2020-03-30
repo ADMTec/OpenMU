@@ -4,25 +4,28 @@
 
 namespace MUnique.OpenMU.GameServer.RemoteView
 {
-    using System.Collections.Generic;
+    using System;
+    using System.Collections.Concurrent;
     using System.Linq;
-
-    using MUnique.OpenMU.DataModel.Configuration;
+    using System.Runtime.InteropServices;
     using MUnique.OpenMU.DataModel.Configuration.Items;
     using MUnique.OpenMU.DataModel.Entities;
     using MUnique.OpenMU.GameLogic;
+    using MUnique.OpenMU.Network.PlugIns;
+    using MUnique.OpenMU.PlugIns;
 
     /// <summary>
     /// Default serializer for the appearance of a player.
     /// </summary>
+    [Guid("54847CAF-7827-48FB-BF53-AF458A694FAF")]
+    [PlugIn("Default appearance serializer", "Default serializer for the appearance of a player. It will most likely only work correctly in season 6.")]
+    [MinimumClient(6, 3, ClientLanguage.Invariant)]
     public class AppearanceSerializer : IAppearanceSerializer
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="AppearanceSerializer"/> class.
+        /// A cache which holds the results of the serializer.
         /// </summary>
-        public AppearanceSerializer()
-        {
-        }
+        private static readonly ConcurrentDictionary<IAppearanceData, byte[]> Cache = new ConcurrentDictionary<IAppearanceData, byte[]>();
 
         private enum PetIndex
         {
@@ -70,45 +73,80 @@ namespace MUnique.OpenMU.GameServer.RemoteView
         }
 
         /// <inheritdoc/>
-        public byte[] GetAppearanceData(IAppearanceData appearance)
+        public int NeededSpace => 18;
+
+        /// <inheritdoc/>
+        public void InvalidateCache(IAppearanceData appearance)
         {
-            return this.GetPreviewCharSet(appearance.CharacterClass, appearance.EquippedItems);
+            Cache.TryRemove(appearance, out _);
+            appearance.AppearanceChanged -= this.OnAppearanceOfAppearanceChanged;
         }
 
-        private byte[] GetPreviewCharSet(CharacterClass characterClass, IEnumerable<ItemAppearance> wearingItems)
+        /// <inheritdoc/>
+        public void WriteAppearanceData(Span<byte> target, IAppearanceData appearance, bool useCache)
         {
-            byte[] preview = new byte[18];
-            ItemAppearance[] itemArray = new ItemAppearance[12];
-            for (byte i = 0; i < itemArray.Length; i++)
+            if (target.Length < this.NeededSpace)
             {
-                itemArray[i] = wearingItems.FirstOrDefault(item => item.ItemSlot == i);
+                throw new ArgumentException($"Target span too small. Actual size: {target.Length}; Required: {this.NeededSpace}.", nameof(target));
             }
 
-            preview[0] = (byte)(characterClass.Number << 3 & 0xF8);
-            this.SetHand(preview, itemArray[InventoryConstants.LeftHandSlot], 1, 12);
-
-            this.SetHand(preview, itemArray[InventoryConstants.RightHandSlot], 2, 13);
-
-            this.SetArmorPiece(preview, itemArray[InventoryConstants.HelmSlot], 3, true, 0x80, 13, false);
-
-            this.SetArmorPiece(preview, itemArray[InventoryConstants.ArmorSlot], 3, false, 0x40, 14, true);
-
-            this.SetArmorPiece(preview, itemArray[InventoryConstants.PantsSlot], 4, true, 0x20, 14, false);
-
-            this.SetArmorPiece(preview, itemArray[InventoryConstants.GlovesSlot], 4, false, 0x10, 15, true);
-
-            this.SetArmorPiece(preview, itemArray[InventoryConstants.BootsSlot], 5, true, 0x08, 15, false);
-
-            this.SetItemLevels(preview, itemArray);
-
-            this.AddWing(preview, itemArray[InventoryConstants.WingsSlot]);
-
-            this.AddPet(preview, itemArray[InventoryConstants.PetSlot]);
-
-            return preview;
+            if (useCache && Cache.TryGetValue(appearance, out var cached))
+            {
+                cached.CopyTo(target);
+            }
+            else
+            {
+                this.WritePreviewCharSet(target, appearance);
+                if (useCache)
+                {
+                    var cacheEntry = target.Slice(0, this.NeededSpace).ToArray();
+                    if (Cache.TryAdd(appearance, cacheEntry))
+                    {
+                        appearance.AppearanceChanged += this.OnAppearanceOfAppearanceChanged;
+                    }
+                }
+            }
         }
 
-        private void SetHand(byte[] preview, ItemAppearance item, int indexIndex, int groupIndex)
+        private void OnAppearanceOfAppearanceChanged(object sender, EventArgs args) => this.InvalidateCache(sender as IAppearanceData);
+
+        private void WritePreviewCharSet(Span<byte> target, IAppearanceData appearanceData)
+        {
+            ItemAppearance[] itemArray = new ItemAppearance[InventoryConstants.EquippableSlotsCount];
+            for (byte i = 0; i < itemArray.Length; i++)
+            {
+                itemArray[i] = appearanceData.EquippedItems.FirstOrDefault(item => item.ItemSlot == i);
+            }
+
+            target[0] = (byte)(appearanceData.CharacterClass.Number << 3 & 0xF8);
+            target[0] |= (byte)appearanceData.Pose;
+            this.SetHand(target, itemArray[InventoryConstants.LeftHandSlot], 1, 12);
+
+            this.SetHand(target, itemArray[InventoryConstants.RightHandSlot], 2, 13);
+
+            this.SetArmorPiece(target, itemArray[InventoryConstants.HelmSlot], 3, true, 0x80, 13, false);
+
+            this.SetArmorPiece(target, itemArray[InventoryConstants.ArmorSlot], 3, false, 0x40, 14, true);
+
+            this.SetArmorPiece(target, itemArray[InventoryConstants.PantsSlot], 4, true, 0x20, 14, false);
+
+            this.SetArmorPiece(target, itemArray[InventoryConstants.GlovesSlot], 4, false, 0x10, 15, true);
+
+            this.SetArmorPiece(target, itemArray[InventoryConstants.BootsSlot], 5, true, 0x08, 15, false);
+
+            this.SetItemLevels(target, itemArray);
+
+            if (appearanceData.FullAncientSetEquipped)
+            {
+                target[11] |= 0x01;
+            }
+
+            this.AddWing(target, itemArray[InventoryConstants.WingsSlot]);
+
+            this.AddPet(target, itemArray[InventoryConstants.PetSlot]);
+        }
+
+        private void SetHand(Span<byte> preview, ItemAppearance item, int indexIndex, int groupIndex)
         {
             if (item == null)
             {
@@ -117,39 +155,59 @@ namespace MUnique.OpenMU.GameServer.RemoteView
             }
             else
             {
-                preview[indexIndex] = (byte)item.Index;
-                preview[groupIndex] |= (byte)((item.Group << 4) & 0xF0);
+                preview[indexIndex] = (byte)item.Definition.Number;
+                preview[groupIndex] |= (byte)(item.Definition.Group << 5);
             }
         }
 
-        private void SetArmorPiece(byte[] preview, ItemAppearance item, int firstIndex, bool firstIndexHigh, byte secondIndexMask, int thirdIndex, bool thirdIndexHigh)
+        private byte GetOrMaskForHighNibble(int value)
+        {
+            return (byte)((value << 4) & 0xF0);
+        }
+
+        private byte GetOrMaskForLowNibble(int value)
+        {
+            return (byte)(value & 0x0F);
+        }
+
+        private void SetEmptyArmor(Span<byte> preview, int firstIndex, bool firstIndexHigh, byte secondIndexMask, int thirdIndex, bool thirdIndexHigh)
+        {
+            // if the item is not equipped every index bit is set to 1
+            preview[firstIndex] |= firstIndexHigh ? this.GetOrMaskForHighNibble(0x0F) : this.GetOrMaskForLowNibble(0x0F);
+            preview[9] |= secondIndexMask;
+            preview[thirdIndex] |= thirdIndexHigh ? this.GetOrMaskForHighNibble(0x0F) : this.GetOrMaskForLowNibble(0x0F);
+        }
+
+        private void SetArmorItemIndex(Span<byte> preview, ItemAppearance item, int firstIndex, bool firstIndexHigh, byte secondIndexMask, int thirdIndex, bool thirdIndexHigh)
+        {
+            preview[firstIndex] |= firstIndexHigh ? this.GetOrMaskForHighNibble(item.Definition.Number) : this.GetOrMaskForLowNibble(item.Definition.Number);
+            byte multi = (byte)(item.Definition.Number / 16);
+            if (multi > 0)
+            {
+                byte bit1 = (byte)(multi % 2);
+                byte byte2 = (byte)(multi / 2);
+                if (bit1 == 1)
+                {
+                    preview[9] |= secondIndexMask;
+                }
+
+                if (byte2 > 0)
+                {
+                    preview[thirdIndex] |= thirdIndexHigh ? this.GetOrMaskForHighNibble(byte2) : this.GetOrMaskForLowNibble(byte2);
+                }
+            }
+        }
+
+        private void SetArmorPiece(Span<byte> preview, ItemAppearance item, int firstIndex, bool firstIndexHigh, byte secondIndexMask, int thirdIndex, bool thirdIndexHigh)
         {
             if (item == null)
             {
-                // if the item is not equipped every index bit is set to 1
-                preview[firstIndex] |= (byte)(0x0F << (firstIndexHigh ? 4 : 0));
-                preview[9] |= secondIndexMask;
-                preview[thirdIndex] |= (byte)(0x0F << (thirdIndexHigh ? 4 : 0));
+                this.SetEmptyArmor(preview, firstIndex, firstIndexHigh, secondIndexMask, thirdIndex, thirdIndexHigh);
             }
             else
             {
                 // item id
-                preview[firstIndex] = (byte)((item.Index << (firstIndexHigh ? 4 : 0)) & (0x0F << (firstIndexHigh ? 4 : 0)));
-                byte multi = (byte)(item.Index / 16);
-                if (multi > 0)
-                {
-                    byte bit1 = (byte)(multi % 2);
-                    byte byte2 = (byte)(multi / 2);
-                    if (bit1 == 1)
-                    {
-                        preview[9] |= secondIndexMask;
-                    }
-
-                    if (byte2 > 0)
-                    {
-                        preview[thirdIndex] = byte2;
-                    }
-                }
+                this.SetArmorItemIndex(preview, item, firstIndex, firstIndexHigh, secondIndexMask, thirdIndex, thirdIndexHigh);
 
                 // exc bit
                 if (this.IsExcellent(item))
@@ -165,14 +223,14 @@ namespace MUnique.OpenMU.GameServer.RemoteView
             }
         }
 
-        private void SetItemLevels(byte[] preview, ItemAppearance[] itemArray)
+        private void SetItemLevels(Span<byte> preview, ItemAppearance[] itemArray)
         {
             int levelindex = 0;
             for (int i = 0; i < 7; i++)
             {
                 if (itemArray[i] != null)
                 {
-                    levelindex |= ((itemArray[i].Level - 1) / 2) << (i * 3);
+                    levelindex |= itemArray[i].GetGlowLevel() << (i * 3);
                 }
             }
 
@@ -181,14 +239,14 @@ namespace MUnique.OpenMU.GameServer.RemoteView
             preview[8] = (byte)(levelindex & 255);
         }
 
-        private void AddWing(byte[] preview, ItemAppearance wing)
+        private void AddWing(Span<byte> preview, ItemAppearance wing)
         {
             if (wing == null)
             {
                 return;
             }
 
-            switch ((WingIndex)wing.Index)
+            switch ((WingIndex)wing.Definition.Number)
             {
                 case WingIndex.WingsOfElf:
                 case WingIndex.WingsOfHeaven:
@@ -220,61 +278,42 @@ namespace MUnique.OpenMU.GameServer.RemoteView
                 case WingIndex.SmallCloakOfWarrior:
                     preview[5] |= 0x0C;
                     break;
+                default:
+                    // nothing to do
+                    break;
             }
 
-            switch ((WingIndex)wing.Index)
+            switch ((WingIndex)wing.Definition.Number)
             {
                 case WingIndex.WingsOfElf:
-                    preview[9] |= 0x01;
-                    break;
-                case WingIndex.WingsOfHeaven:
-                    preview[9] |= 0x02;
-                    break;
-                case WingIndex.WingsOfSatan:
-                    preview[9] |= 0x03;
-                    break;
-                case WingIndex.WingsOfMistery:
-                    preview[5] |= 0x04;
-                    break;
                 case WingIndex.WingsOfSpirit:
-                    preview[9] |= 0x01;
-                    break;
-                case WingIndex.WingsOfSoul:
-                    preview[9] |= 0x02;
-                    break;
-                case WingIndex.WingsOfDragon:
-                    preview[9] |= 0x03;
-                    break;
-                case WingIndex.WingsOfDarkness:
-                    preview[9] |= 0x04;
-                    break;
-                case WingIndex.CapeOfLord:
-                    preview[9] |= 0x05;
-                    break;
-                case WingIndex.WingsOfDespair:
-                    preview[9] |= 0x06;
-                    break;
-                case WingIndex.CapeOfFighter:
-                    preview[9] |= 0x07;
-                    break;
                 case WingIndex.WingOfStorm:
                     preview[9] |= 0x01;
                     break;
+                case WingIndex.WingsOfHeaven:
+                case WingIndex.WingsOfSoul:
                 case WingIndex.WingOfEternal:
                     preview[9] |= 0x02;
                     break;
+                case WingIndex.WingsOfSatan:
+                case WingIndex.WingsOfDragon:
                 case WingIndex.WingOfIllusion:
                     preview[9] |= 0x03;
                     break;
+                case WingIndex.WingsOfMistery:
+                case WingIndex.WingsOfDarkness:
                 case WingIndex.WingOfRuin:
                     preview[9] |= 0x04;
                     break;
+                case WingIndex.CapeOfLord:
                 case WingIndex.CapeOfEmperor:
                     preview[9] |= 0x05;
                     break;
+                case WingIndex.WingsOfDespair:
                 case WingIndex.WingOfDimension:
                     preview[9] |= 0x06;
                     break;
+                case WingIndex.CapeOfFighter:
                 case WingIndex.CapeOfOverrule:
                     preview[9] |= 0x07;
                     break;
@@ -296,41 +335,64 @@ namespace MUnique.OpenMU.GameServer.RemoteView
                 case WingIndex.SmallCloakOfWarrior:
                     preview[17] |= 0xC0;
                     break;
+                default:
+                    // nothing to do
+                    break;
             }
         }
 
-        private void AddPet(byte[] preview, ItemAppearance pet)
+        private void AddPet(Span<byte> preview, ItemAppearance pet)
         {
             if (pet == null)
             {
-                preview[5] |= 0x0F;
+                preview[5] |= 0b0000_0011;
                 return;
             }
 
-            switch ((PetIndex)pet.Index)
+            switch ((PetIndex)pet.Definition.Number)
             {
                 case PetIndex.Angel:
-                    break;
                 case PetIndex.Imp:
-                    preview[5] |= 0x01;
-                    break;
                 case PetIndex.Unicorn:
-                    preview[5] |= 0x02;
+                    preview[5] |= (byte)pet.Definition.Number;
                     break;
                 case PetIndex.Dinorant:
                     preview[5] |= 0x03;
                     preview[10] |= 0x01;
                     break;
+                case PetIndex.DarkHorse:
+                    preview[5] |= 0x03;
+                    preview[12] |= 0x01;
+                    break;
                 case PetIndex.Fenrir:
                     preview[5] |= 0x03;
-                    preview[12] |= 0x02;
+                    preview[10] &= 0xFE;
+                    preview[12] &= 0xFE;
+                    preview[12] |= 0x04;
+                    preview[16] = 0x00;
+
+                    if (pet.VisibleOptions.Contains(ItemOptionTypes.BlackFenrir))
+                    {
+                        preview[16] |= 0x01;
+                    }
+
+                    if (pet.VisibleOptions.Contains(ItemOptionTypes.BlueFenrir))
+                    {
+                        preview[16] |= 0x02;
+                    }
+
+                    if (pet.VisibleOptions.Contains(ItemOptionTypes.GoldFenrir))
+                    {
+                        preview[17] |= 0x01;
+                    }
+
                     break;
                 default:
-                    preview[5] |= 0x0F;
+                    preview[5] |= 0x03;
                     break;
             }
 
-            switch ((PetIndex)pet.Index)
+            switch ((PetIndex)pet.Definition.Number)
             {
                 case PetIndex.Panda:
                     preview[16] |= 0xE0;
@@ -349,6 +411,9 @@ namespace MUnique.OpenMU.GameServer.RemoteView
                     break;
                 case PetIndex.Demon:
                     preview[16] |= 0x20;
+                    break;
+                default:
+                    // no further flag required.
                     break;
             }
         }

@@ -4,8 +4,9 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
 {
+    using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.Guild;
     using MUnique.OpenMU.Interfaces;
-    using Views;
 
     /// <summary>
     /// Action to kick a player out of a guild.
@@ -14,54 +15,49 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
     {
         private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(GuildKickPlayerAction));
 
-        private readonly IGameServerContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GuildKickPlayerAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public GuildKickPlayerAction(IGameServerContext gameContext)
-        {
-            this.gameContext = gameContext;
-        }
-
         /// <summary>
         /// Kicks the player out of the guild.
         /// </summary>
-        /// <param name="guildMaster">The guild master.</param>
+        /// <param name="player">The player.</param>
         /// <param name="nickname">The nickname.</param>
         /// <param name="securityCode">The security code.</param>
-        public void KickPlayer(Player guildMaster, string nickname, string securityCode)
+        public void KickPlayer(Player player, string nickname, string securityCode)
         {
-            if (guildMaster.Account.SecurityCode != securityCode)
+            var guildServer = (player.GameContext as IGameServerContext)?.GuildServer;
+            if (guildServer == null)
             {
-                guildMaster.PlayerView.ShowMessage("Wrong Security Code.", MessageType.BlueNormal);
-                Log.WarnFormat("Wrong Security Code: [{0}] <> [{1}], Player: {2}", securityCode, guildMaster.Account.SecurityCode, guildMaster.SelectedCharacter.Name);
-
-                guildMaster.PlayerView.GuildView.GuildKickResult(GuildKickSuccess.Failed);
+                Log.Warn("No guild server available");
                 return;
             }
 
-            var guildId = guildMaster.SelectedCharacter?.GuildMemberInfo?.Id;
-            if (guildId.HasValue)
+            if (player.Account.SecurityCode != null && player.Account.SecurityCode != securityCode)
             {
-                if (guildMaster.SelectedCharacter.GuildMemberInfo.Status == DataModel.Entities.GuildPosition.GuildMaster)
-                {
-                    guildMaster.PlayerView.GuildView.GuildKickResult(GuildKickSuccess.Failed);
-                }
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Wrong Security Code.", MessageType.BlueNormal);
+                Log.DebugFormat("Wrong Security Code: [{0}] <> [{1}], Player: {2}", securityCode, player.Account.SecurityCode, player.SelectedCharacter.Name);
 
-                if (nickname == guildMaster.SelectedCharacter.Name)
-                {
-                    this.gameContext.GuildServer.DeleteGuild(guildId.Value);
-                    this.gameContext.GuildCache.Invalidate(guildId.Value);
-                    guildMaster.PlayerView.GuildView.GuildKickResult(GuildKickSuccess.GuildDisband);
-                    return;
-                }
-                else
-                {
-                    this.gameContext.GuildServer.KickPlayer(guildId.Value, nickname);
-                }
+                player.ViewPlugIns.GetPlugIn<IGuildKickResultPlugIn>()?.GuildKickResult(GuildKickSuccess.Failed);
+                return;
             }
+
+            var isKickingHimself = player.SelectedCharacter.Name == nickname;
+            if (!isKickingHimself && player.GuildStatus?.Position != GuildPosition.GuildMaster)
+            {
+                Log.WarnFormat("Suspicious kick request for player with name: {0} (player is not a guild master) to kick {1}, could be hack attempt.", player.Name, nickname);
+                player.ViewPlugIns.GetPlugIn<IGuildKickResultPlugIn>()?.GuildKickResult(GuildKickSuccess.Failed);
+                return;
+            }
+
+            if (isKickingHimself && player.GuildStatus?.Position == GuildPosition.GuildMaster)
+            {
+                var guildId = player.GuildStatus.GuildId;
+                guildServer.KickMember(guildId, nickname);
+
+                player.GuildStatus = null;
+                player.ViewPlugIns.GetPlugIn<IGuildKickResultPlugIn>()?.GuildKickResult(GuildKickSuccess.GuildDisband);
+                return;
+            }
+
+            guildServer.KickMember(player.GuildStatus.GuildId, nickname);
         }
     }
 }

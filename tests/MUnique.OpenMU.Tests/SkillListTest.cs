@@ -5,11 +5,11 @@
 namespace MUnique.OpenMU.Tests
 {
     using System.Collections.Generic;
+    using Moq;
     using MUnique.OpenMU.DataModel.Configuration.Items;
     using MUnique.OpenMU.DataModel.Entities;
     using MUnique.OpenMU.GameLogic;
     using NUnit.Framework;
-    using Rhino.Mocks;
 
     /// <summary>
     /// Tests the skill list.
@@ -71,7 +71,7 @@ namespace MUnique.OpenMU.Tests
             item.Durability = 1;
             player.Inventory.AddItem(0, item);
             var skillList = new SkillList(player);
-            Assert.That(skillList.RemoveItemSkill(item.Definition.Skill.SkillID.ToUnsigned()), Is.True);
+            Assert.That(skillList.RemoveItemSkill(item.Definition.Skill.Number.ToUnsigned()), Is.True);
             Assert.That(skillList.ContainsSkill(ItemSkillId), Is.False);
         }
 
@@ -87,37 +87,29 @@ namespace MUnique.OpenMU.Tests
 
         private Item CreateItemWithSkill()
         {
+            var definition = new Mock<ItemDefinition>();
+            definition.SetupAllProperties();
+            definition.Object.Skill = new OpenMU.DataModel.Configuration.Skill
+            {
+                Number = ItemSkillId.ToSigned(),
+            };
+
+            definition.Object.Height = 1;
+            definition.Object.Width = 1;
+            definition.Setup(d => d.BasePowerUpAttributes).Returns(new List<ItemBasePowerUpDefinition>());
+
             var item = new Item
             {
                 HasSkill = true,
-                Definition = new ItemDefinition
-                {
-                    Skill = new OpenMU.DataModel.Configuration.Skill { SkillID = ItemSkillId.ToSigned() },
-                    Height = 1,
-                    Width = 1
-                }
+                Definition = definition.Object,
             };
             return item;
         }
 
         private SkillEntry CreateSkillEntry(ushort skillId)
         {
-            var skillEntry = new SkillEntry { Skill = new OpenMU.DataModel.Configuration.Skill { SkillID = skillId.ToSigned() } };
+            var skillEntry = new SkillEntry { Skill = new OpenMU.DataModel.Configuration.Skill { Number = skillId.ToSigned() } };
             return skillEntry;
-        }
-
-        private IStorage CreateStorage()
-        {
-            var result = new Storage(0, 12, 0xFF, new ItemStorage());
-            return result;
-        }
-
-        private Character CreateCharacter()
-        {
-            var result = MockRepository.GenerateStub<Character>();
-            result.Stub(c => c.LearnedSkills).Return(new List<SkillEntry>());
-            result.LearnedSkills.Add(this.CreateSkillEntry(LearnedSkillId));
-            return result;
         }
     }
 }

@@ -124,6 +124,16 @@ namespace MUnique.OpenMU.Pathfinding
             this.stop = true;
         }
 
+        /// <summary>
+        /// Resets the pathfinder.
+        /// </summary>
+        public void ResetPathFinder()
+        {
+            this.openList.Clear();
+            this.resultList.Clear();
+            this.stop = false;
+        }
+
         private void ExpandNodes(Node node, Point start, Point end)
         {
             foreach (var newNode in this.network.GetPossibleNextNodes(node))
@@ -155,7 +165,7 @@ namespace MUnique.OpenMU.Pathfinding
             Node node = this.network.GetNodeAt(end);
             while (node.PreviousNode != node)
             {
-                yield return new PathResultNode(node.X, node.Y, node.PreviousNode.X, node.PreviousNode.X);
+                yield return new PathResultNode(node.Position, node.PreviousNode.Position);
                 node = node.PreviousNode;
             }
         }

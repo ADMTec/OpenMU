@@ -22,7 +22,7 @@ namespace MUnique.OpenMU.Pathfinding
         /// <summary>
         /// The node is on the closed list.
         /// </summary>
-        Closed
+        Closed,
     }
 
     /// <summary>
@@ -33,7 +33,7 @@ namespace MUnique.OpenMU.Pathfinding
         /// <summary>
         /// Gets or sets the predicted total cost (F) to reach the destination.
         /// </summary>
-        /// <remarks>F = G + H</remarks>
+        /// <remarks>F = G + H.</remarks>
         public int PredictedTotalCost { get; set; }
 
         /// <summary>

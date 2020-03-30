@@ -5,7 +5,7 @@
 namespace MUnique.OpenMU.DataModel.Configuration.Items
 {
     using System.Collections.Generic;
-
+    using MUnique.OpenMU.DataModel.Composition;
     using MUnique.OpenMU.DataModel.Configuration;
 
     /// <summary>
@@ -16,7 +16,7 @@ namespace MUnique.OpenMU.DataModel.Configuration.Items
         /// <summary>
         /// Gets or sets the (Sub-)Id of this item. Must be unique in an item group.
         /// </summary>
-        public byte Number { get; set; }
+        public short Number { get; set; }
 
         /// <summary>
         /// Gets or sets the item slot where it can get equipped.
@@ -39,14 +39,24 @@ namespace MUnique.OpenMU.DataModel.Configuration.Items
         public bool DropsFromMonsters { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether this instance acts as ammunition for another equipped weapon.
+        /// </summary>
+        public bool IsAmmunition { get; set; }
+
+        /// <summary>
         /// Gets or sets the name of the item.
         /// </summary>
         public string Name { get; set; }
 
         /// <summary>
-        /// Gets or sets the item drop level, which indicates the minimum monster lvl of which this item can be dropped
+        /// Gets or sets the item drop level, which indicates the minimum monster lvl of which this item can be dropped.
         /// </summary>
         public byte DropLevel { get; set; }
+
+        /// <summary>
+        /// Gets or sets the maximum item level.
+        /// </summary>
+        public byte MaximumItemLevel { get; set; }
 
         /// <summary>
         /// Gets or sets the maximum durability of this item at Level 0.
@@ -75,7 +85,7 @@ namespace MUnique.OpenMU.DataModel.Configuration.Items
 
         /// <summary>
         /// Gets or sets the skill which this items adds to the skill list while wearing or which can be learned by consuming this item.
-        /// TODO: Split these two usages into different properties?
+        /// TODO: Split these two usages into different properties?.
         /// </summary>
         public virtual Skill Skill { get; set; }
 
@@ -92,7 +102,7 @@ namespace MUnique.OpenMU.DataModel.Configuration.Items
         ///   - double wear bonus of single swords
         ///   - set bonus for defense rate
         ///   - set bonus for defense, if level is greater than 9
-        ///   - ancient sets
+        ///   - ancient sets.
         /// </remarks>
         public virtual ICollection<ItemSetGroup> PossibleItemSetGroups { get; protected set; }
 
@@ -104,11 +114,13 @@ namespace MUnique.OpenMU.DataModel.Configuration.Items
         /// <summary>
         /// Gets or sets the requirements for wearing this item.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<AttributeRequirement> Requirements { get; protected set; }
 
         /// <summary>
         /// Gets or sets the base PowerUps of this item, for example min/max damage for weapons.
         /// </summary>
+        [MemberOfAggregate]
         public virtual ICollection<ItemBasePowerUpDefinition> BasePowerUpAttributes { get; protected set; }
     }
 }

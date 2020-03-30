@@ -6,7 +6,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
 {
     using System.Linq;
     using Microsoft.EntityFrameworkCore;
-    using Microsoft.EntityFrameworkCore.Metadata;
+    using MUnique.OpenMU.AttributeSystem;
 
     /// <summary>
     /// Context for all types of the data model.
@@ -30,24 +30,11 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-
-            modelBuilder.Entity<Guild>(entity =>
-            {
-                entity.Property(guild => guild.Name).HasMaxLength(8).IsRequired();
-            });
-
-            modelBuilder.Entity<GuildMemberInfo>(e =>
-            {
-                e.Ignore(g => g.Name);
-            });
-
-            modelBuilder.Entity<FriendViewItem>(e =>
-            {
-                e.Ignore(item => item.CharacterName);
-                e.Ignore(item => item.FriendName);
-            });
-
+            modelBuilder.Ignore<ConstantElement>();
+            modelBuilder.Ignore<SimpleElement>();
             modelBuilder.Entity<AttributeDefinition>();
+            modelBuilder.Entity<ConnectServerDefinition>();
+            modelBuilder.Entity<ChatServerDefinition>();
             modelBuilder.Entity<PowerUpDefinitionWithDuration>()
                 .HasOne(d => d.RawBoost)
                 .WithOne(v => v.ParentAsBoost)
@@ -82,16 +69,19 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
                 entity.Property(character => character.CharacterSlot).IsRequired();
                 entity.Property(character => character.CreateDate).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 var accountKey = entity.Metadata.GetForeignKeys().First(key => key.PrincipalEntityType == modelBuilder.Entity<Account>().Metadata);
-                accountKey.DeleteBehavior = Microsoft.EntityFrameworkCore.Metadata.DeleteBehavior.Cascade;
+                accountKey.DeleteBehavior = DeleteBehavior.Cascade;
+
+                entity.HasMany(character => character.RawLetters).WithOne(letter => letter.Receiver).OnDelete(DeleteBehavior.Cascade);
             });
 
+            modelBuilder.Entity<ItemStorage>().HasMany(storage => storage.RawItems).WithOne(item => item.RawItemStorage);
             modelBuilder.Entity<GameServerDefinition>();
             modelBuilder.Entity<ItemBasePowerUpDefinition>().Ignore(d => d.BaseValueElement);
             modelBuilder.Entity<LevelBonus>().Ignore(l => l.AdditionalValueElement);
             modelBuilder.Entity<ExitGate>().HasOne(gate => gate.RawMap);
-            modelBuilder.Entity<GameMapDefinition>().HasMany(map => map.RawGates);
-            modelBuilder.Entity<GameMapDefinition>().HasMany(map => map.RawSpawnGates).WithOne(g => g.RawMap);
-            modelBuilder.Entity<GameMapDefinition>().HasOne(map => map.RawDeathSafezone);
+            modelBuilder.Entity<GameMapDefinition>().HasMany(map => map.RawEnterGates);
+            modelBuilder.Entity<GameMapDefinition>().HasMany(map => map.RawExitGates).WithOne(g => g.RawMap);
+            modelBuilder.Entity<GameMapDefinition>().HasOne(map => map.RawSafezoneMap);
             modelBuilder.Entity<GameMapDefinition>().HasMany(map => map.RawMonsterSpawns);
 
             modelBuilder.Entity<MonsterSpawnArea>().HasOne(spawn => spawn.RawMonsterDefinition);
@@ -105,13 +95,14 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
             modelBuilder.Entity<StatAttribute>().Ignore("ValueGetter");
 
             modelBuilder.Entity<MasterSkillDefinition>().HasOne(s => s.RawRoot);
-            modelBuilder.Entity<MasterSkillDefinition>().HasOne(s => s.RawCharacterClass);
+            modelBuilder.Entity<LetterBody>().HasOne(body => body.RawHeader);
+            modelBuilder.Entity<LetterHeader>().Ignore(header => header.ReceiverName);
 
             // TODO:
-            modelBuilder.Entity<GameConfiguration>().Ignore(c => c.ExperienceTable).Ignore(c => c.MasterExperienceTable).Ignore(c => c.WarpList);
+            modelBuilder.Entity<GameConfiguration>().Ignore(c => c.ExperienceTable)
+                .Ignore(c => c.MasterExperienceTable);
 
             // join entity keys:
-            modelBuilder.Entity<SkillPowerUpDefinition>().HasKey(e => new { e.Key, e.ValueId });
             this.AddJoinDefinitions(modelBuilder);
 
             var types = modelBuilder.Model.GetEntityTypes();
@@ -124,6 +115,9 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
                     key.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAdd;
                 }
             }
+
+            GuildContext.ConfigureModel(modelBuilder);
+            FriendContext.ConfigureModel(modelBuilder);
         }
     }
 }

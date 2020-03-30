@@ -23,13 +23,13 @@ namespace MUnique.OpenMU.GameLogic.Attributes
                 { Stats.CurrentHealth, m => m.Health },
                 { Stats.DamageReceiveDecrement, m => 1.0f },
                 { Stats.AttackDamageIncrease, m => 1.0f },
-                { Stats.ShieldBypassChance, m => 1.0f }
+                { Stats.ShieldBypassChance, m => 1.0f },
             };
 
         private static readonly IDictionary<AttributeDefinition, Action<Monster, float>> SetterMapping =
             new Dictionary<AttributeDefinition, Action<Monster, float>>
             {
-                { Stats.CurrentHealth, (m, v) => m.Health = (int)v }
+                { Stats.CurrentHealth, (m, v) => m.Health = (int)v },
             };
 
         private static readonly IDictionary<MonsterDefinition, IDictionary<AttributeDefinition, float>> MonsterStatAttributesCache = new Dictionary<MonsterDefinition, IDictionary<AttributeDefinition, float>>();
@@ -42,7 +42,7 @@ namespace MUnique.OpenMU.GameLogic.Attributes
 
         /// <summary>
         /// Attribute dictionary of a monster instance.
-        /// Most monster instances don't have additional attributes, so we just instanciate one if needed.
+        /// Most monster instances don't have additional attributes, so we just instantiate one if needed.
         /// </summary>
         private IDictionary<AttributeDefinition, IComposableAttribute> attributes;
 
@@ -76,13 +76,9 @@ namespace MUnique.OpenMU.GameLogic.Attributes
         /// <inheritdoc/>
         public float GetValueOfAttribute(AttributeDefinition attributeDefinition)
         {
-            var attributeDictionary = this.attributes;
-            if (attributeDictionary != null)
+            if (this.attributes != null && this.attributes.TryGetValue(attributeDefinition, out IComposableAttribute attribute))
             {
-                if (attributeDictionary.TryGetValue(attributeDefinition, out IComposableAttribute attribute))
-                {
-                    return attribute.Value;
-                }
+                return attribute.Value;
             }
 
             if (this.statAttributes.TryGetValue(attributeDefinition, out float value))

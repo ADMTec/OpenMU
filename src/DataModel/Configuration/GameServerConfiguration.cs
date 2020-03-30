@@ -5,26 +5,14 @@
 namespace MUnique.OpenMU.DataModel.Configuration
 {
     using System.Collections.Generic;
+    using MUnique.OpenMU.DataModel.Composition;
 
     /// <summary>
     /// Defines the game server configuration.
     /// </summary>
+    [AggregateRoot]
     public class GameServerConfiguration
     {
-        /// <summary>
-        /// Gets or sets the supported packet handlers, for each version.
-        /// </summary>
-        public virtual ICollection<MainPacketHandlerConfiguration> SupportedPacketHandlers { get; protected set; }
-
-        /// <summary>
-        /// Gets or sets the maximum npc count.
-        /// </summary>
-        public short MaximumNPCs
-        {
-            get;
-            set;
-        }
-
         /// <summary>
         /// Gets or sets the maximum number of players which can connect.
         /// </summary>

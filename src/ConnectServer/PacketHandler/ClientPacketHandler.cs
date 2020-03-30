@@ -9,6 +9,8 @@ namespace MUnique.OpenMU.ConnectServer.PacketHandler
     using System.Net.Sockets;
 
     using log4net;
+    using MUnique.OpenMU.Interfaces;
+    using IConnectServer = MUnique.OpenMU.ConnectServer.IConnectServer;
 
     /// <summary>
     /// The handler of packets coming from the client.
@@ -19,7 +21,7 @@ namespace MUnique.OpenMU.ConnectServer.PacketHandler
 
         private readonly IDictionary<byte, IPacketHandler<Client>> packetHandlers = new Dictionary<byte, IPacketHandler<Client>>();
 
-        private readonly Settings settings;
+        private readonly IConnectServerSettings connectServerSettings;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ClientPacketHandler"/> class.
@@ -27,17 +29,17 @@ namespace MUnique.OpenMU.ConnectServer.PacketHandler
         /// <param name="connectServer">The connect server.</param>
         public ClientPacketHandler(IConnectServer connectServer)
         {
-            this.settings = connectServer.Settings;
+            this.connectServerSettings = connectServer.Settings;
             this.packetHandlers.Add(0x05, new FtpRequestHandler(connectServer.Settings));
             this.packetHandlers.Add(0xF4, new ServerListHandler(connectServer));
         }
 
         /// <inheritdoc/>
-        public void HandlePacket(Client client, byte[] packet)
+        public void HandlePacket(Client client, Span<byte> packet)
         {
             try
             {
-                if (packet[1] > this.settings.MaxReceiveSize || packet.Length < 4)
+                if (packet[1] > this.connectServerSettings.MaximumReceiveSize || packet.Length < 4)
                 {
                     this.DisconnectClientUnknownPacket(client, packet);
                     return;
@@ -48,27 +50,31 @@ namespace MUnique.OpenMU.ConnectServer.PacketHandler
                 {
                     packetHandler.HandlePacket(client, packet);
                 }
-                else if (this.settings.DcOnUnknownPacket)
+                else if (this.connectServerSettings.DisconnectOnUnknownPacket)
                 {
                     this.DisconnectClientUnknownPacket(client, packet);
+                }
+                else
+                {
+                    // do nothing.
                 }
             }
             catch (SocketException ex)
             {
                 if (Log.IsDebugEnabled)
                 {
-                    Log.DebugFormat("SocketException occured in Client.ReceivePacket, Client Address: {0}:{1}, Packet: [{2}], Exception: {3}", client.Address, client.Port, packet.ToHexString(), ex);
+                    Log.DebugFormat("SocketException occured in Client.ReceivePacket, Client Address: {0}:{1}, Packet: [{2}], Exception: {3}", client.Address, client.Port, packet.ToArray().ToHexString(), ex);
                 }
             }
             catch (Exception ex)
             {
-                Log.WarnFormat("Exception occured in Client.ReceivePacket, Client Address: {0}:{1}, Packet: [{2}], Exception: {3}", client.Address, client.Port, packet.ToHexString(), ex);
+                Log.WarnFormat("Exception occured in Client.ReceivePacket, Client Address: {0}:{1}, Packet: [{2}], Exception: {3}", client.Address, client.Port, packet.ToArray().ToHexString(), ex);
             }
         }
 
-        private void DisconnectClientUnknownPacket(Client client, byte[] packet)
+        private void DisconnectClientUnknownPacket(Client client, Span<byte> packet)
         {
-            Log.InfoFormat("Client {0}:{1} will be disconnected because it sent an unknown packet: {2}", client.Address, client.Port, packet.ToHexString());
+            Log.InfoFormat("Client {0}:{1} will be disconnected because it sent an unknown packet: {2}", client.Address, client.Port, packet.ToArray().ToHexString());
             client.Connection.Disconnect();
         }
     }

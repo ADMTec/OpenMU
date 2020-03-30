@@ -5,6 +5,7 @@
 namespace MUnique.OpenMU.DataModel.Configuration.Items
 {
     using System.Collections.Generic;
+    using MUnique.OpenMU.DataModel.Composition;
 
     /// <summary>
     /// Defines an item set group. With (partial) completion of the set, addional options are getting applied.
@@ -14,7 +15,7 @@ namespace MUnique.OpenMU.DataModel.Configuration.Items
     ///   - double wear bonus of single swords
     ///   - set bonus for defense rate
     ///   - set bonus for defense, if level is greater than 9
-    ///   - ancient sets
+    ///   - ancient sets.
     /// </remarks>
     public class ItemSetGroup
     {
@@ -48,12 +49,26 @@ namespace MUnique.OpenMU.DataModel.Configuration.Items
         /// <summary>
         /// Gets or sets the minimum level which all of the items of the set need to have to get the bonus.
         /// </summary>
-        public int MinimumSetLevel { get; set; }
+        public int SetLevel { get; set; }
+
+        /// <summary>
+        /// Gets or sets the ancient set discriminator.
+        /// </summary>
+        /// <remarks>
+        /// Only relevant to ancient sets. One item can only be in one ancient set with the same discriminator.
+        /// The original mu online protocol supports up to two different ancient sets per item - with discriminator values 1 and 2.
+        /// E.g. a 'Warrior Leather' set would have a discriminator value of 1, the 'Anonymous Leather' set would have 2.
+        /// </remarks>
+        public int AncientSetDiscriminator { get; set; }
 
         /// <summary>
         /// Gets or sets the options. If the options depend on the item count, this options need to be ordered correctly.
         /// </summary>
-        public virtual ICollection<ItemOption> Options { get; protected set; }
+        /// <remarks>
+        /// The order is defined by <see cref="ItemOption.Number"/>.
+        /// </remarks>
+        [MemberOfAggregate]
+        public virtual ICollection<IncreasableItemOption> Options { get; protected set; }
 
         /// <summary>
         /// Gets or sets the items of this set.
@@ -61,6 +76,7 @@ namespace MUnique.OpenMU.DataModel.Configuration.Items
         /// <remarks>
         /// Here we can define additional bonus options, like the ancient options (e.g. +5 / +10 Str etc.).
         /// </remarks>
+        [MemberOfAggregate]
         public virtual ICollection<ItemOfItemSet> Items { get; protected set; }
     }
 }

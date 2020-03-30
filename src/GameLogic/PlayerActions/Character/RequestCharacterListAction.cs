@@ -4,18 +4,13 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
 {
+    using MUnique.OpenMU.GameLogic.Views.Character;
+
     /// <summary>
     /// Action to request the character list.
     /// </summary>
     public class RequestCharacterListAction
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RequestCharacterListAction"/> class.
-        /// </summary>
-        public RequestCharacterListAction()
-        {
-        }
-
         /// <summary>
         /// Requests the character list and advances the player state to <see cref="PlayerState.CharacterSelection"/>.
         /// </summary>
@@ -24,7 +19,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
         {
             if (player.PlayerState.TryAdvanceTo(PlayerState.CharacterSelection))
             {
-                player.PlayerView.ShowCharacterList();
+                player.ViewPlugIns.GetPlugIn<IShowCharacterListPlugIn>()?.ShowCharacterList();
             }
         }
     }

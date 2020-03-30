@@ -4,107 +4,75 @@
 
 namespace MUnique.OpenMU.Persistence.EntityFramework
 {
-    using System.Collections;
+    using System;
+    using System.Collections.Generic;
     using System.Linq;
     using Microsoft.EntityFrameworkCore;
 
+    using MUnique.OpenMU.Persistence.EntityFramework.Json;
+
     /// <summary>
-    /// The game configuration repository. It just fills the experience table, because the entity framework can't map arrays.
-    /// And instead of loading dependent data by calling other repositories, this repository uses the built-in functions of
-    /// the entity framework. That's a bit faster, and we don't need all of these repositories.
+    /// The game configuration repository, which loads the configuration by using the
+    /// <see cref="JsonObjectLoader"/>, to speed up loading the whole object graph.
     /// </summary>
     internal class GameConfigurationRepository : GenericRepository<GameConfiguration>
     {
+        private readonly JsonObjectLoader objectLoader;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="GameConfigurationRepository"/> class.
         /// </summary>
         /// <param name="repositoryManager">The repository manager.</param>
-        public GameConfigurationRepository(IRepositoryManager repositoryManager)
+        public GameConfigurationRepository(RepositoryManager repositoryManager)
             : base(repositoryManager)
         {
+            this.objectLoader = new GameConfigurationJsonObjectLoader();
         }
 
-        /// <summary>
-        /// Loads the dependent data of the object from the corresponding repositories.
-        /// Instead of loading dependent data by calling other repositories, like the base does,
-        /// this repository uses the built-in functions of the entity framework.
-        /// That's a bit faster and we don't need all of these repositories.
-        /// </summary>
-        /// <param name="obj">The object.</param>
-        /// <param name="currentContext">The current context with which the object got loaded. It is neccessary to retrieve the foreign key ids.</param>
-        protected override void LoadDependentData(object obj, DbContext currentContext)
+        /// <inheritdoc />
+        public override GameConfiguration GetById(Guid id)
         {
-            var entityEntry = currentContext.Entry(obj);
-            foreach (var navigation in entityEntry.Navigations)
+            var currentContext = this.RepositoryManager.ContextStack.GetCurrentContext() as EntityFrameworkContextBase;
+            if (currentContext == null)
             {
-                if (navigation.IsLoaded)
-                {
-                    continue;
-                }
-
-                navigation.Load();
-                if (navigation.CurrentValue != null)
-                {
-                    if (navigation.CurrentValue is IEnumerable enumerable)
-                    {
-                        this.LoadDependentData(enumerable, currentContext);
-                    }
-                    else
-                    {
-                        this.LoadDependentData(navigation.CurrentValue, currentContext);
-                    }
-                }
+                throw new InvalidOperationException("There is no current context set.");
             }
 
-            foreach (var collection in entityEntry.Collections)
+            var database = currentContext.Context.Database;
+            database.OpenConnection();
+            try
             {
-                if (collection.IsLoaded)
-                {
-                    continue;
-                }
-
-                collection.Load();
-                if (collection.CurrentValue != null)
-                {
-                    this.LoadDependentData(collection.CurrentValue, currentContext);
-                }
+                var config = this.objectLoader.LoadObject<GameConfiguration>(id, currentContext.Context);
+                currentContext.Attach(config);
+                return config;
             }
-
-            this.SetExperienceTables(obj as GameConfiguration);
-        }
-
-        private void SetExperienceTables(GameConfiguration gameConfiguration)
-        {
-            if (gameConfiguration != null)
+            finally
             {
-                gameConfiguration.ExperienceTable =
-                    Enumerable.Range(0, gameConfiguration.MaximumLevel + 1)
-                        .Select(level => this.CalculateNeededExperience(level))
-                        .ToArray();
-                gameConfiguration.MasterExperienceTable =
-                    Enumerable.Range(0, 201).Select(level => this.CalcNeededMasterExp(level)).ToArray();
+                database.CloseConnection();
             }
         }
 
-        private long CalcNeededMasterExp(long lvl)
+        /// <inheritdoc />
+        public override IEnumerable<GameConfiguration> GetAll()
         {
-            // f(x) = 505 * x^3 + 35278500 * x + 228045 * x^2
-            return (505 * lvl * lvl * lvl) + (35278500 * lvl) + (228045 * lvl * lvl);
-        }
-
-        private long CalculateNeededExperience(long level)
-        {
-            if (level == 0)
+            var currentContext = this.RepositoryManager.ContextStack.GetCurrentContext() as EntityFrameworkContextBase;
+            if (currentContext == null)
             {
-                return 0;
+                throw new InvalidOperationException("There is no current context set.");
             }
 
-            if (level < 256)
+            var database = currentContext.Context.Database;
+            database.OpenConnection();
+            try
             {
-                return 10 * (level + 8) * (level - 1) * (level - 1);
+                var configs = this.objectLoader.LoadAllObjects<GameConfiguration>(currentContext.Context).ToList();
+                configs.ForEach(currentContext.Attach);
+                return configs;
             }
-
-            return (10 * (level + 8) * (level - 1) * (level - 1)) + (1000 * (level - 247) * (level - 256) * (level - 256));
+            finally
+            {
+                database.CloseConnection();
+            }
         }
     }
 }

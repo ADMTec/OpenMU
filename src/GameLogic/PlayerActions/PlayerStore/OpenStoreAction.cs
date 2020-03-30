@@ -4,14 +4,16 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.PlayerStore
 {
+    using System.Linq;
     using log4net;
+    using MUnique.OpenMU.GameLogic.Views.PlayerShop;
 
     /// <summary>
     /// Action to open a player store.
     /// </summary>
     public class OpenStoreAction
     {
-        private static ILog log = LogManager.GetLogger(typeof(OpenStoreAction));
+        private static readonly ILog Log = LogManager.GetLogger(typeof(OpenStoreAction));
 
         /// <summary>
         /// Opens the player store.
@@ -20,10 +22,16 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.PlayerStore
         /// <param name="storeName">Name of the store.</param>
         public void OpenStore(Player player, string storeName)
         {
+            if (player.ShopStorage.Items.Any(i => !i.StorePrice.HasValue))
+            {
+                Log.WarnFormat("OpenStore request failed: Not all store items have a price assigned. Player: [{0}], StoreName: [{1}]", player.SelectedCharacter.Name, player.ShopStorage.StoreName);
+                return;
+            }
+
             player.ShopStorage.StoreName = storeName;
             player.ShopStorage.StoreOpen = true;
-            log.DebugFormat("OpenStore: Player: [{0}], StoreName: [{1}]", player.SelectedCharacter.Name, player.ShopStorage.StoreName);
-            player.ForEachObservingPlayer(p => p.PlayerView.PlayerShopOpened(player), true);
+            Log.DebugFormat("OpenStore: Player: [{0}], StoreName: [{1}]", player.SelectedCharacter.Name, player.ShopStorage.StoreName);
+            player.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IPlayerShopOpenedPlugIn>()?.PlayerShopOpened(player), true);
         }
     }
 }

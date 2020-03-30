@@ -8,8 +8,9 @@ namespace MUnique.OpenMU.Startup
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
+    using System.Linq;
     using System.Reflection;
-
+    using System.Threading;
     using log4net;
     using log4net.Config;
     using MUnique.OpenMU.AdminPanel;
@@ -21,8 +22,13 @@ namespace MUnique.OpenMU.Startup
     using MUnique.OpenMU.GuildServer;
     using MUnique.OpenMU.Interfaces;
     using MUnique.OpenMU.LoginServer;
+    using MUnique.OpenMU.Network;
+    using MUnique.OpenMU.Network.PlugIns;
     using MUnique.OpenMU.Persistence;
     using MUnique.OpenMU.Persistence.EntityFramework;
+    using MUnique.OpenMU.Persistence.Initialization;
+    using MUnique.OpenMU.Persistence.InMemory;
+    using MUnique.OpenMU.PublicApi;
 
     /// <summary>
     /// The startup class for an all-in-one game server.
@@ -34,69 +40,112 @@ namespace MUnique.OpenMU.Startup
         private readonly AdminPanel adminPanel;
         private readonly IDictionary<int, IGameServer> gameServers = new Dictionary<int, IGameServer>();
         private readonly IList<IManageableServer> servers = new List<IManageableServer>();
-        private readonly RepositoryManager repositoryManager;
+        private readonly IPersistenceContextProvider persistenceContextProvider;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Program"/> class.
         /// Constructor for the main entry program.
         /// </summary>
-        public Program()
+        /// <param name="args">The command line args.</param>
+        public Program(string[] args)
         {
-            this.repositoryManager = new RepositoryManager();
-            this.repositoryManager.InitializeSqlLogging();
-            if (!this.repositoryManager.IsDatabaseUpToDate())
+            if (args.Contains("-demo"))
             {
-                Console.WriteLine("The database needs to be updated before the server can be started. Apply update? (y/n)");
-                var key = Console.ReadLine()?.ToLowerInvariant();
-                if (key == "y")
+                this.persistenceContextProvider = new InMemoryPersistenceContextProvider();
+                var initialization = new DataInitialization(this.persistenceContextProvider);
+                initialization.CreateInitialData();
+            }
+            else
+            {
+                this.persistenceContextProvider = this.PrepareRepositoryManager(args.Contains("-reinit"), args.Contains("-autoupdate"));
+            }
+
+            var ipResolver = IpAddressResolverFactory.DetermineIpResolver(args);
+
+            Log.Info("Start initializing sub-components");
+            var serverConfigListener = new ServerConfigurationChangeListener(this.servers);
+            var persistenceContext = this.persistenceContextProvider.CreateNewConfigurationContext();
+            var loginServer = new LoginServer();
+
+            var chatServerDefinition = persistenceContext.Get<ChatServerDefinition>().First();
+            var chatServer = new ChatServer(chatServerDefinition.ConvertToSettings(), ipResolver, chatServerDefinition.GetId());
+            this.servers.Add(chatServer);
+            var guildServer = new GuildServer(this.gameServers, this.persistenceContextProvider);
+            var friendServer = new FriendServer(this.gameServers, chatServer, this.persistenceContextProvider);
+            var connectServers = new Dictionary<GameClientDefinition, IGameServerStateObserver>();
+
+            ClientVersionResolver.DefaultVersion = new ClientVersion(6, 3, ClientLanguage.English);
+            foreach (var gameClientDefinition in persistenceContext.Get<GameClientDefinition>())
+            {
+                ClientVersionResolver.Register(gameClientDefinition.Version, new ClientVersion(gameClientDefinition.Season, gameClientDefinition.Episode, gameClientDefinition.Language));
+            }
+
+            foreach (var connectServerDefinition in persistenceContext.Get<ConnectServerDefinition>())
+            {
+                var clientVersion = new ClientVersion(connectServerDefinition.Client.Season, connectServerDefinition.Client.Episode, connectServerDefinition.Client.Language);
+                var connectServer = ConnectServerFactory.CreateConnectServer(connectServerDefinition, clientVersion, connectServerDefinition.GetId());
+                this.servers.Add(connectServer);
+                if (!connectServers.TryGetValue(connectServerDefinition.Client, out var observer))
                 {
-                    this.repositoryManager.ApplyAllPendingUpdates();
-                    Console.WriteLine("The database has been successfully updated.");
+                    connectServers[connectServerDefinition.Client] = connectServer;
                 }
                 else
                 {
-                    Console.WriteLine("Cancelled the update process, can't start the server.");
-                    return;
+                    Log.WarnFormat($"Multiple connect servers for game client '{connectServerDefinition.Client.Description}' configured. Only one per client makes sense.");
+                    if (!(observer is MulticastConnectionServerStateObserver))
+                    {
+                        var multicastObserver = new MulticastConnectionServerStateObserver();
+                        multicastObserver.AddObserver(observer);
+                        multicastObserver.AddObserver(connectServer);
+                        connectServers[connectServerDefinition.Client] = multicastObserver;
+                    }
                 }
             }
 
-            this.repositoryManager.RegisterRepositories();
-            Log.Info("Start initializing sub-components");
-            var loginServer = new LoginServer();
-            var chatServer = new ChatServerListener(55980);
-            this.servers.Add(chatServer);
-            var guildServer = new GuildServer(this.gameServers, this.repositoryManager);
-            var friendServer = new FriendServer(this.gameServers, chatServer, this.repositoryManager);
-            chatServer.Start();
-            var connectServer = ConnectServerFactory.CreateConnectServer();
-            this.servers.Add(connectServer);
             Log.Info("Start initializing game servers");
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
-            foreach (var gameServerDefinition in this.GetGameServers())
+            foreach (var gameServerDefinition in persistenceContext.Get<DataModel.Configuration.GameServerDefinition>())
             {
                 using (ThreadContext.Stacks["gameserver"].Push(gameServerDefinition.ServerID.ToString()))
                 {
-                    var gameServer = new GameServer(gameServerDefinition, guildServer, loginServer, this.repositoryManager, friendServer);
-                    foreach (var mainPacketHandler in gameServer.Context.PacketHandlers)
+                    var gameServer = new GameServer(gameServerDefinition, guildServer, loginServer, this.persistenceContextProvider, friendServer);
+                    foreach (var endpoint in gameServerDefinition.Endpoints)
                     {
-                        gameServer.AddListener(new DefaultTcpGameServerListener(gameServerDefinition.NetworkPort, gameServer.ServerInfo, gameServer.Context, connectServer, mainPacketHandler));
-                        //// At the moment only one main packet handler should be used;
-                        //// A TCP port can only be used for one TCP listener, so we have to introduce something to pair ports with main packets handlers.
-                        break;
+                        gameServer.AddListener(new DefaultTcpGameServerListener(endpoint, gameServer.ServerInfo, gameServer.Context, connectServers[endpoint.Client], ipResolver));
                     }
 
                     this.servers.Add(gameServer);
+                    this.gameServers.Add(gameServer.Id, gameServer);
                     Log.InfoFormat("Game Server {0} - [{1}] initialized", gameServer.Id, gameServer.Description);
                 }
             }
 
             stopwatch.Stop();
             Log.Info($"All game servers initialized, elapsed time: {stopwatch.Elapsed}");
-            Log.Info("Start initializing admin panel");
 
-            this.adminPanel = new AdminPanel(1234, this.servers, this.repositoryManager);
-            Log.Info("Admin panel initialized");
+            Log.Info("Start API...");
+            ApiHost.RunAsync(this.gameServers.Values, this.servers.OfType<IConnectServer>(), Log4NetConfigFilePath);
+            Log.Info("Started API");
+
+            var adminPort = this.DetermineAdminPort(args);
+            Log.Info($"Start initializing admin panel for port {adminPort}.");
+            this.adminPanel = new AdminPanel(adminPort, this.servers, this.persistenceContextProvider, serverConfigListener, Log4NetConfigFilePath);
+            Log.Info($"Admin panel initialized, port {adminPort}.");
+
+            if (args.Contains("-autostart"))
+            {
+                chatServer.Start();
+                foreach (var gameServer in this.gameServers.Values)
+                {
+                    gameServer.Start();
+                }
+
+                foreach (var connectServer in this.servers.OfType<IConnectServer>())
+                {
+                    connectServer.Start();
+                }
+            }
         }
 
         /// <summary>
@@ -105,10 +154,10 @@ namespace MUnique.OpenMU.Startup
         /// <param name="args">The command line args.</param>
         public static void Main(string[] args)
         {
-            BasicConfigurator.Configure();
-            XmlConfigurator.ConfigureAndWatch(new FileInfo(Log4NetConfigFilePath));
+            var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
+            XmlConfigurator.ConfigureAndWatch(logRepository, new FileInfo(Log4NetConfigFilePath));
 
-            using (new Program())
+            using (new Program(args))
             {
                 bool exit = false;
                 while (!exit)
@@ -120,6 +169,12 @@ namespace MUnique.OpenMU.Startup
                             break;
                         case "gc":
                             GC.Collect();
+                            break;
+                        case null:
+                            Thread.Sleep(1000);
+                            break;
+                        default:
+                            Console.WriteLine("Unknown command");
                             break;
                     }
                 }
@@ -136,16 +191,65 @@ namespace MUnique.OpenMU.Startup
                 (server as IDisposable)?.Dispose();
             }
 
-            this.adminPanel.Dispose();
-            this.repositoryManager.Dispose();
+            (this.persistenceContextProvider as IDisposable)?.Dispose();
         }
 
-        private IEnumerable<GameServerDefinition> GetGameServers()
+        private ushort DetermineAdminPort(string[] args)
         {
-            using (this.repositoryManager.UseTemporaryConfigurationContext())
+            var parameter = args.FirstOrDefault(a => a.StartsWith("-adminport:", StringComparison.InvariantCultureIgnoreCase));
+            if (parameter != null
+                && int.TryParse(parameter.Substring(parameter.IndexOf(':') + 1), out int port)
+                && port >= 1
+                && port <= ushort.MaxValue)
             {
-                return this.repositoryManager.GetRepository<GameServerDefinition>().GetAll();
+                return (ushort)port;
             }
+
+            return 1234; // Default port
+        }
+
+        private IPersistenceContextProvider PrepareRepositoryManager(bool reinit, bool autoupdate)
+        {
+            PersistenceContextProvider.InitializeSqlLogging();
+            var manager = new PersistenceContextProvider();
+            if (reinit || !manager.DatabaseExists())
+            {
+                Log.Info("The database is getting (re-)initialized...");
+                manager.ReCreateDatabase();
+                var initialization = new DataInitialization(manager);
+                initialization.CreateInitialData();
+                Log.Info("...initialization finished.");
+            }
+            else if (!manager.IsDatabaseUpToDate())
+            {
+                if (autoupdate)
+                {
+                    Console.WriteLine("The database needs to be updated before the server can be started. Updating...");
+                    manager.ApplyAllPendingUpdates();
+                    Console.WriteLine("The database has been successfully updated.");
+                }
+                else
+                {
+                    Console.WriteLine("The database needs to be updated before the server can be started. Apply update? (y/n)");
+                    var key = Console.ReadLine()?.ToLowerInvariant();
+                    if (key == "y")
+                    {
+                        manager.ApplyAllPendingUpdates();
+                        Console.WriteLine("The database has been successfully updated.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Cancelled the update process, can't start the server.");
+                        return null;
+                    }
+                }
+            }
+            else
+            {
+                // everything is fine and ready
+            }
+
+            return manager;
         }
     }
 }

@@ -23,18 +23,21 @@ namespace MUnique.OpenMU.GameLogic
     {
         private const short ForceWaveSkillId = 66;
         private const long MaximumPrice = 3000000000;
-        private static readonly HashSet<short> WingIds = new HashSet<short>()
+        private const float DestroyedPetPenalty = 2.0f;
+        private const float DestroyedItemPenalty = 1.4f;
+
+        private static readonly HashSet<short> WingIds = new HashSet<short>
         {
             0, 1, 2, 3, 4, 5, 6,
             36, 37, 38, 39, 40,
             41, 42, 43, // sum wings
             49, 50, // Rf Capes
-            130, 131, 132, 133, 134, 135 // mini wings? -> All worth 240, remove here!
+            130, 131, 132, 133, 134, 135, // mini wings? -> All worth 240, remove here!
         };
 
         private static readonly IDictionary<int, Func<Item, long>> SpecialItemDictionary
-            = new Dictionary<int, Func<Item, long>>()
-        {
+            = new Dictionary<int, Func<Item, long>>
+            {
             {
                 (int)SpecialItems.Arrow, item =>
                 {
@@ -86,6 +89,14 @@ namespace MUnique.OpenMU.GameLogic
             { (int)SpecialItems.Creation, item => 36000000 },
             { (int)SpecialItems.PackedBless, item => (item.Level + 1) * 9000000 * 10 },
             { (int)SpecialItems.PackedSoul, item => (item.Level + 1) * 6000000 * 10 },
+            { (int)SpecialItems.PackedLife, item => (item.Level + 1) * 45000000 * 10 },
+            { (int)SpecialItems.PackedCreation, item => (item.Level + 1) * 36000000 * 10 },
+            { (int)SpecialItems.PackedGuardian, item => (item.Level + 1) * 60000000 * 10 },
+            { (int)SpecialItems.PackedGemstone, item => (item.Level + 1) * 186000 * 10 },
+            { (int)SpecialItems.PackedHarmony, item => (item.Level + 1) * 186000 * 10 },
+            { (int)SpecialItems.PackedChaos, item => (item.Level + 1) * 810000 * 10 },
+            { (int)SpecialItems.PackedLowerRefineStone, item => (item.Level + 1) * 186000 * 10 },
+            { (int)SpecialItems.PackedHigherRefineStone, item => (item.Level + 1) * 186000 * 10 },
             { (int)SpecialItems.Fruits, item => 33000000 },
             { (int)SpecialItems.LochFeather, item => item.Level == 1 ? 7500000 : 180000 },
             { (int)SpecialItems.JewelGuardian, item => 60000000 },
@@ -101,6 +112,8 @@ namespace MUnique.OpenMU.GameLogic
             { (int)SpecialItems.SmallSdPotion, item => item.Durability * 2000 },
             { (int)SpecialItems.SdPotion, item => item.Durability * 4000 },
             { (int)SpecialItems.LargeSdPotion, item => item.Durability * 6000 },
+            { (int)SpecialItems.LargeHealPotion, item => item.Durability * 1500 * (item.Level + 1) },
+            { (int)SpecialItems.LargeManaPotion, item => item.Durability * 1500 * (item.Level + 1) },
             { (int)SpecialItems.SmallComplexPotion, item => item.Durability * 2500 },
             { (int)SpecialItems.ComplexPotion, item => item.Durability * 5000 },
             { (int)SpecialItems.LargeComplexPotion, item => item.Durability * 7500 },
@@ -150,6 +163,12 @@ namespace MUnique.OpenMU.GameLogic
                     item.Level == 7 ? 75000 :
                     item.Level == 8 ? 90000 : 15000
             },
+            {
+                (int)SpecialItems.OldScroll, item => item.Level == 1 ? 500000 : (item.Level + 1) * 200000
+            },
+            {
+                (int)SpecialItems.IllusionSorcererCovenant, item => item.Level == 1 ? 500000 : (item.Level + 1) * 200000
+            },
             { (int)SpecialItems.ArmorGuardman, item => 5000 },
             { (int)SpecialItems.WizardsRing, item => item.Level == 0 ? 30000 : 0 },
             { (int)SpecialItems.SpiritPet, item => item.Level == 0 ? 30000000 : item.Level == 1 ? 15000000 : 0 },
@@ -175,10 +194,19 @@ namespace MUnique.OpenMU.GameLogic
             Creation = 0x160E, // getId(14,22),
             PackedBless = 0x1E0C, // getId(12,30),
             PackedSoul = 0x1F0C, // getId(12,31),
-            // TODO: add other packed jewels, since they were added to season 6
+            PackedLife = 0x880C,
+            PackedCreation = 0x890C,
+            PackedGuardian = 0x8A0C,
+            PackedGemstone = 0x8B0C,
+            PackedHarmony = 0x8C0C,
+            PackedChaos = 0x8D0C,
+            PackedLowerRefineStone = 0x8E0C,
+            PackedHigherRefineStone = 0x8F0C,
             Fruits = 0xF0D, // getId(13,15),
             LochFeather = 0xE0D, // getId(13,14),
             JewelGuardian = 0x1F0E, // getId(14,31),
+            LargeHealPotion = 0x030E,
+            LargeManaPotion = 0x060E,
             SiegePotion = 0x70E, // getId(14,7),
             OrderGuardianLifeStone = 0xB0D, // getId(13,11),
             ContractSummon = 0x70D, // getId(13,7),
@@ -216,6 +244,8 @@ namespace MUnique.OpenMU.GameLogic
             Halloween5 = 0x310E, // getId(14, 49),
             Halloween6 = 0x320E, // getId(14, 50),
             GemOfSecret = 0x1A0C, // getId(12,26),
+            OldScroll = 0x310D,
+            IllusionSorcererCovenant = 0x320D,
         }
 
         /// <summary>
@@ -230,10 +260,53 @@ namespace MUnique.OpenMU.GameLogic
             if (item.Definition.Group == 14 && (item.Definition.Number <= 8))
             {
                 // Potions + Antidote
-                sellingPrice /= 100;
+                return sellingPrice / 10 * 10;
             }
 
-            return sellingPrice;
+            return RoundPrice(sellingPrice);
+        }
+
+        /// <summary>
+        /// Calculates the repair price of the item, which the player has to pay if he wants to repair the item.
+        /// </summary>
+        /// <param name="item">The item.</param>
+        /// <param name="npcDiscount">If set to <c>true</c>, the item is repaired through an NPC which gives a discount.</param>
+        /// <returns>The repair price.</returns>
+        public long CalculateRepairPrice(Item item, bool npcDiscount)
+        {
+            if (item.GetMaximumDurabilityOfOnePiece() == 0)
+            {
+                return 0;
+            }
+
+            const long maximumBasePrice = 400000000;
+            var isPet = item.ItemSlot == InventoryConstants.PetSlot;
+            var maximumDurability = item.GetMaximumDurabilityOfOnePiece();
+            var basePrice = Math.Min(isPet ? CalculateBuyingPrice(item, maximumDurability) : CalculateBuyingPrice(item, maximumDurability) / 3, maximumBasePrice);
+            basePrice = RoundPrice(basePrice);
+
+            float squareRootOfBasePrice = (float)Math.Sqrt(basePrice);
+            float squareRootOfSquareRoot = (float)Math.Sqrt(squareRootOfBasePrice);
+            float missingDurability = 1 - ((float)item.Durability / item.GetMaximumDurabilityOfOnePiece());
+            float repairPrice = (3.0f * squareRootOfBasePrice * squareRootOfSquareRoot * missingDurability) + 1.0f;
+            if (item.Durability <= 0)
+            {
+                if (isPet)
+                {
+                    repairPrice *= DestroyedPetPenalty;
+                }
+                else
+                {
+                    repairPrice *= DestroyedItemPenalty;
+                }
+            }
+
+            if (!npcDiscount)
+            {
+                repairPrice *= 2.5f;
+            }
+
+            return RoundPrice((long)repairPrice);
         }
 
         /// <summary>
@@ -241,13 +314,15 @@ namespace MUnique.OpenMU.GameLogic
         /// </summary>
         /// <param name="item">The item.</param>
         /// <returns>The buying price.</returns>
-        public long CalculateBuyingPrice(Item item)
+        public long CalculateBuyingPrice(Item item) => CalculateBuyingPrice(item, item.Durability);
+
+        private static long CalculateBuyingPrice(Item item, byte durability)
         {
             var definition = item.Definition;
 
             if (definition.Value > 0 && (definition.Group == 15 || definition.Group == 12))
             {
-               return RoundPrice(definition.Value);
+                return RoundPrice(definition.Value);
             }
 
             long price = 0;
@@ -258,10 +333,9 @@ namespace MUnique.OpenMU.GameLogic
                 dropLevel += 25;
             }
 
-            Func<Item, long> func;
-            if (SpecialItemDictionary.TryGetValue(GetId(item.Definition.Group, item.Definition.Number), out func))
+            if (SpecialItemDictionary.TryGetValue(GetId(item.Definition.Group, item.Definition.Number), out var specialItemPriceFunction))
             {
-                price = func(item);
+                price = specialItemPriceFunction(item);
             }
             else if (definition.Value > 0)
             {
@@ -298,6 +372,9 @@ namespace MUnique.OpenMU.GameLogic
                     case 13: dropLevel += 245; break;
                     case 14: dropLevel += 305; break;
                     case 15: dropLevel += 365; break;
+                    default:
+                        // other levels don't add value.
+                        break;
                 }
 
                 // Wings
@@ -311,16 +388,14 @@ namespace MUnique.OpenMU.GameLogic
                     price = ((dropLevel + 40) * dropLevel * dropLevel / 8) + 100;
                 }
 
-                if (item.Definition.Group <= 6)
+                var isOneHandedWeapon = item.Definition.Group < 6 && definition.Width < 2 && definition.BasePowerUpAttributes.Any(o => o.TargetAttribute == Stats.MinimumPhysBaseDmg);
+                var isShield = item.Definition.Group == 6;
+                if (isOneHandedWeapon || isShield)
                 {
-                    // if it's not a two-handed weapon or it's a shield
-                    if (item.Definition.Group == 6 || (definition.BasePowerUpAttributes.Any(o => o.TargetAttribute == Stats.MinimumPhysBaseDmg) && definition.Width < 2))
-                    {
-                        price = price * 80 / 100;
-                    }
+                    price = price * 80 / 100;
                 }
 
-                if (item.HasSkill && definition.Skill?.SkillID != ForceWaveSkillId)
+                if (item.HasSkill && definition.Skill?.Number != ForceWaveSkillId)
                 {
                     price += (long)(price * 1.5);
                 }
@@ -347,28 +422,22 @@ namespace MUnique.OpenMU.GameLogic
                         break;
                 }
 
-                var excCount = item.ItemOptions.Count(o => o.ItemOption.OptionType == ItemOptionTypes.Excellent);
-
-                if (IsWing(item))
+                // For each wing option, add 25%
+                var wingOptionCount = item.ItemOptions.Count(o => o.ItemOption.OptionType == ItemOptionTypes.Wing);
+                for (int i = 0; i < wingOptionCount; i++)
                 {
-                    // TODO: Instead of using ItemOptionTypes.Excellent for wings, introduce another option type. Then we can remove this if statement.
-                    // For each wing option, add 25%
-                    for (int i = 0; i < excCount; i++)
-                    {
-                        price += (long)(price * 0.25);
-                    }
+                    price += (long)(price * 0.25);
                 }
-                else
+
+                // For each excellent option double the value
+                var excCount = item.ItemOptions.Count(o => o.ItemOption.OptionType == ItemOptionTypes.Excellent);
+                for (int i = 0; i < excCount; i++)
                 {
-                    // For each excellent option double the value
-                    for (int i = 0; i < excCount; i++)
-                    {
-                        price += price;
-                    }
+                    price += price;
                 }
             }
 
-            if (item.ItemOptions.Any(o => o.ItemOption.OptionType == ItemOptionTypes.Level380Option))
+            if (item.ItemOptions.Any(o => o.ItemOption.OptionType == ItemOptionTypes.GuardianOption))
             {
                 price += price * 16 / 100;
             }
@@ -379,9 +448,9 @@ namespace MUnique.OpenMU.GameLogic
             }
 
             var maxDurability = item.GetMaximumDurabilityOfOnePiece();
-            if (maxDurability > 1)
+            if (maxDurability > 1 && maxDurability > durability)
             {
-                float multiplier = 1.0f - ((float)item.Durability / maxDurability);
+                float multiplier = 1.0f - ((float)durability / maxDurability);
                 long loss = (long)(price * 0.6 * multiplier);
                 price -= loss;
             }
@@ -410,6 +479,10 @@ namespace MUnique.OpenMU.GameLogic
             else if (result >= 100)
             {
                 result = result / 10 * 10;
+            }
+            else
+            {
+                // no rounding for smaller values.
             }
 
             return result;

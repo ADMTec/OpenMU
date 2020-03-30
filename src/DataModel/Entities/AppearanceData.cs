@@ -4,7 +4,9 @@
 
 namespace MUnique.OpenMU.DataModel.Entities
 {
+    using System;
     using System.Collections.Generic;
+    using MUnique.OpenMU.DataModel.Composition;
     using MUnique.OpenMU.DataModel.Configuration;
 
     /// <summary>
@@ -13,20 +15,31 @@ namespace MUnique.OpenMU.DataModel.Entities
     public class AppearanceData : IAppearanceData
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="AppearanceData"/> class.
+        /// Occurs when the appearance of the player changed.
         /// </summary>
-        public AppearanceData()
-        {
-        }
+        /// <remarks>
+        /// This never happens in this implementation.
+        /// </remarks>
+        public event EventHandler AppearanceChanged;
 
         /// <summary>
         /// Gets or sets the character class.
         /// </summary>
         public virtual CharacterClass CharacterClass { get; set; }
 
+        /// <inheritdoc />
+        public CharacterPose Pose { get; set; }
+
+        /// <inheritdoc />
+        public bool FullAncientSetEquipped { get; set; }
+
         /// <summary>
         /// Gets or sets the equipped items.
         /// </summary>
-        public IEnumerable<ItemAppearance> EquippedItems { get; set; }
+        [MemberOfAggregate]
+        public virtual ICollection<ItemAppearance> EquippedItems { get; protected set; }
+
+        /// <inheritdoc />
+        IEnumerable<ItemAppearance> IAppearanceData.EquippedItems => this.EquippedItems;
     }
 }

@@ -7,47 +7,63 @@
 namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
 {
     using MUnique.OpenMU.DataModel.Entities;
+    using MUnique.OpenMU.GameLogic.Views.Inventory;
     using MUnique.OpenMU.Persistence;
 
     /// <summary>
     /// Consume handler to modify items which are specified by the target slot.
     /// </summary>
-    public abstract class ItemModifyConsumeHandler : IItemConsumeHandler
+    public abstract class ItemModifyConsumeHandler : BaseConsumeHandler
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="ItemModifyConsumeHandler"/> class.
         /// </summary>
-        /// <param name="repositoryManager">The repository manager.</param>
-        protected ItemModifyConsumeHandler(IRepositoryManager repositoryManager)
+        /// <param name="persistenceContextProvider">The persistence context provider.</param>
+        protected ItemModifyConsumeHandler(IPersistenceContextProvider persistenceContextProvider)
         {
-            this.RepositoryManager = repositoryManager;
+            this.PersistenceContextProvider = persistenceContextProvider;
         }
 
         /// <summary>
         /// Gets the repository manager.
         /// </summary>
-        protected IRepositoryManager RepositoryManager { get; }
+        protected IPersistenceContextProvider PersistenceContextProvider { get; }
 
         /// <inheritdoc/>
-        public bool ConsumeItem(Player player, byte itemSlot, byte targetSlot)
+        public override bool ConsumeItem(Player player, Item item, Item targetItem)
         {
             if (player.PlayerState.CurrentState != PlayerState.EnteredWorld)
             {
                 return false;
             }
 
-            Item item = player.Inventory.GetItem(targetSlot);
-            if (item == null)
+            if (targetItem == null)
             {
                 return false;
             }
 
-            if (!this.ModifyItem(item))
+            if (targetItem.ItemSlot <= InventoryConstants.LastEquippableItemSlotIndex)
+            {
+                // It shouldn't be possible to upgrade an equipped item.
+                // The original server allowed this, however people managed to downgrade their maxed out weapons to +6 when some
+                // visual bugs on the client occured :D Example: On the server side there is a jewel of bless on a certain slot,
+                // but client shows a health potion. When the client then consumes the potion it would apply the bless to item slot 0.
+                return false;
+            }
+
+            if (!this.CheckPreconditions(player, item, targetItem))
             {
                 return false;
             }
 
-            player.PlayerView.InventoryView.ItemUpgraded(item);
+            if (!this.ModifyItem(targetItem, player.PersistenceContext))
+            {
+                return false;
+            }
+
+            this.ConsumeSourceItem(player, item);
+
+            player.ViewPlugIns.GetPlugIn<IItemUpgradedPlugIn>()?.ItemUpgraded(targetItem);
             return true;
         }
 
@@ -55,7 +71,8 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
         /// Modifies the item.
         /// </summary>
         /// <param name="item">The item.</param>
+        /// <param name="persistenceContext">The persistence context.</param>
         /// <returns>Flag indicating whether the modification of the item occured.</returns>
-        protected abstract bool ModifyItem(Item item);
+        protected abstract bool ModifyItem(Item item, IContext persistenceContext);
     }
 }

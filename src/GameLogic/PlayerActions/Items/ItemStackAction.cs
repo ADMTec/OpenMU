@@ -4,11 +4,12 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
 {
-    using System.Collections.Generic;
     using System.Linq;
     using log4net;
     using MUnique.OpenMU.DataModel.Configuration;
     using MUnique.OpenMU.DataModel.Entities;
+    using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.Inventory;
     using MUnique.OpenMU.Interfaces;
 
     /// <summary>
@@ -31,20 +32,6 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
             */
 
         private static readonly ILog Log = LogManager.GetLogger(typeof(ItemStackAction));
-
-        private readonly IDictionary<byte, JewelMix> mixes;
-
-        private readonly IGameContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ItemStackAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public ItemStackAction(IGameContext gameContext)
-        {
-            this.gameContext = gameContext;
-            this.mixes = this.gameContext.Configuration.JewelMixes?.ToDictionary(mix => mix.Number);
-        }
 
         /// <summary>
         /// Stacks several items to one stacked item.
@@ -71,19 +58,19 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
                 foreach (Item jewel in jewels)
                 {
                     player.Inventory.RemoveItem(jewel);
-                    player.PlayerView.InventoryView.ItemConsumed(jewel.ItemSlot, true);
+                    player.ViewPlugIns.GetPlugIn<IItemRemovedPlugIn>()?.RemoveItem(jewel.ItemSlot);
                 }
 
-                var stacked = this.gameContext.RepositoryManager.CreateNew<Item>();
+                var stacked = player.PersistenceContext.CreateNew<Item>();
                 stacked.Definition = mix.MixedJewel;
                 stacked.Level = (byte)(stackSize / 10);
                 stacked.Durability = 1;
                 player.Inventory.AddItem(stacked);
-                player.PlayerView.InventoryView.ItemAppear(stacked);
+                player.ViewPlugIns.GetPlugIn<IItemAppearPlugIn>()?.ItemAppear(stacked);
             }
             else
             {
-                player.PlayerView.ShowMessage("You are lacking of Jewels.", MessageType.BlueNormal);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("You are lacking of Jewels.", MessageType.BlueNormal);
             }
         }
 
@@ -109,13 +96,13 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
             var stacked = player.Inventory.GetItem(slot);
             if (stacked == null)
             {
-                player.PlayerView.ShowMessage("Stacked Jewel not found.", MessageType.BlueNormal);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Stacked Jewel not found.", MessageType.BlueNormal);
                 return;
             }
 
             if (stacked.Definition != mix.SingleJewel)
             {
-                player.PlayerView.ShowMessage("Selected Item is not a stacked Jewel.", MessageType.BlueNormal);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Selected Item is not a stacked Jewel.", MessageType.BlueNormal);
                 return;
             }
 
@@ -124,20 +111,20 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
             var freeSlots = player.Inventory.FreeSlots.Take(pieces).ToList();
             if (freeSlots.Count < pieces)
             {
-                player.PlayerView.ShowMessage("Inventory got not enough Space.", MessageType.BlueNormal);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Inventory got not enough Space.", MessageType.BlueNormal);
                 return;
             }
 
             player.Inventory.RemoveItem(stacked);
-            player.PlayerView.InventoryView.ItemConsumed(slot, true);
+            player.ViewPlugIns.GetPlugIn<IItemRemovedPlugIn>()?.RemoveItem(slot);
             foreach (var freeSlot in freeSlots)
             {
-                var jewel = this.gameContext.RepositoryManager.CreateNew<Item>();
+                var jewel = player.PersistenceContext.CreateNew<Item>();
                 jewel.Definition = mix.SingleJewel;
                 jewel.Durability = 1;
                 jewel.ItemSlot = freeSlot;
                 player.Inventory.AddItem(freeSlot, jewel);
-                player.PlayerView.InventoryView.ItemAppear(jewel);
+                player.ViewPlugIns.GetPlugIn<IItemAppearPlugIn>()?.ItemAppear(jewel);
             }
         }
 
@@ -155,8 +142,8 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
 
         private JewelMix GetJewelMix(byte mixId, Player player)
         {
-            JewelMix mix;
-            if (!this.mixes.TryGetValue(mixId, out mix))
+            JewelMix mix = player.GameContext.Configuration.JewelMixes.FirstOrDefault(m => m.Number == mixId);
+            if (mix == null)
             {
                 Log.WarnFormat($"Unkown mix type [{mixId}], Player Name: [{player.SelectedCharacter?.Name}], Account Name: [{player.Account?.LoginName}]");
             }

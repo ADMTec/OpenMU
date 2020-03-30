@@ -5,7 +5,8 @@
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Messenger
 {
     using log4net;
-    using MUnique.OpenMU.DataModel.Entities;
+    using MUnique.OpenMU.GameLogic.Views.Messenger;
+    using MUnique.OpenMU.Interfaces;
 
     /// <summary>
     /// Action to delete a letter.
@@ -13,17 +14,6 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Messenger
     public class LetterDeleteAction
     {
         private static readonly ILog Log = LogManager.GetLogger(typeof(LetterDeleteAction));
-
-        private readonly IGameContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LetterDeleteAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public LetterDeleteAction(IGameContext gameContext)
-        {
-            this.gameContext = gameContext;
-        }
 
         /// <summary>
         /// Deletes the letter.
@@ -39,16 +29,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Messenger
 
             var letterIndex = player.SelectedCharacter.Letters.IndexOf(letter);
             player.SelectedCharacter.Letters.RemoveAt(letterIndex);
-            player.PlayerView.MessengerView.LetterDeleted((ushort)letterIndex);
-
-            // TODO: Deleting it from the repository should not be required.
-            using (this.gameContext.RepositoryManager.UseContext(player.PersistenceContext))
-            {
-                if (!this.gameContext.RepositoryManager.GetRepository<LetterHeader>().Delete(letter))
-                {
-                    Log.WarnFormat("Player {0} tried to delete a letter, no success. LetterID: {1}", player.SelectedCharacter.Name, letterIndex);
-                }
-            }
+            player.ViewPlugIns.GetPlugIn<ILetterDeletedPlugIn>()?.LetterDeleted((ushort)letterIndex);
         }
     }
 }

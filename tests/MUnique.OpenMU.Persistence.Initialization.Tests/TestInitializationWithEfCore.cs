@@ -4,11 +4,10 @@
 
 namespace MUnique.OpenMU.Persistence.Initialization.Tests
 {
+    using System;
     using System.Linq;
-    using Microsoft.EntityFrameworkCore;
-    using MUnique.OpenMU.DataModel.Configuration;
-    using MUnique.OpenMU.DataModel.Entities;
     using MUnique.OpenMU.Persistence.EntityFramework;
+    using MUnique.OpenMU.Persistence.InMemory;
     using NUnit.Framework;
 
     /// <summary>
@@ -24,29 +23,35 @@ namespace MUnique.OpenMU.Persistence.Initialization.Tests
         [Ignore("This is not a real test which should run automatically.")]
         public void SetupDatabaseAndTestLoadingData()
         {
-            using (var installationContext = new EntityDataContext())
-            {
-                installationContext.Database.EnsureDeleted();
-                installationContext.Database.Migrate();
-            }
+            var manager = new PersistenceContextProvider();
+            manager.ReCreateDatabase();
+            this.TestDataInitialization(new PersistenceContextProvider());
+        }
 
-            var manager = new RepositoryManager();
-            manager.RegisterRepositories();
+        /// <summary>
+        /// Tests the data initialization using the in-memory persistence.
+        /// </summary>
+        [Test]
+        public void TestDataInitializationInMemory()
+        {
+            this.TestDataInitialization(new InMemoryPersistenceContextProvider());
+        }
+
+        private void TestDataInitialization(IPersistenceContextProvider contextProvider)
+        {
+            var initialization = new DataInitialization(contextProvider);
+            initialization.CreateInitialData();
 
             // Loading game configuration
-            using (var context = manager.CreateNewConfigurationContext())
-            using (manager.UseContext(context))
+            using (var context = contextProvider.CreateNewConfigurationContext())
             {
-                var gameConfiguraton = manager.GetRepository<GameConfiguration>().GetAll().FirstOrDefault();
+                var gameConfiguraton = context.Get<DataModel.Configuration.GameConfiguration>().FirstOrDefault();
                 Assert.That(gameConfiguraton, Is.Not.Null);
 
                 // Testing loading of an account
-                using (var accountContext = manager.CreateNewAccountContext(gameConfiguraton))
-                using (manager.UseContext(accountContext))
+                using (var accountContext = contextProvider.CreateNewPlayerContext(gameConfiguraton))
                 {
-                    var account1 =
-                        manager.GetRepository<Account, IAccountRepository<Account>>()
-                            .GetAccountByLoginName("test1", "test1");
+                    var account1 = accountContext.GetAccountByLoginName("test1", "test1");
                     Assert.That(account1, Is.Not.Null);
                     Assert.That(account1.LoginName, Is.EqualTo("test1"));
                 }

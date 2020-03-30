@@ -9,8 +9,6 @@ namespace MUnique.OpenMU.Interfaces
     using System;
     using System.Collections.Generic;
 
-    using MUnique.OpenMU.DataModel.Entities;
-
     /// <summary>
     /// Defines some server ids which are used for some specific states.
     /// </summary>
@@ -59,7 +57,7 @@ namespace MUnique.OpenMU.Interfaces
         /// </summary>
         /// <param name="characterId">Id of the character.</param>
         /// <returns>The friend list of a character.</returns>
-        IEnumerable<FriendViewItem> GetFriendList(Guid characterId);
+        IEnumerable<string> GetFriendList(Guid characterId);
 
         /// <summary>
         /// Sets the online state of a character.
@@ -96,5 +94,14 @@ namespace MUnique.OpenMU.Interfaces
         /// <param name="characterId">Character id.</param>
         /// <returns>The character names of all open friend requests.</returns>
         IEnumerable<string> GetOpenFriendRequests(Guid characterId);
+
+        /// <summary>
+        /// Invites a friend to an existing chat room.
+        /// </summary>
+        /// <param name="selectedCharacterName">Name of the selected character.</param>
+        /// <param name="friendName">Name of the friend.</param>
+        /// <param name="roomNumber">The room number.</param>
+        /// <returns>The success of the invitation.</returns>
+        bool InviteFriendToChatRoom(string selectedCharacterName, string friendName, ushort roomNumber);
     }
 }

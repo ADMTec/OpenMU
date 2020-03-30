@@ -1,113 +1,66 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <ProjectGuid>{E3C36FF6-7205-4F9C-9242-A6B3441FF7F7}</ProjectGuid>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
-    <OutputType>Library</OutputType>
-    <RootNamespace>MUnique.OpenMU.Network</RootNamespace>
-    <AssemblyName>MUnique.OpenMU.Network</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
-    <TargetFrameworkProfile>
-    </TargetFrameworkProfile>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <SignAssembly>False</SignAssembly>
-    <DelaySign>False</DelaySign>
-    <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
-    <AllowUnsafeBlocks>False</AllowUnsafeBlocks>
-    <NoStdLib>False</NoStdLib>
-    <WarningLevel>4</WarningLevel>
-    <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
-    <NoWin32Manifest>False</NoWin32Manifest>
-    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
-    <NuGetPackageImportStamp>
-    </NuGetPackageImportStamp>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <Authors>MUnique</Authors>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <RepositoryUrl>https://github.com/MUnique/OpenMU/tree/master/src/Network</RepositoryUrl>
+    <PackageProjectUrl>https://munique.net</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>MUnique OpenMU MUOnline Network TCP</PackageTags>
+    <PackageId>MUnique.OpenMU.Network</PackageId>
+    <Description>
+      MUnique.OpenMU.Network contains all what's required to connect from and to a MU Online game, connect or chat server. It implements the MU Online network protocol.
+      It also contains several the encryption algorithms and keys which were used until a few years ago up to Season 6 Episode 3.
+    </Description>
+    <PackageVersion>0.3.3</PackageVersion>
+    <Version>0.3.3</Version>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
-    <OutputPath>bin\Debug\</OutputPath>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>Full</DebugType>
-    <Optimize>False</Optimize>
-    <CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
-    <OutputPath>bin\Release\</OutputPath>
-    <DebugSymbols>False</DebugSymbols>
-    <DebugType>None</DebugType>
-    <Optimize>True</Optimize>
-    <CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
-    <DefineConstants>TRACE</DefineConstants>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Platform)' == 'AnyCPU' ">
-    <BaseAddress>4194304</BaseAddress>
-    <PlatformTarget>x86</PlatformTarget>
-    <RegisterForComInterop>False</RegisterForComInterop>
-    <GenerateSerializationAssemblies>Auto</GenerateSerializationAssemblies>
-    <FileAlignment>4096</FileAlignment>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\bin\Debug\</OutputPath>
-    <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>..\..\bin\Debug\MUnique.OpenMU.Network.xml</DocumentationFile>
-    <CodeAnalysisRuleSet>
-    </CodeAnalysisRuleSet>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <OutputPath>..\..\bin\Release\</OutputPath>
-    <DocumentationFile>..\..\bin\Release\MUnique.OpenMU.Network.XML</DocumentationFile>
-    <CodeAnalysisRuleSet>
-    </CodeAnalysisRuleSet>
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile>..\..\bin\Release\MUnique.OpenMU.Network.xml</DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="log4net, Version=2.0.8.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
-      <HintPath>..\packages\log4net.2.0.8\lib\net45-full\log4net.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Net.Http" />
+    <Compile Remove="Analyzer\**" />
+    <EmbeddedResource Remove="Analyzer\**" />
+    <None Remove="Analyzer\**" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="..\SharedAssemblyInfo.cs">
-      <Link>Properties\SharedAssemblyInfo.cs</Link>
-    </Compile>
-    <Compile Include="ArrayExtensions.cs" />
-    <Compile Include="ClientAcceptEventArgs.cs" />
-    <Compile Include="Connection.cs" />
-    <Compile Include="Counter.cs" />
-    <Compile Include="Decryptor.cs" />
-    <Compile Include="DefaultKeys.cs" />
-    <Compile Include="IDecryptor.cs" />
-    <Compile Include="InvalidBlockChecksumException.cs" />
-    <Compile Include="Listener.cs" />
-    <Compile Include="NumberConversionExtensions.cs" />
-    <Compile Include="PublicIpResolver.cs" />
-    <Compile Include="Xor3Decryptor.cs" />
-    <Compile Include="Xor3Encryptor.cs" />
-    <AdditionalFiles Include="..\stylecop.json">
-      <Link>stylecop.json</Link>
-    </AdditionalFiles>
-    <Compile Include="EncryptionBase.cs" />
-    <Compile Include="Encryptor.cs" />
-    <Compile Include="IConnection.cs" />
-    <Compile Include="IEncryptor.cs" />
-    <Compile Include="ListPacketQueue.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <None Include="MUnique.OpenMU.Network.nuspec">
-      <SubType>Designer</SubType>
-    </None>
-    <None Include="packages.config" />
-    <None Include="Readme.md" />
+    <Compile Remove="Packets\**" />
+    <EmbeddedResource Remove="Packets\**" />
+    <None Remove="Packets\**" />
   </ItemGroup>
+
   <ItemGroup>
-    <Analyzer Include="..\packages\StyleCop.Analyzers.1.0.0\analyzers\dotnet\cs\Newtonsoft.Json.dll" />
-    <Analyzer Include="..\packages\StyleCop.Analyzers.1.0.0\analyzers\dotnet\cs\StyleCop.Analyzers.CodeFixes.dll" />
-    <Analyzer Include="..\packages\StyleCop.Analyzers.1.0.0\analyzers\dotnet\cs\StyleCop.Analyzers.dll" />
+    <Compile Include="..\SharedAssemblyInfo.cs" Link="Properties\SharedAssemblyInfo.cs" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup Condition=" '$(TRAVIS)' == '' ">
-    <PostBuildEvent>nuget pack $(ProjectPath) -Symbols -Prop Configuration=$(ConfigurationName) -Prop Platform=$(Platform) -IncludeReferencedProjects</PostBuildEvent>
-  </PropertyGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="..\stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="log4net" Version="2.0.8" />
+    <PackageReference Include="Pipelines.Sockets.Unofficial" Version="2.1.1" />
+    <PackageReference Include="StyleCop.Analyzers" Version="1.1.118">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.IO.Pipelines" Version="4.7.0" />
+    <PackageReference Include="System.Net.Sockets" Version="4.3.0" />
+    <PackageReference Include="System.Text.Encoding" Version="4.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PlugIns\MUnique.OpenMU.PlugIns.csproj" />
+  </ItemGroup>
+
 </Project>

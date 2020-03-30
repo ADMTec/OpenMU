@@ -5,7 +5,7 @@
 namespace MUnique.OpenMU.DataModel.Configuration
 {
     using System.Collections.Generic;
-    using Items;
+    using MUnique.OpenMU.DataModel.Configuration.Items;
 
     /// <summary>
     /// Enumeration of special item types.
@@ -40,17 +40,21 @@ namespace MUnique.OpenMU.DataModel.Configuration
         /// <summary>
         /// The money special item type.
         /// </summary>
-        Money
+        Money,
     }
 
     /// <summary>
     /// Idea: append several "drop item groups" with its certain probability.
     /// In the drop generator sort all DropItemGroups by its chance.
-    /// Classes which can have DropItemGroups: Maps, Monsters(for example the kundun drops), Players(for quest items)
-    /// The game server configuration also got the basic drop groups (for example for random items and jewels).
+    /// Classes which can have DropItemGroups: Maps, Monsters(for example the kundun drops), Players(for quest items).
     /// </summary>
     public class DropItemGroup
     {
+        /// <summary>
+        /// Gets or sets the description.
+        /// </summary>
+        public string Description { get; set; }
+
         /// <summary>
         /// Gets or sets the chance of the item drop group to apply. From 0.0 to 1.0.
         /// </summary>

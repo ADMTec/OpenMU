@@ -1,0 +1,32 @@
+# Build and Push Docker Container
+
+trigger:
+  branches:
+    include:
+    - master
+  paths:
+    exclude:
+    - docs/*
+    - tests/*
+
+pr:
+- master
+- releases/*
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+- task: Docker@2
+  inputs:
+   containerRegistry: 'munique docker hub'
+   command: 'login'
+- task: Docker@2
+  inputs:
+    containerRegistry: 'munique docker hub'
+    command: 'buildAndPush'
+    Dockerfile: '**/Dockerfile'
+    repository: 'munique/openmu'
+    tags: |
+      $(Build.BuildId)
+      latest

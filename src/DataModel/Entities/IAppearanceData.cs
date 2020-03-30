@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.DataModel.Entities
 {
+    using System;
     using System.Collections.Generic;
     using MUnique.OpenMU.DataModel.Configuration;
 
@@ -13,9 +14,24 @@ namespace MUnique.OpenMU.DataModel.Entities
     public interface IAppearanceData
     {
         /// <summary>
+        /// Occurs when the appearance of the player changed.
+        /// </summary>
+        event EventHandler AppearanceChanged;
+
+        /// <summary>
         /// Gets the character class.
         /// </summary>
         CharacterClass CharacterClass { get; }
+
+        /// <summary>
+        /// Gets the current pose.
+        /// </summary>
+        CharacterPose Pose { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether a full ancient set is equipped.
+        /// </summary>
+        bool FullAncientSetEquipped { get; }
 
         /// <summary>
         /// Gets the equipped items.

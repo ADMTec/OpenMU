@@ -4,77 +4,61 @@
 
 namespace MUnique.OpenMU.AdminPanel
 {
-    using System;
     using System.Collections.Generic;
-    using Microsoft.Owin.Extensions;
-    using Microsoft.Owin.Host.HttpListener;
-    using Microsoft.Owin.Hosting;
+    using apache.log4net.Extensions.Logging;
+    using Microsoft.AspNetCore.Hosting;
+    using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Hosting;
+    using Microsoft.Extensions.Logging;
     using MUnique.OpenMU.Interfaces;
     using MUnique.OpenMU.Persistence;
-    using Nancy.Bootstrapper;
-    using Owin;
+    using SixLabors.ImageSharp;
+    using SixLabors.Memory;
 
     /// <summary>
-    /// The admin panel host class which provides the web server over OWIN.
+    /// The admin panel host class which provides a web server over ASP.NET Core Kestrel.
     /// </summary>
-    public sealed class AdminPanel : IDisposable
+    public sealed class AdminPanel
     {
         /// <summary>
-        /// The OWIN web application.
-        /// </summary>
-        private IDisposable webApp;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AdminPanel"/> class.
+        /// Initializes a new instance of the <see cref="AdminPanel" /> class.
         /// </summary>
         /// <param name="port">The port.</param>
         /// <param name="servers">All manageable servers, including game servers, connect servers etc.</param>
-        /// <param name="repositoryManager">The repository manager.</param>
-        public AdminPanel(ushort port, IList<IManageableServer> servers, IRepositoryManager repositoryManager)
+        /// <param name="persistenceContextProvider">The persistence context provider.</param>
+        /// <param name="changeListener">The change listener.</param>
+        /// <param name="loggingConfigurationPath">The logging configuration file path.</param>
+        public AdminPanel(ushort port, IList<IManageableServer> servers, IPersistenceContextProvider persistenceContextProvider, IServerConfigurationChangeListener changeListener, string loggingConfigurationPath)
         {
-            Startup.Bootstrapper = new MyBootstrapper(servers, repositoryManager);
-            var startOptions = new StartOptions($"http://+:{port}")
-            {
-                ServerFactory = typeof(OwinHttpListener).Namespace,
-                AppStartup = typeof(Startup).AssemblyQualifiedName
-            };
-            WorldObserverHub.Servers = servers;
+            Configuration.Default.MemoryAllocator = ArrayPoolMemoryAllocator.CreateWithMinimalPooling();
 
             // you might need to allow it first with netsh:
             // netsh http add urlacl http://+:1234/ user=[Username]
-            this.webApp = WebApp.Start<Startup>(startOptions);
-        }
+            var host = Host.CreateDefaultBuilder()
+                .ConfigureLogging(configureLogging =>
+                {
+                    configureLogging.ClearProviders();
+                    var settings = new Log4NetSettings { ConfigFile = loggingConfigurationPath, Watch = true };
 
-        /// <inheritdoc/>
-        public void Dispose()
-        {
-            if (this.webApp != null)
-            {
-                this.webApp.Dispose();
-                this.webApp = null;
-            }
-        }
+                    configureLogging.AddLog4Net(settings);
+                })
+                .ConfigureServices(serviceCollection =>
+                {
+                    serviceCollection.AddSingleton(servers);
+                    serviceCollection.AddSingleton(persistenceContextProvider);
+                    serviceCollection.AddSingleton(changeListener);
+                })
+                .ConfigureWebHostDefaults(webBuilder =>
+                {
+                    webBuilder.UseStartup<Startup>();
+                    webBuilder.UseStaticWebAssets();
 
-        /// <summary>
-        /// The startup class for the OWIN web app.
-        /// </summary>
-        public class Startup
-        {
-            /// <summary>
-            /// Gets or sets the nancy bootstrapper.
-            /// </summary>
-            public static INancyBootstrapper Bootstrapper { get; set; }
-
-            /// <summary>
-            /// Configurations the specified web application.
-            /// </summary>
-            /// <param name="app">The application.</param>
-            public void Configuration(IAppBuilder app)
-            {
-                app.MapSignalR();
-                app.UseNancy(config => config.Bootstrapper = Bootstrapper);
-                app.UseStageMarker(PipelineStage.MapHandler);
-            }
+                    // For testing purposes, we use http. Later we need to switch to https.
+                    // The self-signed certificate would otherwise cause a lot of warnings in the browser.
+                    webBuilder.UseUrls($"http://*:{port}");
+                })
+                .Build();
+            host.Start();
         }
     }
 }

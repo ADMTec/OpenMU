@@ -5,12 +5,14 @@
 namespace MUnique.OpenMU.GameLogic
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Threading;
-
     using log4net;
     using MUnique.OpenMU.DataModel.Configuration;
+    using MUnique.OpenMU.GameLogic.PlugIns;
     using MUnique.OpenMU.Persistence;
+    using MUnique.OpenMU.PlugIns;
 
     /// <summary>
     /// The game context which holds all data of the game together.
@@ -19,20 +21,26 @@ namespace MUnique.OpenMU.GameLogic
     {
         private static readonly ILog Log = LogManager.GetLogger(typeof(GameContext));
 
+        private readonly IDictionary<ushort, GameMap> mapList;
+
         private readonly Timer recoverTimer;
 
+        private readonly IMapInitializer mapInitializer;
+
         /// <summary>
-        /// Initializes a new instance of the <see cref="GameContext"/> class.
+        /// Initializes a new instance of the <see cref="GameContext" /> class.
         /// </summary>
         /// <param name="configuration">The configuration.</param>
-        /// <param name="repositoryManager">The repository manager.</param>
-        public GameContext(GameConfiguration configuration, IRepositoryManager repositoryManager)
+        /// <param name="persistenceContextProvider">The persistence context provider.</param>
+        /// <param name="mapInitializer">The map initializer.</param>
+        public GameContext(GameConfiguration configuration, IPersistenceContextProvider persistenceContextProvider, IMapInitializer mapInitializer)
         {
             try
             {
                 this.Configuration = configuration;
-                this.RepositoryManager = repositoryManager;
-                this.MapList = new Dictionary<ushort, GameMap>();
+                this.PersistenceContextProvider = persistenceContextProvider;
+                this.PlugInManager = new PlugInManager(configuration.PlugInConfigurations);
+                this.mapList = new Dictionary<ushort, GameMap>();
                 this.recoverTimer = new Timer(this.RecoverTimerElapsed, null, this.Configuration.RecoveryInterval, this.Configuration.RecoveryInterval);
             }
             catch (Exception ex)
@@ -40,19 +48,40 @@ namespace MUnique.OpenMU.GameLogic
                 Log.Error(ex);
                 throw;
             }
+
+            this.mapInitializer = mapInitializer;
         }
 
-        /// <inheritdoc/>
-        public IDictionary<ushort, GameMap> MapList { get; }
+        /// <summary>
+        /// Occurs when a game map got created.
+        /// </summary>
+        public event EventHandler<GameMapEventArgs> GameMapCreated;
+
+        /// <summary>
+        /// Occurs when a game map got removed.
+        /// </summary>
+        /// <remarks>
+        /// Currently, maps are never removed.
+        /// It may make sense to remove unused maps after a certain period.
+        /// </remarks>
+        public event EventHandler<GameMapEventArgs> GameMapRemoved;
+
+        /// <summary>
+        /// Gets the initialized maps which are hosted on this context.
+        /// </summary>
+        public IEnumerable<GameMap> Maps => this.mapList.Values;
 
         /// <inheritdoc/>
         public GameConfiguration Configuration { get; }
 
         /// <inheritdoc/>
+        public PlugInManager PlugInManager { get; }
+
+        /// <inheritdoc/>
         public IItemPowerUpFactory ItemPowerUpFactory { get; } = new ItemPowerUpFactory();
 
         /// <inheritdoc/>
-        public IRepositoryManager RepositoryManager { get; }
+        public IPersistenceContextProvider PersistenceContextProvider { get; }
 
         /// <summary>
         /// Gets the player list.
@@ -62,13 +91,47 @@ namespace MUnique.OpenMU.GameLogic
         /// <summary>
         /// Gets the players by character name dictionary.
         /// </summary>
-        public IDictionary<string, Player> PlayersByCharacterName { get; } = new Dictionary<string, Player>();
+        public IDictionary<string, Player> PlayersByCharacterName { get; } = new ConcurrentDictionary<string, Player>();
+
+        /// <inheritdoc/>
+        public GameMap GetMap(ushort mapId)
+        {
+            if (this.mapList.TryGetValue(mapId, out var map))
+            {
+                return map;
+            }
+
+            GameMap createdMap;
+            lock (this.mapInitializer)
+            {
+                if (this.mapList.TryGetValue(mapId, out map))
+                {
+                    return map;
+                }
+
+                createdMap = this.mapInitializer.CreateGameMap(mapId);
+                if (createdMap == null)
+                {
+                    return null;
+                }
+
+                this.mapList.Add(mapId, createdMap);
+                createdMap.ObjectAdded += (sender, args) => this.PlugInManager.GetPlugInPoint<IObjectAddedToMapPlugIn>()?.ObjectAddedToMap(args.Map, args.Object);
+                createdMap.ObjectRemoved += (sender, args) => this.PlugInManager.GetPlugInPoint<IObjectRemovedFromMapPlugIn>()?.ObjectRemovedFromMap(args.Map, args.Object);
+            }
+
+            // ReSharper disable once InconsistentlySynchronizedField it's desired behavior to initialize the map outside the lock to keep locked timespan short.
+            this.mapInitializer.InitializeState(createdMap);
+            this.GameMapCreated?.Invoke(this, new GameMapEventArgs(createdMap, null));
+
+            return createdMap;
+        }
 
         /// <summary>
         /// Adds the player to the game.
         /// </summary>
         /// <param name="player">The player.</param>
-        public void AddPlayer(Player player)
+        public virtual void AddPlayer(Player player)
         {
             player.PlayerLeftWorld += this.PlayerLeftWorld;
             player.PlayerEnteredWorld += this.PlayerEnteredWorld;
@@ -80,7 +143,7 @@ namespace MUnique.OpenMU.GameLogic
         /// Removes the player from the game.
         /// </summary>
         /// <param name="player">The player.</param>
-        public void RemovePlayer(Player player)
+        public virtual void RemovePlayer(Player player)
         {
             if (player == null)
             {
@@ -143,7 +206,7 @@ namespace MUnique.OpenMU.GameLogic
                 }
 
                 var player = this.PlayerList[i];
-                if (player.SelectedCharacter != null)
+                if (player.SelectedCharacter != null && player.PlayerState.CurrentState == PlayerState.EnteredWorld)
                 {
                     player.Regenerate();
                 }

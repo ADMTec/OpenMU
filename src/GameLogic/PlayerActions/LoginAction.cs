@@ -6,8 +6,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions
 {
     using System;
     using MUnique.OpenMU.DataModel.Entities;
-    using MUnique.OpenMU.GameLogic.Views;
-    using MUnique.OpenMU.Persistence;
+    using MUnique.OpenMU.GameLogic.Views.Login;
 
     /// <summary>
     /// Action to log in a player to the game.
@@ -15,17 +14,6 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions
     public class LoginAction
     {
         private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(LoginAction));
-
-        private readonly IGameServerContext gameServerContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LoginAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public LoginAction(IGameServerContext gameContext)
-        {
-            this.gameServerContext = gameContext;
-        }
 
         /// <summary>
         /// Logins the specified player.
@@ -38,11 +26,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions
             Account account = null;
             try
             {
-                using (this.gameServerContext.RepositoryManager.UseContext(player.PersistenceContext))
-                {
-                    var repository = this.gameServerContext.RepositoryManager.GetRepository<Account, IAccountRepository<Account>>();
-                    account = repository.GetAccountByLoginName(username, password);
-                }
+                account = player.PersistenceContext.GetAccountByLoginName(username, password);
             }
             catch (Exception ex)
             {
@@ -53,27 +37,34 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions
             {
                 if (account.State == AccountState.Banned)
                 {
-                    player.PlayerView.ShowLoginResult(LoginResult.AccountBlocked);
+                    player.ViewPlugIns.GetPlugIn<IShowLoginResultPlugIn>()?.ShowLoginResult(LoginResult.AccountBlocked);
                 }
                 else if (account.State == AccountState.TemporarilyBanned)
                 {
-                    player.PlayerView.ShowLoginResult(LoginResult.TemporaryBlocked);
-                }
-                else if (player.PlayerState.TryAdvanceTo(PlayerState.Authenticated) && this.gameServerContext.LoginServer.TryLogin(username, this.gameServerContext.Id))
-                {
-                    player.Account = account;
-                    Log.DebugFormat("Login successful, username: [{0}]", username);
-                    player.PlayerView.ShowLoginResult(LoginResult.OK);
+                    player.ViewPlugIns.GetPlugIn<IShowLoginResultPlugIn>()?.ShowLoginResult(LoginResult.TemporaryBlocked);
                 }
                 else
                 {
-                    player.PlayerView.ShowLoginResult(LoginResult.AccountAlreadyConnected);
+                    using (var context = player.PlayerState.TryBeginAdvanceTo(PlayerState.Authenticated))
+                    {
+                        if (context.Allowed && player.GameContext is IGameServerContext gameServerContext && gameServerContext.LoginServer.TryLogin(username, gameServerContext.Id))
+                        {
+                            player.Account = account;
+                            Log.DebugFormat("Login successful, username: [{0}]", username);
+                            player.ViewPlugIns.GetPlugIn<IShowLoginResultPlugIn>()?.ShowLoginResult(LoginResult.OK);
+                        }
+                        else
+                        {
+                            context.Allowed = false;
+                            player.ViewPlugIns.GetPlugIn<IShowLoginResultPlugIn>()?.ShowLoginResult(LoginResult.AccountAlreadyConnected);
+                        }
+                    }
                 }
             }
             else
             {
                 Log.InfoFormat($"Account not found or invalid password, username: [{username}]");
-                player.PlayerView.ShowLoginResult(LoginResult.InvalidPassword);
+                player.ViewPlugIns.GetPlugIn<IShowLoginResultPlugIn>()?.ShowLoginResult(LoginResult.InvalidPassword);
             }
         }
     }

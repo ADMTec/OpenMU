@@ -5,19 +5,13 @@
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
 {
     using System.Linq;
+    using MUnique.OpenMU.GameLogic.Views.Character;
 
     /// <summary>
     /// Action to focus a character in the character selection screen.
     /// </summary>
     public class FocusCharacterAction
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="FocusCharacterAction"/> class.
-        /// </summary>
-        public FocusCharacterAction()
-        {
-        }
-
         /// <summary>
         /// Focuses the character.
         /// </summary>
@@ -33,7 +27,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
             var character = player.Account.Characters.FirstOrDefault(c => c.Name == characterName);
             if (character != null)
             {
-                player.PlayerView.CharacterFocused(character);
+                player.ViewPlugIns.GetPlugIn<ICharacterFocusedPlugIn>()?.CharacterFocused(character);
             }
         }
     }

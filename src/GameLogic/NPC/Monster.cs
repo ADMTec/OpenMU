@@ -12,51 +12,75 @@ namespace MUnique.OpenMU.GameLogic.NPC
     using MUnique.OpenMU.DataModel.Configuration;
     using MUnique.OpenMU.DataModel.Entities;
     using MUnique.OpenMU.GameLogic.Attributes;
-    using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.PlugIns;
+    using MUnique.OpenMU.GameLogic.Views.World;
     using MUnique.OpenMU.Pathfinding;
+    using MUnique.OpenMU.PlugIns;
 
     /// <summary>
     /// The implementation of a monster, which can attack players.
     /// </summary>
-    public sealed class Monster : NonPlayerCharacter, IAttackable, ISupportWalk
+    public sealed class Monster : NonPlayerCharacter, IAttackable, ISupportWalk, IMovable
     {
         private const byte MonsterAttackAnimation = 0x78;
         private readonly IDropGenerator dropGenerator;
         private readonly object moveLock = new object();
         private readonly IMonsterIntelligence intelligence;
+        private readonly PlugInManager plugInManager;
         private readonly Walker walker;
 
         private Timer respawnTimer;
         private int health;
         private bool isCalculatingPath;
+        private PathFinder pathFinder;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Monster"/> class.
+        /// Initializes a new instance of the <see cref="Monster" /> class.
         /// </summary>
         /// <param name="spawnInfo">The spawn information.</param>
         /// <param name="stats">The stats.</param>
-        /// <param name="id">The identifier.</param>
         /// <param name="map">The map on which this instance will spawn.</param>
         /// <param name="dropGenerator">The drop generator.</param>
         /// <param name="monsterIntelligence">The monster intelligence.</param>
-        public Monster(MonsterSpawnArea spawnInfo, MonsterDefinition stats, ushort id, GameMap map, IDropGenerator dropGenerator, IMonsterIntelligence monsterIntelligence)
-            : base(spawnInfo, stats, id, map)
+        /// <param name="plugInManager">The plug in manager.</param>
+        public Monster(MonsterSpawnArea spawnInfo, MonsterDefinition stats, GameMap map, IDropGenerator dropGenerator, IMonsterIntelligence monsterIntelligence, PlugInManager plugInManager)
+            : base(spawnInfo, stats, map)
         {
             this.dropGenerator = dropGenerator;
             this.Attributes = new MonsterAttributeHolder(this);
-            this.walker = new Walker(this);
+            this.MagicEffectList = new MagicEffectsList(this);
+            this.walker = new Walker(this, () => this.StepDelay);
             this.intelligence = monsterIntelligence;
+            this.plugInManager = plugInManager;
             this.intelligence.Monster = this;
             this.intelligence.Start();
+            this.Initialize();
         }
 
+        /// <inheritdoc/>
+        public MagicEffectsList MagicEffectList { get; }
+
         /// <summary>
-        /// Gets or sets a value indicating whether this <see cref="Monster"/> is walking.
+        /// Gets a value indicating whether this <see cref="Monster"/> is walking.
         /// </summary>
         /// <value>
         ///   <c>true</c> if walking; otherwise, <c>false</c>.
         /// </value>
-        public bool IsWalking { get; set; }
+        public bool IsWalking => this.WalkTarget != default;
+
+        /// <inheritdoc/>
+        public override Point Position
+        {
+            get => base.Position;
+            set
+            {
+                if (base.Position != value)
+                {
+                    base.Position = value;
+                    this.plugInManager?.GetPlugInPoint<IAttackableMovedPlugIn>()?.AttackableMoved(this);
+                }
+            }
+        }
 
         /// <summary>
         /// Gets or sets the current health.
@@ -71,21 +95,22 @@ namespace MUnique.OpenMU.GameLogic.NPC
         public bool Alive { get; set; }
 
         /// <inheritdoc/>
+        public uint LastReceivedDamage { get; private set; }
+
+        /// <inheritdoc/>
         public IAttributeSystem Attributes { get; }
+
+        /// <inheritdoc/>
+        public Point WalkTarget => this.walker.CurrentTarget;
 
         /// <inheritdoc/>
         public TimeSpan StepDelay => this.Definition.MoveDelay;
 
-        /// <inheritdoc />
-        public Stack<WalkingStep> NextDirections { get; } = new Stack<WalkingStep>(5);
-
         /// <inheritdoc/>
-        public Point WalkTarget { get; set; }
-
-        /// <inheritdoc/>
-        public override void Respawn()
+        public override void Initialize()
         {
-            base.Respawn();
+            base.Initialize();
+            this.respawnTimer?.Dispose();
             this.Health = (int)this.Attributes[Stats.MaximumHealth];
             this.Alive = true;
         }
@@ -97,7 +122,7 @@ namespace MUnique.OpenMU.GameLogic.NPC
         public void Attack(IAttackable player)
         {
             player.AttackBy(this, null);
-            this.ForEachObservingPlayer(p => p.PlayerView.WorldView.ShowAnimation(this, MonsterAttackAnimation, player, this.GetDirectionTo(player)), true);
+            this.ForEachWorldObserver(p => p.ViewPlugIns.GetPlugIn<IShowAnimationPlugIn>()?.ShowAnimation(this, MonsterAttackAnimation, player, this.GetDirectionTo(player)), true);
         }
 
         /// <summary>
@@ -115,8 +140,16 @@ namespace MUnique.OpenMU.GameLogic.NPC
             this.isCalculatingPath = true;
             try
             {
-                var pathFinder = new PathFinder(new GridNetwork(this.CurrentMap.Terrain.AIgrid, true)); // TODO: Reuse PathFinder?
-                calculatedPath = pathFinder.FindPath(new Point(this.X, this.Y), new Point(target.X, target.Y));
+                if (this.pathFinder == null)
+                {
+                    this.pathFinder = new PathFinder(new GridNetwork(this.CurrentMap.Terrain.AIgrid, true));
+                }
+                else
+                {
+                    this.pathFinder.ResetPathFinder();
+                }
+
+                calculatedPath = this.pathFinder.FindPath(this.Position, target.Position);
                 if (calculatedPath == null)
                 {
                     return;
@@ -127,38 +160,60 @@ namespace MUnique.OpenMU.GameLogic.NPC
                 this.isCalculatingPath = false;
             }
 
-            var targetNode = calculatedPath.Last();
-            this.WalkTarget = new Point(targetNode.X, targetNode.Y);
-            this.NextDirections.Clear();
-            foreach (var step in calculatedPath.Select(GetStep).Reverse())
+            var targetNode = calculatedPath.Last(); // that's one step before the target coordinates actually are reached.
+            Span<WalkingStep> steps = stackalloc WalkingStep[calculatedPath.Count];
+            var i = steps.Length;
+            foreach (var step in calculatedPath.Select(GetStep))
             {
-                this.NextDirections.Push(step);
+                i--;
+                steps[i] = step;
             }
 
-            this.Move(targetNode.X, targetNode.Y, MoveType.Walk);
-            this.walker.Start();
+            this.WalkTo(new Point(targetNode.X, targetNode.Y), steps);
         }
 
         /// <summary>
-        /// Attacks this object by the attacker with the specified skill.
+        /// Walks to the specified target coordinates using the specified steps.
         /// </summary>
-        /// <param name="attacker">The attacker.</param>
-        /// <param name="skill">The skill.</param>
+        /// <param name="target">The target.</param>
+        /// <param name="steps">The steps.</param>
+        public void WalkTo(Point target, Span<WalkingStep> steps)
+        {
+            this.walker.WalkTo(target, steps);
+            this.Move(target, MoveType.Walk);
+        }
+
+        /// <inheritdoc/>
+        public int GetDirections(Span<Direction> directions)
+        {
+            return this.walker.GetDirections(directions);
+        }
+
+        /// <inheritdoc />
+        public int GetSteps(Span<WalkingStep> steps) => this.walker.GetSteps(steps);
+
+        /// <inheritdoc />
         public void AttackBy(IAttackable attacker, SkillEntry skill)
         {
             var hitInfo = attacker.CalculateDamage(this, skill);
-            bool killed = this.Hit(hitInfo.DamageHP + hitInfo.DamageSD, attacker);
-            if (attacker is Player player)
+            this.Hit(hitInfo, attacker);
+            if (hitInfo.HealthDamage > 0)
             {
-                player.PlayerView.ShowHit(this, hitInfo);
-                if (killed)
-                {
-                    var party = player.Party;
-                    int exp = party?.DistributeExperienceAfterKill(this) ?? player.AddExpAfterKill(this);
-                    this.DropItem(exp, player);
-                    this.OnDeath(player);
-                }
+                attacker.ApplyAmmunitionConsumption(hitInfo);
+                (attacker as Player)?.AfterHitTarget();
             }
+        }
+
+        /// <inheritdoc />
+        public void ReflectDamage(IAttackable reflector, uint damage)
+        {
+            this.Hit(new HitInfo(damage, 0, DamageAttributes.Reflected), reflector);
+        }
+
+        /// <inheritdoc/>
+        public void Move(Point target)
+        {
+            this.Move(target, MoveType.Instant);
         }
 
         /// <summary>
@@ -166,36 +221,43 @@ namespace MUnique.OpenMU.GameLogic.NPC
         /// </summary>
         internal void RandomMove()
         {
-            byte randx = (byte)GameLogic.Rand.NextInt(Math.Max(0, this.X - 1), Math.Min(0xFF, this.X + 2));
-            byte randy = (byte)GameLogic.Rand.NextInt(Math.Max(0, this.Y - 1), Math.Min(0xFF, this.Y + 2));
+            byte randx = (byte)GameLogic.Rand.NextInt(Math.Max(0, this.Position.X - 1), Math.Min(0xFF, this.Position.X + 2));
+            byte randy = (byte)GameLogic.Rand.NextInt(Math.Max(0, this.Position.Y - 1), Math.Min(0xFF, this.Position.Y + 2));
             if (this.CurrentMap.Terrain.AIgrid[randx, randy] == 1)
             {
-                this.Move(randx, randy, MoveType.Walk);
+                var target = new Point(randx, randy);
+                var current = this.Position;
+                Span<WalkingStep> steps = stackalloc WalkingStep[1];
+                steps[0] = new WalkingStep
+                {
+                    From = current,
+                    To = target,
+                    Direction = current.GetDirectionTo(target),
+                };
+                this.WalkTo(target, steps);
             }
         }
 
         /// <inheritdoc/>
-        protected override void Dispose(bool dispose)
+        protected override void Dispose(bool managed)
         {
-            base.Dispose(dispose);
-            this.respawnTimer.Dispose();
-            this.walker.Dispose();
-            (this.intelligence as IDisposable)?.Dispose();
+            base.Dispose(managed);
+            if (managed)
+            {
+                this.respawnTimer?.Dispose();
+                this.walker.Dispose();
+                (this.intelligence as IDisposable)?.Dispose();
+            }
         }
 
-        /// <summary>
-        /// Moves the instance to the specified position.
-        /// </summary>
-        /// <param name="newx">The new x coordinate.</param>
-        /// <param name="newy">The new y coordinate.</param>
-        /// <param name="type">The type of moving.</param>
-        protected override void Move(byte newx, byte newy, MoveType type)
+        /// <inheritdoc />
+        protected override void Move(Point target, MoveType type)
         {
-            this.CurrentMap.Move(this, newx, newy, this.moveLock, type);
+            this.CurrentMap.Move(this, target, this.moveLock, type);
             if (type == MoveType.Instant)
             {
-                this.X = newx;
-                this.Y = newy;
+                this.walker.Stop();
+                this.Position = target;
             }
         }
 
@@ -220,18 +282,18 @@ namespace MUnique.OpenMU.GameLogic.NPC
             var firstItem = true;
             foreach (var item in generatedItems)
             {
-                Point dropCoord;
+                Point dropCoordinates;
                 if (firstItem)
                 {
-                    dropCoord = new Point(this.X, this.Y);
+                    dropCoordinates = this.Position;
                     firstItem = false;
                 }
                 else
                 {
-                    dropCoord = this.CurrentMap.Terrain.GetRandomDropCoordinate(this.X, this.Y, 4);
+                    dropCoordinates = this.CurrentMap.Terrain.GetRandomDropCoordinate(this.Position, 4);
                 }
 
-                var droppedItem = new DroppedItem(item, dropCoord.X, dropCoord.Y, this.CurrentMap);
+                var droppedItem = new DroppedItem(item, dropCoordinates, this.CurrentMap, null);
                 this.CurrentMap.Add(droppedItem);
             }
         }
@@ -249,7 +311,7 @@ namespace MUnique.OpenMU.GameLogic.NPC
             {
                 foreach (IWorldObserver o in this.Observers)
                 {
-                    o.WorldView.ObjectGotKilled(this, attacker);
+                    o.ViewPlugIns.GetPlugIn<IObjectGotKilledPlugIn>()?.ObjectGotKilled(this, attacker);
                 }
 
                 this.Observers.Clear();
@@ -259,16 +321,46 @@ namespace MUnique.OpenMU.GameLogic.NPC
                 this.ObserverLock.ExitWriteLock();
             }
 
-            this.CurrentMap.Remove(this);
+            if (attacker is Player player)
+            {
+                int exp = player.Party?.DistributeExperienceAfterKill(this, player) ?? player.AddExpAfterKill(this);
+                this.DropItem(exp, player);
+                player.AfterKilledMonster();
+                player.GameContext.PlugInManager.GetPlugInPoint<IAttackableGotKilledPlugIn>()?.AttackableGotKilled(this, attacker);
+            }
         }
 
-        private bool Hit(uint damage, IAttackable attacker)
+        /// <summary>
+        /// Respawns this instance on the map.
+        /// </summary>
+        private void Respawn()
+        {
+            this.Initialize();
+            this.CurrentMap.Respawn(this);
+        }
+
+        private void Hit(HitInfo hitInfo, IAttackable attacker)
         {
             if (!this.Alive)
             {
-                return false;
+                return;
             }
 
+            var killed = this.TryHit(hitInfo.HealthDamage + hitInfo.ShieldDamage, attacker);
+            if (attacker is Player player)
+            {
+                player.ViewPlugIns.GetPlugIn<IShowHitPlugIn>()?.ShowHit(this, hitInfo);
+                player.GameContext.PlugInManager.GetPlugInPoint<IAttackableGotHitPlugIn>()?.AttackableGotHit(this, attacker, hitInfo);
+            }
+
+            if (killed)
+            {
+                this.OnDeath(attacker);
+            }
+        }
+
+        private bool TryHit(uint damage, IAttackable attacker)
+        {
             if (damage > 0)
             {
                 this.intelligence.RegisterHit(attacker);
@@ -284,6 +376,7 @@ namespace MUnique.OpenMU.GameLogic.NPC
             try
             {
                 Interlocked.Add(ref this.health, -(int)damage);
+                this.LastReceivedDamage = damage;
                 return false;
             }
             catch

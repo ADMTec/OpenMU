@@ -46,8 +46,19 @@ namespace MUnique.OpenMU.AttributeSystem
         /// <param name="targetAttribute">The target attribute.</param>
         /// <param name="inputOperand">The multiplier.</param>
         /// <param name="inputAttribute">The input attribute.</param>
+        public AttributeRelationship(AttributeDefinition targetAttribute, float inputOperand, AttributeDefinition inputAttribute)
+            : this(targetAttribute, inputOperand, inputAttribute, InputOperator.Multiply)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AttributeRelationship" /> class.
+        /// </summary>
+        /// <param name="targetAttribute">The target attribute.</param>
+        /// <param name="inputOperand">The multiplier.</param>
+        /// <param name="inputAttribute">The input attribute.</param>
         /// <param name="inputOperator">The input operator.</param>
-        public AttributeRelationship(AttributeDefinition targetAttribute, float inputOperand, AttributeDefinition inputAttribute, InputOperator inputOperator = InputOperator.Multiply)
+        public AttributeRelationship(AttributeDefinition targetAttribute, float inputOperand, AttributeDefinition inputAttribute, InputOperator inputOperator)
         {
             this.InputOperand = inputOperand;
             this.InputOperator = inputOperator;
@@ -82,5 +93,16 @@ namespace MUnique.OpenMU.AttributeSystem
         /// Gets or sets the operand which is applied to the input attribute before adding to the target attribute.
         /// </summary>
         public float InputOperand { get; set; }
+
+        /// <inheritdoc/>
+        public override string ToString()
+        {
+            if (this.TargetAttribute is null)
+            {
+                return $"{this.InputAttribute} {this.InputOperator.AsString()} {this.InputOperand}";
+            }
+
+            return $"{this.TargetAttribute} += {this.InputAttribute} {this.InputOperator.AsString()} {this.InputOperand}";
+        }
     }
 }

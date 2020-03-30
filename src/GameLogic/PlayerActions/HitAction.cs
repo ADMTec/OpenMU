@@ -4,6 +4,9 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions
 {
+    using MUnique.OpenMU.DataModel.Configuration;
+    using MUnique.OpenMU.GameLogic.Views.World;
+
     /// <summary>
     /// Action to hit targets without a skill with pure melee damage.
     /// </summary>
@@ -16,7 +19,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions
         /// <param name="target">The target.</param>
         /// <param name="attackAnimation">The attack animation.</param>
         /// <param name="lookingDirection">The looking direction.</param>
-        public void Hit(Player player, IAttackable target, byte attackAnimation, byte lookingDirection)
+        public void Hit(Player player, IAttackable target, byte attackAnimation, Direction lookingDirection)
         {
             if (target is IObservable targetAsObservable)
             {
@@ -35,11 +38,12 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions
                 }
             }
 
+            player.Rotation = lookingDirection;
             target.AttackBy(player, null);
             player.ObserverLock.EnterReadLock();
             try
             {
-                player.Observers.ForEach(observer => observer.WorldView.ShowAnimation(player, attackAnimation, target, lookingDirection));
+                player.Observers.ForEach(observer => observer.ViewPlugIns.GetPlugIn<IShowAnimationPlugIn>()?.ShowAnimation(player, attackAnimation, target, lookingDirection));
             }
             finally
             {

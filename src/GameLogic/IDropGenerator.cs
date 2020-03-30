@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.GameLogic
 {
+    using System;
     using System.Collections.Generic;
     using System.Linq;
 
@@ -35,17 +36,17 @@ namespace MUnique.OpenMU.GameLogic
     public class DefaultDropGenerator : IDropGenerator
     {
         /// <summary>
-        /// The amoun of money which is dropped at least, and added to the gained experience.
+        /// The amount of money which is dropped at least, and added to the gained experience.
         /// </summary>
-        public const int BaseMoneyDrop = 7;
-
-        private readonly IEnumerable<DropItemGroup> baseGroups;
+        public static readonly int BaseMoneyDrop = 7;
 
         private readonly IRandomizer randomizer;
 
         private readonly IList<ItemDefinition> ancientItems;
 
         private readonly IList<ItemDefinition> droppableItems;
+
+        private readonly IList<ItemDefinition>[] droppableItemsPerMonsterLevel = new IList<ItemDefinition>[byte.MaxValue + 1];
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DefaultDropGenerator" /> class.
@@ -54,7 +55,6 @@ namespace MUnique.OpenMU.GameLogic
         /// <param name="randomizer">The randomizer.</param>
         public DefaultDropGenerator(GameConfiguration config, IRandomizer randomizer)
         {
-            this.baseGroups = config.BaseDropItemGroups;
             this.randomizer = randomizer;
             this.droppableItems = config.Items.Where(i => i.DropsFromMonsters).ToList();
             this.ancientItems = this.droppableItems.Where(i => i.PossibleItemSetGroups.Any(o => o.Items.Any(n => n.BonusOption.OptionType == ItemOptionTypes.AncientBonus))).ToList();
@@ -112,8 +112,8 @@ namespace MUnique.OpenMU.GameLogic
         /// <returns>A random item.</returns>
         protected Item GetRandomItem(int monsterLvl, bool socketItems)
         {
-            var possible = this.GetPossibleList(monsterLvl).ToList();
-            if (!possible.Any())
+            var possible = this.GetPossibleList(monsterLvl);
+            if (possible == null || !possible.Any())
             {
                 return null;
             }
@@ -121,7 +121,8 @@ namespace MUnique.OpenMU.GameLogic
             var itemDef = possible.ElementAt(this.randomizer.NextInt(0, possible.Count));
             var item = new TemporaryItem();
             item.Definition = itemDef;
-            item.Level = (byte)((monsterLvl - itemDef.DropLevel) / 3);
+            item.Level = Math.Min((byte)((monsterLvl - itemDef.DropLevel) / 3), item.Definition.MaximumItemLevel);
+
             this.ApplyRandomOptions(item);
             return item;
         }
@@ -139,7 +140,8 @@ namespace MUnique.OpenMU.GameLogic
                 {
                     if (this.randomizer.NextRandomBool(option.AddChance))
                     {
-                        var newOption = option.PossibleOptions.SelectRandom(this.randomizer);
+                        var remainingOptions = option.PossibleOptions.Where(possibleOption => item.ItemOptions.All(link => link.ItemOption != possibleOption));
+                        var newOption = remainingOptions.SelectRandom(this.randomizer);
                         var itemOptionLink = new ItemOptionLink();
                         itemOptionLink.ItemOption = newOption;
                         itemOptionLink.Level = 1;
@@ -161,8 +163,13 @@ namespace MUnique.OpenMU.GameLogic
         /// <returns>A random excellent item.</returns>
         protected Item GetRandomExcellentItem(int monsterLvl)
         {
-            var possible = this.GetPossibleList(monsterLvl - 25).ToList();
-            if (!possible.Any())
+            if (monsterLvl < 25)
+            {
+                return null;
+            }
+
+            var possible = this.GetPossibleList(monsterLvl - 25);
+            if (possible == null || !possible.Any())
             {
                 return null;
             }
@@ -226,7 +233,7 @@ namespace MUnique.OpenMU.GameLogic
 
                 if (this.randomizer.NextRandomBool(excellentOptions.AddChance))
                 {
-                    ItemOption option = excellentOptions.PossibleOptions.SelectRandom(this.randomizer);
+                    var option = excellentOptions.PossibleOptions.SelectRandom(this.randomizer);
                     while (item.ItemOptions.Any(o => o.ItemOption == option))
                     {
                         option = excellentOptions.PossibleOptions.SelectRandom(this.randomizer);
@@ -244,7 +251,7 @@ namespace MUnique.OpenMU.GameLogic
             IEnumerable<DropItemGroup> characterGroup,
             IEnumerable<DropItemGroup> mapGroup)
         {
-            IEnumerable<DropItemGroup> dropGroups = this.baseGroups ?? Enumerable.Empty<DropItemGroup>();
+            IEnumerable<DropItemGroup> dropGroups = Enumerable.Empty<DropItemGroup>();
             if (monsterGroup != null)
             {
                 dropGroups = dropGroups.Concat(monsterGroup);
@@ -285,6 +292,9 @@ namespace MUnique.OpenMU.GameLogic
                         return this.GetRandomItem((int)monster[Stats.Level], false);
                     case SpecialItemType.SocketItem:
                         return this.GetRandomItem((int)monster[Stats.Level], true);
+                    default:
+                        // none
+                        return null;
                 }
             }
 
@@ -309,13 +319,17 @@ namespace MUnique.OpenMU.GameLogic
             return null;
         }
 
-        private IEnumerable<ItemDefinition> GetPossibleList(int monsterLevel)
+        private IList<ItemDefinition> GetPossibleList(int monsterLevel)
         {
-            ////TODO: Optimize this by using a sorted list and a binary search to find the starting point. Maybe even build up a cache?
-            return from it in this.droppableItems
+            if (monsterLevel < byte.MinValue || monsterLevel > byte.MaxValue)
+            {
+                return null;
+            }
+
+            return this.droppableItemsPerMonsterLevel[monsterLevel] ?? (this.droppableItemsPerMonsterLevel[monsterLevel] = (from it in this.droppableItems
                     where (it.DropLevel <= monsterLevel)
                     && (it.DropLevel > monsterLevel - 12)
-                    select it;
+                    select it).ToList());
         }
     }
 }

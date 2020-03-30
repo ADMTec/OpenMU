@@ -4,26 +4,25 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.PlayerStore
 {
+    using MUnique.OpenMU.GameLogic.Views.PlayerShop;
+
     /// <summary>
     /// Action to close the own player store.
     /// </summary>
     public class CloseStoreAction
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="CloseStoreAction"/> class.
-        /// </summary>
-        public CloseStoreAction()
-        {
-        }
-
-        /// <summary>
         /// Closes the store of the player.
         /// </summary>
         /// <param name="player">The player.</param>
         public void CloseStore(Player player)
         {
-            player.ShopStorage.StoreOpen = false;
-            player.ForEachObservingPlayer(p => p.PlayerView.PlayerShopClosed(player), true);
+            lock (player.ShopStorage.StoreLock)
+            {
+                player.ShopStorage.StoreOpen = false;
+            }
+
+            player.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IPlayerShopClosedPlugIn>()?.PlayerShopClosed(player), true);
         }
     }
 }

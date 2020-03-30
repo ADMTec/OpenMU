@@ -5,6 +5,8 @@
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Trade
 {
     using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.Inventory;
+    using MUnique.OpenMU.GameLogic.Views.Trade;
     using MUnique.OpenMU.Interfaces;
 
     /// <summary>
@@ -12,13 +14,6 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Trade
     /// </summary>
     public class TradeMoneyAction
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TradeMoneyAction"/> class.
-        /// </summary>
-        public TradeMoneyAction()
-        {
-        }
-
         /// <summary>
         /// Sets the money which should be traded to the other player.
         /// </summary>
@@ -29,12 +24,12 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Trade
             // Check if Trade is open
             if (player.PlayerState.CurrentState != PlayerState.TradeOpened)
             {
-                player.PlayerView.ShowMessage("Uncheck trade accept button first", MessageType.BlueNormal);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Uncheck trade accept button first", MessageType.BlueNormal);
                 return;
             }
 
             // Check if the Player got enough Zen/Money
-            if (player.SelectedCharacter.Money < moneyAmount)
+            if (player.Money < moneyAmount)
             {
                 return;
             }
@@ -43,20 +38,17 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Trade
             player.TryAddMoney(player.TradingMoney);
             player.TryAddMoney((int)(-1 * moneyAmount));
             player.TradingMoney = (int)moneyAmount;
-            player.PlayerView.InventoryView.UpdateMoney();
+            player.ViewPlugIns.GetPlugIn<IUpdateMoneyPlugIn>()?.UpdateMoney();
+            player.ViewPlugIns.GetPlugIn<IRequestedTradeMoneyHasBeenSetPlugIn>()?.RequestedTradeMoneyHasBeenSet();
 
             // Send the Money Packet to the Trading Partner
-            var tradingPartner = player.TradingPartner as Player;
-            if (tradingPartner != null)
-            {
-                tradingPartner.PlayerView.TradeView.SetTradeMoney(moneyAmount);
-            }
+            player.TradingPartner?.ViewPlugIns.GetPlugIn<ISetTradeMoneyPlugIn>()?.SetTradeMoney(moneyAmount);
 
-            player.PlayerView.TradeView.ChangeTradeButtonState(TradeButtonState.Red);
-            if (tradingPartner != null)
+            player.ViewPlugIns.GetPlugIn<IChangeTradeButtonStatePlugIn>()?.ChangeTradeButtonState(TradeButtonState.Red);
+            if (player.TradingPartner != null)
             {
-                tradingPartner.PlayerState.TryAdvanceTo(PlayerState.TradeOpened);
-                tradingPartner.PlayerView.TradeView.ChangeTradeButtonState(TradeButtonState.Red);
+                player.TradingPartner.PlayerState.TryAdvanceTo(PlayerState.TradeOpened);
+                player.TradingPartner.ViewPlugIns.GetPlugIn<IChangeTradeButtonStatePlugIn>()?.ChangeTradeButtonState(TradeButtonState.Red);
             }
         }
     }

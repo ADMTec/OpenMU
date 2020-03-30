@@ -4,26 +4,13 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions
 {
-    using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.Login;
 
     /// <summary>
     /// Action to log the player out of the game.
     /// </summary>
     public class LogoutAction
     {
-        private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(LogoutAction));
-
-        private readonly IGameServerContext gameServerContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LogoutAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public LogoutAction(IGameServerContext gameContext)
-        {
-            this.gameServerContext = gameContext;
-        }
-
         /// <summary>
         /// Logs out the specified player.
         /// </summary>
@@ -31,18 +18,11 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions
         /// <param name="logoutType">Type of the logout.</param>
         public void Logout(Player player, LogoutType logoutType)
         {
-            if (player.CurrentMap != null)
-            {
-                player.CurrentMap.Remove(player);
-            }
-
-            if (player.SelectedCharacter != null)
-            {
-                this.gameServerContext.FriendServer.SetOnlineState(player.SelectedCharacter.Id, player.SelectedCharacter.Name, 0xFF);
-                player.SelectedCharacter = null;
-            }
-
+            player.CurrentMap?.Remove(player);
+            player.SelectedCharacter = null;
             player.MagicEffectList.ClearAllEffects();
+            player.Party?.KickMySelf(player);
+            player.PersistenceContext.SaveChanges();
             if (logoutType == LogoutType.CloseGame)
             {
                 player.Disconnect();
@@ -54,7 +34,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions
                     player.PlayerState.TryAdvanceTo(PlayerState.Authenticated);
                 }
 
-                player.PlayerView.Logout(logoutType);
+                player.ViewPlugIns.GetPlugIn<ILogoutPlugIn>()?.Logout(logoutType);
             }
         }
     }

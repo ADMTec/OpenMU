@@ -20,23 +20,21 @@ namespace MUnique.OpenMU.Pathfinding.PreCalculation
         {
             const int elementSize = 6;
 
-            // ReSharper disable once TooWideLocalVariableScope we want to reduce stack allocations
-            PathInfo pathInfo;
             while (source.Position + elementSize < source.Length)
             {
                 byte startX = (byte)source.ReadByte();
                 byte startY = (byte)source.ReadByte();
                 byte startEndDiff = (byte)source.ReadByte();
                 byte startNextStepDiff = (byte)source.ReadByte();
-                pathInfo.Combination.Start = new Point(startX, startY);
+                var start = new Point(startX, startY);
                 byte xOffset = (byte)(startEndDiff >> 4 & 0x0F);
                 byte yOffset = (byte)(startEndDiff & 0x0F);
-                pathInfo.Combination.End = new Point((byte)(startX + xOffset), (byte)(startY + yOffset));
+                var end = new Point((byte)(startX + xOffset), (byte)(startY + yOffset));
 
                 byte xOffsetNext = (byte)(startNextStepDiff >> 4 & 0x0F);
                 byte yOffsetNext = (byte)(startNextStepDiff & 0x0F);
-                pathInfo.NextStep = new Point((byte)(startX + xOffsetNext), (byte)(startY + yOffsetNext));
-                yield return pathInfo;
+                var nextStep = new Point((byte)(startX + xOffsetNext), (byte)(startY + yOffsetNext));
+                yield return new PathInfo(new PointCombination(start, end), nextStep);
             }
         }
 
@@ -58,12 +56,12 @@ namespace MUnique.OpenMU.Pathfinding.PreCalculation
             int diffY = end.Y - start.Y + 8;
             if (diffX > 15)
             {
-                throw new IndexOutOfRangeException("diffX");
+                throw new ArgumentException($"The difference between start and end in the x value is greater than the allowed 15. start: {start}, end: {end}");
             }
 
             if (diffY > 15)
             {
-                throw new IndexOutOfRangeException("diffY");
+                throw new ArgumentException($"The difference between start and end in the y value is greater than the allowed 15. start: {start}, end: {end}");
             }
 
             return (byte)(((diffX << 4) & 0xF0) | (diffY & 0x0F));

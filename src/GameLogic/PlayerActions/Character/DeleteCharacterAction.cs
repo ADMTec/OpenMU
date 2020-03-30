@@ -6,26 +6,17 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
 {
     using System;
     using System.Linq;
-    using MUnique.OpenMU.DataModel.Entities;
-    using Views;
+    using MUnique.OpenMU.GameLogic.PlugIns;
+    using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.Character;
+    using MUnique.OpenMU.Interfaces;
 
     /// <summary>
-    /// Action to delete a character in the character selction screen.
+    /// Action to delete a character in the character selection screen.
     /// </summary>
     public class DeleteCharacterAction
     {
         private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(DeleteCharacterAction));
-
-        private readonly IGameContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="DeleteCharacterAction"/> class.
-        /// </summary>
-        /// <param name="context">The context.</param>
-        public DeleteCharacterAction(IGameContext context)
-        {
-            this.gameContext = context;
-        }
 
         /// <summary>
         /// Tries to delete the character.
@@ -36,7 +27,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
         public void DeleteCharacter(Player player, string characterName, string securityCode)
         {
             var result = this.DeleteCharacterRequest(player, characterName, securityCode);
-            player.PlayerView.ShowCharacterDeleteResponse(result);
+            player.ViewPlugIns.GetPlugIn<IShowCharacterDeleteResponsePlugIn>()?.ShowCharacterDeleteResponse(result);
         }
 
         private CharacterDeleteResult DeleteCharacterRequest(Player player, string characterName, string securityCode)
@@ -58,24 +49,21 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
                 return CharacterDeleteResult.Unsuccessful;
             }
 
-            if (player.Account.SecurityCode != securityCode)
+            if (player.Account.SecurityCode != null && player.Account.SecurityCode != securityCode)
             {
                 return CharacterDeleteResult.WrongSecurityCode;
             }
 
-            using (this.gameContext.RepositoryManager.UseContext(player.PersistenceContext))
+            if (player.GameContext is IGameServerContext gameServerContext && gameServerContext.GuildServer.GetGuildPosition(character.Id) != null)
             {
-                player.Account.Characters.Remove(character);
-
-                // TODO: remove the following stuff - it should be done automatically!
-                var repository = this.gameContext.RepositoryManager.GetRepository<Character>();
-                if (repository.Delete(character))
-                {
-                    return CharacterDeleteResult.Successful;
-                }
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Can't delete a guild member. Remove the character from guild first.", MessageType.BlueNormal);
+                return CharacterDeleteResult.Unsuccessful;
             }
 
-            return CharacterDeleteResult.Unsuccessful;
+            player.Account.Characters.Remove(character);
+            player.GameContext.PlugInManager.GetPlugInPoint<ICharacterDeletedPlugIn>()?.CharacterDeleted(player, character);
+            player.PersistenceContext.Delete(character);
+            return CharacterDeleteResult.Successful;
         }
     }
 }

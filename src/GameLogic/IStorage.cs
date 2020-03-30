@@ -46,11 +46,6 @@ namespace MUnique.OpenMU.GameLogic
     public interface IStorage
     {
         /// <summary>
-        /// Occurs when the equipped items changed.
-        /// </summary>
-        event EventHandler<ItemEventArgs> EquippedItemsChanged;
-
-        /// <summary>
         /// Gets the underlying item storage.
         /// </summary>
         ItemStorage ItemStorage { get; }
@@ -59,11 +54,6 @@ namespace MUnique.OpenMU.GameLogic
         /// Gets an enumeration of all items.
         /// </summary>
         IEnumerable<Item> Items { get; }
-
-        /// <summary>
-        /// Gets all items which are in the wearable slots.
-        /// </summary>
-        IEnumerable<Item> EquippedItems { get; }
 
         /// <summary>
         /// Gets an enumeration of all free item slot indexes.
@@ -86,11 +76,25 @@ namespace MUnique.OpenMU.GameLogic
         bool AddItem(byte slot, Item item);
 
         /// <summary>
-        /// Adds the item to the storage.
+        /// Adds the item to the next free slot of the storage.
         /// </summary>
         /// <param name="item">The item.</param>
         /// <returns>True, if successful.</returns>
         bool AddItem(Item item);
+
+        /// <summary>
+        /// Tries to add money to itemStorage.
+        /// </summary>
+        /// <param name="value">The value which should be added.</param>
+        /// <returns><c>True</c>, if the money can be add to itemStorage; Otherwise, <c>false</c>.</returns>
+        bool TryAddMoney(int value);
+
+        /// <summary>
+        /// Tries to remove money from itemStorage.
+        /// </summary>
+        /// <param name="value">The value which should be added.</param>
+        /// <returns><c>True</c>, if had enought money to be remove; Otherwise, <c>false</c>.</returns>
+        bool TryRemoveMoney(int value);
 
         /// <summary>
         /// Returns the index of a slot in which the item would fit.
@@ -127,6 +131,23 @@ namespace MUnique.OpenMU.GameLogic
     }
 
     /// <summary>
+    /// Interface for the inventory storage, which may have equipped items.
+    /// </summary>
+    /// <seealso cref="MUnique.OpenMU.GameLogic.IStorage" />
+    public interface IInventoryStorage : IStorage
+    {
+        /// <summary>
+        /// Occurs when the equipped items changed.
+        /// </summary>
+        event EventHandler<ItemEventArgs> EquippedItemsChanged;
+
+        /// <summary>
+        /// Gets all items which are in the wearable slots.
+        /// </summary>
+        IEnumerable<Item> EquippedItems { get; }
+    }
+
+    /// <summary>
     /// The interface for a player shop storage. A shop can be opened by a player, and other players can buy the items of this shop.
     /// </summary>
     public interface IShopStorage : IStorage
@@ -143,11 +164,6 @@ namespace MUnique.OpenMU.GameLogic
         /// Gets or sets the name of the store.
         /// </summary>
         string StoreName { get; set; }
-
-        /// <summary>
-        /// Gets the store prices.
-        /// </summary>
-        uint[] StorePrices { get; }
 
         /// <summary>
         /// Gets the store lock.

@@ -5,7 +5,6 @@
 namespace MUnique.OpenMU.GameLogic
 {
     using System;
-    using System.IO;
     using log4net;
 
     using MUnique.OpenMU.DataModel.Configuration;
@@ -23,19 +22,26 @@ namespace MUnique.OpenMU.GameLogic
         /// </summary>
         /// <param name="definition">The game map definition.</param>
         public GameMapTerrain(GameMapDefinition definition)
+            : this(definition.Name, definition.TerrainData)
         {
-            if (definition.TerrainData == null)
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="GameMapTerrain"/> class.
+        /// </summary>
+        /// <param name="mapName">Name of the map.</param>
+        /// <param name="terrainData">The terrain data.</param>
+        public GameMapTerrain(string mapName, byte[] terrainData)
+        {
+            if (terrainData == null)
             {
-                Log.Warn($"Terrain data for {definition.Name} not defined.");
+                Log.Warn($"Terrain data for {mapName} not defined.");
                 return;
             }
 
-            using (var memoryStream = new MemoryStream(definition.TerrainData))
-            {
-                Log.Debug($"Start reading terrain data for {definition.Name}.");
-                this.ReadTerrainData(memoryStream);
-                Log.Debug($"Finished reading terrain data for {definition.Name}.");
-            }
+            Log.Debug($"Start reading terrain data for {mapName}.");
+            this.ReadTerrainData(terrainData.AsSpan(3));
+            Log.Debug($"Finished reading terrain data for {mapName}.");
         }
 
         /// <summary>
@@ -56,25 +62,24 @@ namespace MUnique.OpenMU.GameLogic
         /// <summary>
         /// Gets a random drop coordinate at the specified point in the specified radius.
         /// </summary>
-        /// <param name="x">The x.</param>
-        /// <param name="y">The y.</param>
-        /// <param name="maxmimumRadius">The maximum radius around the specifeied coordinate.</param>
+        /// <param name="point">The target point.</param>
+        /// <param name="maxmimumRadius">The maximum radius around the specified coordinate.</param>
         /// <returns>The random drop coordinate.</returns>
-        public Point GetRandomDropCoordinate(byte x, byte y, byte maxmimumRadius)
+        public Point GetRandomDropCoordinate(Point point, byte maxmimumRadius)
         {
-            byte tempx = (byte)Rand.NextInt(Math.Max(0, x - maxmimumRadius), Math.Min(255, x + maxmimumRadius + 1));
-            byte tempy = (byte)Rand.NextInt(Math.Max(0, y - maxmimumRadius), Math.Min(255, y + maxmimumRadius + 1));
+            byte tempx = (byte)Rand.NextInt(Math.Max(0, point.X - maxmimumRadius), Math.Min(255, point.X + maxmimumRadius + 1));
+            byte tempy = (byte)Rand.NextInt(Math.Max(0, point.Y - maxmimumRadius), Math.Min(255, point.Y + maxmimumRadius + 1));
             int i = 0;
             while (!this.WalkMap[tempx, tempy] && i < 20)
             {
-                tempx = (byte)Rand.NextInt(Math.Max(0, x - maxmimumRadius), Math.Min(255, x + maxmimumRadius + 1));
-                tempy = (byte)Rand.NextInt(Math.Max(0, y - maxmimumRadius), Math.Min(255, y + maxmimumRadius + 1));
+                tempx = (byte)Rand.NextInt(Math.Max(0, point.X - maxmimumRadius), Math.Min(255, point.X + maxmimumRadius + 1));
+                tempy = (byte)Rand.NextInt(Math.Max(0, point.Y - maxmimumRadius), Math.Min(255, point.Y + maxmimumRadius + 1));
                 i++;
             }
 
             if (i == 20)
             {
-                return new Point(x, y);
+                return point;
             }
 
             return new Point(tempx, tempy);
@@ -83,17 +88,13 @@ namespace MUnique.OpenMU.GameLogic
         /// <summary>
         /// Reads the terrain data from a stream.
         /// </summary>
-        /// <param name="stream">The stream.</param>
-        private void ReadTerrainData(Stream stream)
+        /// <param name="data">The data.</param>
+        private void ReadTerrainData(ReadOnlySpan<byte> data)
         {
             this.WalkMap = new bool[256, 256];
             this.SafezoneMap = new bool[256, 256];
             this.AIgrid = new byte[256, 256];
-            stream.ReadByte();
-            stream.ReadByte();
-            stream.ReadByte();
-            var data = new byte[0x10000];
-            stream.Read(data, 0, 0x10000);
+
             for (int i = 0; i < data.Length; i++)
             {
                 byte x = (byte)(i & 0xFF);

@@ -7,14 +7,15 @@ namespace MUnique.OpenMU.DataModel.Entities
     using MUnique.OpenMU.DataModel.Configuration.Items;
 
     /// <summary>
-    /// This class defines a link between the item and the conrete item option which the actual item instance possess.
+    /// This class defines a link between the item and the concrete item option which the actual item instance possess.
     /// </summary>
     public class ItemOptionLink
     {
         /// <summary>
         /// Gets or sets the item option.
+        /// Link to <see cref="ItemDefinition.PossibleItemOptions"/>, <see cref="ItemOptionDefinition.PossibleOptions"/>.
         /// </summary>
-        public virtual ItemOption ItemOption { get; set; }
+        public virtual IncreasableItemOption ItemOption { get; set; }
 
         /// <summary>
         /// Gets or sets the level.
@@ -40,6 +41,12 @@ namespace MUnique.OpenMU.DataModel.Entities
         {
             this.ItemOption = otherLink.ItemOption;
             this.Level = otherLink.Level;
+        }
+
+        /// <inheritdoc />
+        public override string ToString()
+        {
+            return $"{this.ItemOption?.PowerUpDefinition}";
         }
     }
 }

@@ -4,12 +4,14 @@
 
 namespace MUnique.OpenMU.GameLogic
 {
+    using System;
     using System.Collections.Generic;
     using System.Linq;
-    using MUnique.OpenMU.DataModel.Attributes;
+    using MUnique.OpenMU.AttributeSystem;
     using MUnique.OpenMU.DataModel.Configuration;
     using MUnique.OpenMU.DataModel.Entities;
     using MUnique.OpenMU.GameLogic.Attributes;
+    using MUnique.OpenMU.GameLogic.Views.Character;
 
     /// <summary>
     /// The implementation of the skill list, which automatically adds the passive skill power ups to the player.
@@ -22,8 +24,6 @@ namespace MUnique.OpenMU.GameLogic
 
         private readonly ICollection<SkillEntry> itemSkills;
 
-        private readonly IDictionary<SkillEntry, IEnumerable<PowerUpWrapper>> passiveSkillPowerUps;
-
         private readonly Player player;
 
         /// <summary>
@@ -34,29 +34,21 @@ namespace MUnique.OpenMU.GameLogic
         {
             this.player = player;
             this.learnedSkills = this.player.SelectedCharacter.LearnedSkills ?? new List<SkillEntry>();
-            this.availableSkills = this.learnedSkills.ToDictionary(skillEntry => skillEntry.Skill.SkillID.ToUnsigned());
+            this.availableSkills = this.learnedSkills.ToDictionary(skillEntry => skillEntry.Skill.Number.ToUnsigned());
             this.itemSkills = new List<SkillEntry>();
             this.player.Inventory.EquippedItems
                 .Where(item => item.HasSkill)
                 .Where(item => item.Definition.Skill != null)
                 .ForEach(item => this.AddItemSkill(item.Definition.Skill));
             this.player.Inventory.EquippedItemsChanged += this.Inventory_WearingItemsChanged;
-            this.passiveSkillPowerUps = new Dictionary<SkillEntry, IEnumerable<PowerUpWrapper>>();
             foreach (var skill in this.learnedSkills.Where(s => s.Skill.SkillType == SkillType.PassiveBoost))
             {
-                this.CreatePowerUpWrappers(skill);
-                skill.PropertyChanged += (sender, eventArgs) =>
-                {
-                    if (eventArgs.PropertyName == "Level")
-                    {
-                        this.UpdateSkillPassivePowerUp((SkillEntry)sender);
-                    }
-                };
+                this.CreatePowerUpForPassiveSkill(skill);
             }
         }
 
         /// <inheritdoc/>
-        public IEnumerable<SkillEntry> Skills => this.learnedSkills;
+        public IEnumerable<SkillEntry> Skills => this.availableSkills.Values;
 
         /// <inheritdoc/>
         public byte SkillCount => (byte)this.availableSkills.Count;
@@ -71,7 +63,7 @@ namespace MUnique.OpenMU.GameLogic
         /// <inheritdoc/>
         public void AddLearnedSkill(Skill skill)
         {
-            var skillEntry = this.player.GameContext.RepositoryManager.CreateNew<SkillEntry>();
+            var skillEntry = this.player.PersistenceContext.CreateNew<SkillEntry>();
             skillEntry.Skill = skill;
             skillEntry.Level = 0;
             this.AddLearnedSkill(skillEntry);
@@ -80,12 +72,21 @@ namespace MUnique.OpenMU.GameLogic
         /// <inheritdoc/>
         public bool RemoveItemSkill(ushort skillId)
         {
-            if (this.availableSkills.TryGetValue(skillId, out SkillEntry skillEntry) && this.availableSkills.Remove(skillId))
+            this.availableSkills.TryGetValue(skillId, out SkillEntry skillEntry);
+            if (skillEntry == null)
             {
-                return this.itemSkills.Remove(skillEntry);
+                return false;
             }
 
-            return false;
+            // We need to take into account that we there might be multiple items equipped with the same skill
+            var skillRemoved = this.itemSkills.Remove(skillEntry);
+            if (skillRemoved && this.itemSkills.All(s => s.Skill.Number != skillId))
+            {
+                this.player.ViewPlugIns.GetPlugIn<ISkillListViewPlugIn>()?.RemoveSkill(skillEntry.Skill);
+                this.availableSkills.Remove(skillId);
+            }
+
+            return true;
         }
 
         /// <inheritdoc/>
@@ -96,35 +97,52 @@ namespace MUnique.OpenMU.GameLogic
 
         private void AddItemSkill(Skill skill)
         {
-            var skillEntry = new SkillEntry(); // Create by repository manager? Probably not, but I'm not sure...
+            var skillEntry = new SkillEntry();
             skillEntry.Skill = skill;
             skillEntry.Level = 0;
             this.itemSkills.Add(skillEntry);
-            this.availableSkills.Add(skill.SkillID.ToUnsigned(), skillEntry);
+
+            // Item skills are always level 0, so it doesn't matter which one is added to the dictionary.
+            if (!this.ContainsSkill((ushort)skill.Number))
+            {
+                this.availableSkills.Add(skill.Number.ToUnsigned(), skillEntry);
+                this.player.ViewPlugIns.GetPlugIn<ISkillListViewPlugIn>()?.AddSkill(skill);
+            }
         }
 
         private void AddLearnedSkill(SkillEntry skill)
         {
-            this.availableSkills.Add(skill.Skill.SkillID.ToUnsigned(), skill);
+            this.availableSkills.Add(skill.Skill.Number.ToUnsigned(), skill);
             this.learnedSkills.Add(skill);
+
+            this.player.ViewPlugIns.GetPlugIn<ISkillListViewPlugIn>()?.AddSkill(skill.Skill);
+            if (skill.Skill.SkillType == SkillType.PassiveBoost)
+            {
+                this.CreatePowerUpForPassiveSkill(skill);
+            }
+        }
+
+        private void CreatePowerUpForPassiveSkill(SkillEntry skillEntry)
+        {
+            this.CreatePowerUpWrappers(skillEntry);
         }
 
         private void CreatePowerUpWrappers(SkillEntry skillEntry)
         {
-            if (skillEntry.Skill.PassivePowerUps.TryGetValue(skillEntry.Level, out PowerUpDefinition powerUp))
+            var masterDefinition = skillEntry.Skill.MasterDefinition;
+            if (masterDefinition == null)
             {
-                this.passiveSkillPowerUps.Add(skillEntry, PowerUpWrapper.CreateByPowerUpDefintion(powerUp, this.player.Attributes).ToList());
+                return;
             }
-        }
 
-        private void UpdateSkillPassivePowerUp(SkillEntry skillEntry)
-        {
-            if (this.passiveSkillPowerUps.TryGetValue(skillEntry, out IEnumerable<PowerUpWrapper> powerUps))
+            if (masterDefinition.TargetAttribute == null)
             {
-                this.passiveSkillPowerUps.Remove(skillEntry);
-                powerUps.ForEach(p => p.Dispose());
-                this.CreatePowerUpWrappers(skillEntry);
+                // log?
+                return;
             }
+
+            // maybe to do: We don't need to hold it, as it's added to the player attributes.
+            new PowerUpWrapper(new PassiveSkillBoostPowerUp(skillEntry), masterDefinition.TargetAttribute, this.player.Attributes);
         }
 
         private void Inventory_WearingItemsChanged(object sender, ItemEventArgs eventArgs)
@@ -142,8 +160,31 @@ namespace MUnique.OpenMU.GameLogic
             }
             else
             {
-                this.RemoveItemSkill(item.Definition.Skill.SkillID.ToUnsigned());
+                this.RemoveItemSkill(item.Definition.Skill.Number.ToUnsigned());
             }
+        }
+
+        private sealed class PassiveSkillBoostPowerUp : IElement
+        {
+            public PassiveSkillBoostPowerUp(SkillEntry skillEntry)
+            {
+                this.Value = skillEntry.CalculateValue();
+                this.AggregateType = skillEntry.Skill.MasterDefinition.Aggregation;
+                skillEntry.PropertyChanged += (sender, eventArgs) =>
+                {
+                    if (eventArgs.PropertyName == nameof(SkillEntry.Level))
+                    {
+                        this.Value = skillEntry.CalculateValue();
+                        this.ValueChanged?.Invoke(this, EventArgs.Empty);
+                    }
+                };
+            }
+
+            public event EventHandler ValueChanged;
+
+            public float Value { get; private set; }
+
+            public AggregateType AggregateType { get; }
         }
     }
 }

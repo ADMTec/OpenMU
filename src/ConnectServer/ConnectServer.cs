@@ -2,6 +2,8 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
+using System.Runtime.CompilerServices;
+
 namespace MUnique.OpenMU.ConnectServer
 {
     using System;
@@ -11,6 +13,7 @@ namespace MUnique.OpenMU.ConnectServer
     using System.Net;
     using log4net;
     using MUnique.OpenMU.Interfaces;
+    using MUnique.OpenMU.Network.PlugIns;
 
     /// <summary>
     /// The connect server.
@@ -18,31 +21,59 @@ namespace MUnique.OpenMU.ConnectServer
     internal class ConnectServer : IConnectServer, OpenMU.Interfaces.IConnectServer
     {
         private static readonly ILog Logger = LogManager.GetLogger(typeof(ConnectServer));
+        private ServerState serverState;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ConnectServer" /> class.
         /// </summary>
-        /// <param name="settings">The settings.</param>
-        public ConnectServer(Settings settings)
+        /// <param name="connectServerSettings">The settings.</param>
+        /// <param name="clientVersion">The client version.</param>
+        /// <param name="configurationId">The configuration identifier.</param>
+        public ConnectServer(IConnectServerSettings connectServerSettings, ClientVersion clientVersion, Guid configurationId)
         {
-            this.Settings = settings;
+            this.ClientVersion = clientVersion;
+            this.ConfigurationId = configurationId;
+            this.Settings = connectServerSettings;
 
             this.ConnectInfos = new Dictionary<ushort, byte[]>();
-            this.ServerList = new ServerList();
+            this.ServerList = new ServerList(this.ClientVersion);
 
             this.ClientListener = new ClientListener(this);
+            this.ClientListener.ConnectedClientsChanged += (sender, args) =>
+            {
+                this.RaisePropertyChanged(nameof(this.CurrentConnections));
+            };
             this.CreatePlugins();
-            this.ServerState = OpenMU.Interfaces.ServerState.Stopped;
         }
 
-        /// <inheritdoc/>
-        public ServerState ServerState { get; private set; }
+        /// <inheritdoc />
+        public event PropertyChangedEventHandler PropertyChanged;
 
         /// <inheritdoc/>
-        public string Description => "Connect Server";
+        public ServerState ServerState
+        {
+            get => this.serverState;
+            private set
+            {
+                if (value != this.serverState)
+                {
+                    this.serverState = value;
+                    this.RaisePropertyChanged();
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public ServerType Type => ServerType.ConnectServer;
 
         /// <inheritdoc/>
-        public int Id => SpecialServerIds.ConnectServer;
+        public string Description => this.Settings.Description;
+
+        /// <inheritdoc/>
+        public int Id => SpecialServerIds.ConnectServer + this.Settings.ServerId;
+
+        /// <inheritdoc />
+        public Guid ConfigurationId { get; }
 
         /// <inheritdoc/>
         public IDictionary<ushort, byte[]> ConnectInfos { get; }
@@ -51,7 +82,10 @@ namespace MUnique.OpenMU.ConnectServer
         public ServerList ServerList { get; }
 
         /// <inheritdoc/>
-        public Settings Settings { get; }
+        public IConnectServerSettings Settings { get; }
+
+        /// <inheritdoc />
+        public ClientVersion ClientVersion { get; }
 
         /// <summary>
         /// Gets the client listener.
@@ -68,6 +102,9 @@ namespace MUnique.OpenMU.ConnectServer
         /// </summary>
         public int CurrentConnections => this.ClientListener.Clients.Count;
 
+        /// <inheritdoc />
+        public ICollection<(ushort, IPEndPoint)> GameServerEndPoints => this.ServerList.Servers.Select(s => (s.ServerId, s.EndPoint)).ToList();
+
         /// <inheritdoc/>
         public void Start()
         {
@@ -77,15 +114,12 @@ namespace MUnique.OpenMU.ConnectServer
             try
             {
                 this.ClientListener.StartListener();
+                this.ServerState = OpenMU.Interfaces.ServerState.Started;
             }
             catch (Exception ex)
             {
-                Logger.Error("Error while starting", ex);
+                Logger.Error(ex.Message, ex);
                 this.ServerState = oldState;
-            }
-            finally
-            {
-                this.ServerState = OpenMU.Interfaces.ServerState.Started;
             }
 
             Logger.Info("Finished starting");
@@ -111,15 +145,16 @@ namespace MUnique.OpenMU.ConnectServer
                 {
                     ServerId = gameServer.Id,
                     EndPoint = publicEndPoint,
-                    ServerLoad = (byte)(gameServer.OnlinePlayerCount * 100f / gameServer.MaximumPlayers)
+                    ServerLoad = (byte)(gameServer.OnlinePlayerCount * 100f / gameServer.MaximumPlayers),
                 };
                 if (gameServer is INotifyPropertyChanged notifier)
                 {
                     notifier.PropertyChanged += this.HandleServerPropertyChanged;
                 }
 
-                this.ServerList.Servers.Add(serverListItem);
                 this.ConnectInfos.Add(serverListItem.ServerId, serverListItem.ConnectInfo);
+                this.ServerList.Servers.Add(serverListItem);
+                this.ServerList.InvalidateCache();
             }
             catch (Exception ex)
             {
@@ -133,7 +168,7 @@ namespace MUnique.OpenMU.ConnectServer
         /// <inheritdoc/>
         public void UnregisterGameServer(IGameServerInfo gameServer)
         {
-            Logger.WarnFormat("GameServer {0} is unregistering", gameServer);
+            Logger.InfoFormat("GameServer {0} is unregistering", gameServer);
             var serverListItem = this.ServerList.Servers.FirstOrDefault(s => s.ServerId == gameServer.Id);
             if (serverListItem != null)
             {
@@ -147,7 +182,7 @@ namespace MUnique.OpenMU.ConnectServer
                 notifier.PropertyChanged -= this.HandleServerPropertyChanged;
             }
 
-            Logger.WarnFormat("GameServer {0} has unregistered", gameServer);
+            Logger.InfoFormat("GameServer {0} has unregistered", gameServer);
         }
 
         private void CreatePlugins()
@@ -167,8 +202,7 @@ namespace MUnique.OpenMU.ConnectServer
                 return;
             }
 
-            var server = sender as IGameServerInfo;
-            if (server == null)
+            if (!(sender is IGameServerInfo server))
             {
                 return;
             }
@@ -180,6 +214,15 @@ namespace MUnique.OpenMU.ConnectServer
             }
 
             serverListItem.ServerLoad = (byte)(server.OnlinePlayerCount * 100f / server.MaximumPlayers);
+        }
+
+        /// <summary>
+        /// Called when a property changed.
+        /// </summary>
+        /// <param name="propertyName">Name of the property.</param>
+        private void RaisePropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }

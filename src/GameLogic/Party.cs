@@ -8,18 +8,22 @@ namespace MUnique.OpenMU.GameLogic
     using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
-
     using MUnique.OpenMU.GameLogic.Attributes;
     using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.Party;
 
     /// <summary>
     /// The party object. Contains a group of players who can chat with each other, and get informations about the health status of their party mates.
     /// </summary>
     public sealed class Party : IDisposable
     {
+        private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(Party));
+
         private readonly Timer healthUpdate;
 
         private readonly byte maxPartySize;
+
+        private readonly List<Player> experienceDistributionList;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Party"/> class.
@@ -30,6 +34,7 @@ namespace MUnique.OpenMU.GameLogic
             this.maxPartySize = maxPartySize;
 
             this.PartyList = new List<IPartyMember>(maxPartySize);
+            this.experienceDistributionList = new List<Player>(this.MaxPartySize);
             var updateInterval = new TimeSpan(0, 0, 0, 0, 500);
             this.healthUpdate = new Timer(this.HealthUpdate_Elapsed, null, updateInterval, updateInterval);
         }
@@ -64,6 +69,22 @@ namespace MUnique.OpenMU.GameLogic
 
         /// <summary>
         /// Kicks the player from the party.
+        /// </summary>
+        /// <param name="sender">The sender.</param>
+        public void KickMySelf(IPartyMember sender)
+        {
+            for (int i = 0; i < this.PartyList.Count; i++)
+            {
+                if (this.PartyList[i].Id == sender.Id)
+                {
+                    this.ExitParty(this.PartyList[i], (byte)i);
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Kicks the player from the party.
         /// Only the party master is allowed to kick other players. However, players can kick themself out of the party.
         /// </summary>
         /// <param name="sender">The sender.</param>
@@ -73,12 +94,12 @@ namespace MUnique.OpenMU.GameLogic
             if (!Equals(sender, this.PartyList[0]) &&
                 !Equals(sender, this.PartyList[index]))
             {
-                // todo: maybe log wrong request as hack attempt
+                Log.WarnFormat("Suspicious request for sender with name: {0}, could be hack attempt.", sender.Name);
                 return;
             }
 
             var toKick = this.PartyList[index];
-            this.ExitParty(toKick);
+            this.ExitParty(toKick, index);
         }
 
         /// <summary>
@@ -108,7 +129,7 @@ namespace MUnique.OpenMU.GameLogic
         {
             for (int i = 0; i < this.PartyList.Count; i++)
             {
-                this.PartyList[i].PartyView.ChatMessage(message, senderCharacterName, ChatMessageType.Party);
+                this.PartyList[i].ViewPlugIns.GetPlugIn<IChatViewPlugIn>()?.ChatMessage(message, senderCharacterName, ChatMessageType.Party);
             }
         }
 
@@ -116,44 +137,23 @@ namespace MUnique.OpenMU.GameLogic
         /// Distributes the experience after kill.
         /// </summary>
         /// <param name="killedObject">The object which was killed.</param>
-        /// <returns>The total distributed experience to all party members.</returns>
-        public int DistributeExperienceAfterKill(IAttackable killedObject)
+        /// <param name="killer">The killer which is member of the party. All players which observe the killer, get experience.</param>
+        /// <returns>
+        /// The total distributed experience to all party members.
+        /// </returns>
+        public int DistributeExperienceAfterKill(IAttackable killedObject, IObservable killer)
         {
-            IList<Player> partyMembersInRange;
-            if (killedObject is IObservable observable)
+            lock (this.experienceDistributionList)
             {
-                observable.ObserverLock.EnterReadLock();
                 try
                 {
-                    partyMembersInRange = this.PartyList.OfType<Player>().Where(p => observable.Observers.Contains(p)).ToList();
+                    return this.InternalDistributeExperienceAfterKill(killedObject, killer);
                 }
                 finally
                 {
-                    observable.ObserverLock.ExitReadLock();
+                    this.experienceDistributionList.Clear();
                 }
             }
-            else
-            {
-                partyMembersInRange = this.PartyList.OfType<Player>().ToList();
-            }
-
-            if (partyMembersInRange.Count == 0)
-            {
-                return 0;
-            }
-
-            var totalLevel = partyMembersInRange.Sum(p => (int)p.Attributes[Stats.Level]);
-            var averageLevel = totalLevel / partyMembersInRange.Count;
-            var averageExperience = killedObject.Attributes[Stats.Level] * 1000 / averageLevel;
-            var totalAverageExperience = averageExperience * partyMembersInRange.Count * Math.Pow(1.2, partyMembersInRange.Count - 1);
-            var randomizedTotalExperience = Rand.NextInt((int)(totalAverageExperience * 0.8), (int)(totalAverageExperience * 1.2));
-            var randomizedTotalExperiencePerLevel = randomizedTotalExperience / totalLevel;
-            foreach (var player in partyMembersInRange)
-            {
-                player.AddExperience((int)(randomizedTotalExperiencePerLevel * player.Attributes[Stats.Level]), killedObject);
-            }
-
-            return randomizedTotalExperience;
         }
 
         /// <inheritdoc/>
@@ -163,7 +163,7 @@ namespace MUnique.OpenMU.GameLogic
             {
                 for (byte i = 0; i < this.PartyList.Count; i++)
                 {
-                    this.PartyList[i].PartyView.PartyClosed();
+                    this.PartyList[i].ViewPlugIns.GetPlugIn<IPartyMemberRemovedPlugIn>()?.PartyMemberRemoved(i);
                     this.PartyList[i].Party = null;
                 }
 
@@ -173,7 +173,46 @@ namespace MUnique.OpenMU.GameLogic
             }
         }
 
-        private void ExitParty(IPartyMember player)
+        private int InternalDistributeExperienceAfterKill(IAttackable killedObject, IObservable killer)
+        {
+            if (killedObject is IObservable observable)
+            {
+                observable.ObserverLock.EnterReadLock();
+                try
+                {
+                    this.experienceDistributionList.AddRange(this.PartyList.OfType<Player>().Where(p => killer.Observers.Contains(p)));
+                }
+                finally
+                {
+                    observable.ObserverLock.ExitReadLock();
+                }
+            }
+            else
+            {
+                this.experienceDistributionList.AddRange(this.PartyList.OfType<Player>());
+            }
+
+            var count = this.experienceDistributionList.Count;
+            if (count == 0)
+            {
+                return count;
+            }
+
+            var totalLevel = this.experienceDistributionList.Sum(p => (int)p.Attributes[Stats.Level]);
+            var averageLevel = totalLevel / count;
+            var averageExperience = killedObject.Attributes[Stats.Level] * 1000 / averageLevel;
+            var totalAverageExperience = averageExperience * count * Math.Pow(1.2, count - 1);
+            var randomizedTotalExperience = Rand.NextInt((int)(totalAverageExperience * 0.8), (int)(totalAverageExperience * 1.2));
+            var randomizedTotalExperiencePerLevel = randomizedTotalExperience / (float)totalLevel;
+            foreach (var player in this.experienceDistributionList)
+            {
+                player.AddExperience((int)(randomizedTotalExperiencePerLevel * player.Attributes[Stats.Level] * player.Attributes[Stats.ExperienceRate]), killedObject);
+            }
+
+            return randomizedTotalExperience;
+        }
+
+        private void ExitParty(IPartyMember player, byte index)
         {
             if (this.PartyList.Count < 3 || Equals(this.PartyMaster, player))
             {
@@ -183,7 +222,7 @@ namespace MUnique.OpenMU.GameLogic
 
             this.PartyList.Remove(player);
             player.Party = null;
-            player.PartyView.PartyClosed();
+            player.ViewPlugIns.GetPlugIn<IPartyMemberRemovedPlugIn>()?.PartyMemberRemoved(index);
             this.SendPartyList();
         }
 
@@ -195,12 +234,18 @@ namespace MUnique.OpenMU.GameLogic
                 return;
             }
 
-            bool updateNeeded = partyMaster.PartyView.IsHealthUpdateNeeded();
+            bool updateNeeded = partyMaster.ViewPlugIns.GetPlugIn<IPartyHealthViewPlugIn>()?.IsHealthUpdateNeeded() ?? false;
             if (updateNeeded)
             {
-                for (var i = this.PartyList.Count - 1; i >= 0; i--)
+                partyMaster.ViewPlugIns.GetPlugIn<IPartyHealthViewPlugIn>()?.UpdatePartyHealth();
+                for (var i = this.PartyList.Count - 1; i >= 1; i--)
                 {
-                    this.PartyList[i].PartyView.UpdatePartyHealth();
+                    var member = this.PartyList[i];
+                    var plugIn = member.ViewPlugIns.GetPlugIn<IPartyHealthViewPlugIn>();
+                    if (plugIn?.IsHealthUpdateNeeded() ?? false)
+                    {
+                        plugIn.UpdatePartyHealth();
+                    }
                 }
             }
         }
@@ -214,7 +259,7 @@ namespace MUnique.OpenMU.GameLogic
 
             for (byte i = 0; i < this.PartyList.Count; i++)
             {
-                this.PartyList[i].PartyView.UpdatePartyList();
+                this.PartyList[i].ViewPlugIns.GetPlugIn<IUpdatePartyListPlugIn>()?.UpdatePartyList();
             }
         }
     }

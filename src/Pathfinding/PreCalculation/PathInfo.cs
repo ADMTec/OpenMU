@@ -4,24 +4,15 @@
 
 namespace MUnique.OpenMU.Pathfinding.PreCalculation
 {
+    using System;
     using System.Runtime.InteropServices;
 
     /// <summary>
     /// Information about which is the <see cref="NextStep"/> to reach the <see cref="PointCombination.End"/> from the <see cref="PointCombination.Start"/>.
     /// </summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1, Size = 6)]
-    public struct PathInfo
+    public struct PathInfo : IEquatable<PathInfo>
     {
-        /// <summary>
-        /// The start/end point combination which acts like a key for the next step.
-        /// </summary>
-        public PointCombination Combination;
-
-        /// <summary>
-        /// The next step to get one step closer to the <see cref="PointCombination.End"/>.
-        /// </summary>
-        public Point NextStep;
-
         /// <summary>
         /// Initializes a new instance of the <see cref="PathInfo"/> struct.
         /// </summary>
@@ -31,6 +22,22 @@ namespace MUnique.OpenMU.Pathfinding.PreCalculation
         {
             this.Combination = combination;
             this.NextStep = nextStep;
+        }
+
+        /// <summary>
+        /// Gets the start/end point combination which acts like a key for the next step.
+        /// </summary>
+        public PointCombination Combination { get; }
+
+        /// <summary>
+        /// Gets the next step to get one step closer to the <see cref="PointCombination.End"/>.
+        /// </summary>
+        public Point NextStep { get; }
+
+        /// <inheritdoc/>
+        public bool Equals(PathInfo other)
+        {
+            return this.Combination.Equals(other.Combination) && this.NextStep == other.NextStep;
         }
     }
 }

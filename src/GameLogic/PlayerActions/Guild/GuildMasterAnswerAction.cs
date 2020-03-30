@@ -5,19 +5,13 @@
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
 {
     using MUnique.OpenMU.DataModel.Configuration;
+    using MUnique.OpenMU.GameLogic.Views.Guild;
 
     /// <summary>
     /// Action to answer the dialog of the guild master npc.
     /// </summary>
     public class GuildMasterAnswerAction
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GuildMasterAnswerAction"/> class.
-        /// </summary>
-        public GuildMasterAnswerAction()
-        {
-        }
-
         /// <summary>
         /// Type of the answer.
         /// </summary>
@@ -31,7 +25,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
             /// <summary>
             /// The guild master npc dialog should be shown.
             /// </summary>
-            ShowDialog = 1
+            ShowDialog = 1,
         }
 
         /// <summary>
@@ -43,11 +37,15 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
         {
             if (player.PlayerState.CurrentState == PlayerState.EnteredWorld && answer == Answer.ShowDialog)
             {
-                player.PlayerView.GuildView.ShowGuildCreationDialog();
+                player.ViewPlugIns.GetPlugIn<IShowGuildCreationDialogPlugIn>()?.ShowGuildCreationDialog();
             }
-            else if (player.OpenedNpc.Definition.NpcWindow == NpcWindow.GuildMaster)
+            else if (player.OpenedNpc?.Definition.NpcWindow == NpcWindow.GuildMaster && player.PlayerState.TryAdvanceTo(PlayerState.EnteredWorld))
             {
                 player.OpenedNpc = null;
+            }
+            else
+            {
+                // nothing to do.
             }
         }
     }

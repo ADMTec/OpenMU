@@ -5,6 +5,11 @@
 //     This source code extends auto-generated code of a T4 template.
 // </auto-generated>
 
+using System.Collections.Specialized;
+using System.ComponentModel;
+using Mapster;
+using MUnique.OpenMU.Persistence.Json;
+
 namespace MUnique.OpenMU.Persistence.EntityFramework
 {
     using System;
@@ -21,27 +26,26 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
         /// </summary>
         public PowerUpDefinitionValue()
         {
-            this.ConstantValue = new SimpleElement();
-            this.ConstantValue.ValueChanged += (sender, args) =>
-            {
-                var element = sender as IElement;
-                if (element != null)
-                {
-                    this.Value = element.Value;
-                    this.AggregateType = element.AggregateType;
-                }
-            };
+            this.ConstantValue = new MUnique.OpenMU.AttributeSystem.SimpleElement();
         }
 
         /// <summary>
         /// Gets the value.
         /// </summary>
-        public float Value { get; private set; }
+        public float Value
+        {
+            get => this.ConstantValue.Value;
+            set => this.ConstantValue.Value = value;
+        }
 
         /// <summary>
         /// Gets the type of the aggregate.
         /// </summary>
-        public AggregateType AggregateType { get; private set; }
+        public AggregateType AggregateType
+        {
+            get => this.ConstantValue.AggregateType;
+            set => this.ConstantValue.AggregateType = value;
+        }
 
         /// <summary>
         /// Gets or sets the parent as boost identifier.
@@ -60,6 +64,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
         /// The entity framework will not name the foreign keys in a proper way, so they would collide.
         /// </remarks>
         [InverseProperty(nameof(PowerUpDefinitionWithDuration.RawBoost))]
+        [Browsable(false)]
         public PowerUpDefinitionWithDuration ParentAsBoost { get; set; }
 
         /// <summary>
@@ -79,6 +84,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
         /// The entity framework will not name the foreign keys in a proper way, so they would collide.
         /// </remarks>
         [InverseProperty(nameof(PowerUpDefinitionWithDuration.RawDuration))]
+        [Browsable(false)]
         public PowerUpDefinitionWithDuration ParentAsDuration { get; set; }
     }
 
@@ -110,6 +116,13 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
         /// The character class.
         /// </value>
         public CharacterClass CharacterClass { get; set; }
+
+        /// <inheritdoc />
+        public new float Value
+        {
+            get => base.Value;
+            set => base.Value = value;
+        }
     }
 
     /// <summary>
@@ -117,6 +130,23 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
     /// </summary>
     internal partial class Item
     {
+        public Guid? ItemStorageId { get; set; }
+
+        [ForeignKey("ItemStorageId")]
+        public ItemStorage RawItemStorage
+        {
+            get { return this.ItemStorage; }
+            set
+            {
+                this.ItemStorage = value;
+                this.ItemStorageId = value?.Id;
+            }
+        }
+
+        /// <inheritdoc/>
+        [NotMapped]
+        private ItemStorage ItemStorage { get; set; }
+
         /// <summary>
         /// Clones the item option link.
         /// </summary>
@@ -129,5 +159,115 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
             persistentLink.AssignValues(link);
             return persistentLink;
         }
+    }
+
+    internal partial class ItemStorage
+    {
+        public ItemStorage()
+        {
+            var notifier = this.Items as INotifyCollectionChanged;
+            if (notifier != null)
+            {
+                notifier.CollectionChanged += this.OnItemsChanged;
+            }
+        }
+
+        private void OnItemsChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            switch (e.Action)
+            {
+
+                case NotifyCollectionChangedAction.Add:
+                    foreach (Item item in e.NewItems)
+                    {
+                        item.RawItemStorage = this;
+                    }
+
+                    break;
+                case NotifyCollectionChangedAction.Reset:
+                case NotifyCollectionChangedAction.Remove:
+                    foreach (Item item in e.OldItems)
+                    {
+                        item.RawItemStorage = null;
+                    }
+
+                    break;
+                default:
+                    // do nothing.
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The Entity Framework Core implementation of <see cref="MUnique.OpenMU.DataModel.Entities.GuildMember"/>.
+    /// </summary>
+    internal partial class GuildMember
+    {
+        /// <summary>
+        /// Gets or sets the character. This property just exists to define the foreign key.
+        /// </summary>
+        [ForeignKey(nameof(Id))]
+        public Character Character { get; set; }
+    }
+
+    internal partial class Account : IConvertibleTo<BasicModel.Account>
+    {
+        public BasicModel.Account Convert()
+        {
+            MapsterConfigurator.EnsureConfigured();
+
+            return this.Adapt<BasicModel.Account>();
+        }
+    }
+
+    internal partial class GameConfiguration : IConvertibleTo<BasicModel.GameConfiguration>
+    {
+        public BasicModel.GameConfiguration Convert()
+        {
+            MapsterConfigurator.EnsureConfigured();
+
+            return this.Adapt<BasicModel.GameConfiguration>();
+        }
+    }
+
+    internal partial class ConnectServerDefinition : IConvertibleTo<BasicModel.ConnectServerDefinition>
+    {
+        public BasicModel.ConnectServerDefinition Convert()
+        {
+            MapsterConfigurator.EnsureConfigured();
+            return this.Adapt<BasicModel.ConnectServerDefinition>();
+        }
+    }
+
+    internal partial class GameClientDefinition : IConvertibleTo<BasicModel.GameClientDefinition>
+    {
+        public BasicModel.GameClientDefinition Convert()
+        {
+            MapsterConfigurator.EnsureConfigured();
+            return this.Adapt<BasicModel.GameClientDefinition>();
+        }
+    }
+
+    /// <summary>
+    /// The Entity Framework Core implementation of <see cref="MUnique.OpenMU.Interfaces.LetterHeader"/>.
+    /// This implementation adds the receiver additionally as reference to <see cref="Character"/>.
+    /// </summary>
+    /// <remarks>
+    /// You may ask, why we didn't add the sender as reference to <see cref="Character"/>. That's because
+    /// it's okay to keep just the name. Also, if the sender gets deleted, we still have the name and one reference less to care about.
+    /// </remarks>
+    internal partial class LetterHeader
+    {
+        /// <summary>
+        /// Gets or sets the receiver of the letter.
+        /// </summary>
+        [ForeignKey(nameof(ReceiverId))]
+        public Character Receiver { get; set; }
+
+        /// <summary>
+        /// Gets or sets the receiver identifier.
+        /// </summary>
+        public Guid ReceiverId { get; set; }
     }
 }

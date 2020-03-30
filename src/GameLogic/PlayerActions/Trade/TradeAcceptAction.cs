@@ -4,6 +4,8 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Trade
 {
+    using MUnique.OpenMU.GameLogic.Views.Trade;
+
     /// <summary>
     /// Action to accept the trade.
     /// </summary>
@@ -23,25 +25,26 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Trade
                 {
                     ////Something bad happend here...
                     this.CancelTrade(tradeAccepter);
-                    if (tradePartner != null)
-                    {
-                        this.CancelTrade(tradePartner);
-                    }
-
-                    return;
+                    this.CancelTrade(tradePartner);
+                    tradePartner.ViewPlugIns.GetPlugIn<IShowTradeRequestAnswerPlugIn>()?.ShowTradeRequestAnswer(false);
+                    tradeAccepter.ViewPlugIns.GetPlugIn<IShowTradeRequestAnswerPlugIn>()?.ShowTradeRequestAnswer(false);
                 }
-
-                this.OpenTrade(tradeAccepter);
-                this.OpenTrade(tradePartner);
+                else
+                {
+                    this.OpenTrade(tradeAccepter);
+                    this.OpenTrade(tradePartner);
+                }
             }
             else
             {
                 if (tradePartner != null)
                 {
                     this.CancelTrade(tradePartner);
+                    tradePartner.ViewPlugIns.GetPlugIn<IShowTradeRequestAnswerPlugIn>()?.ShowTradeRequestAnswer(false);
                 }
 
                 this.CancelTrade(tradeAccepter);
+                tradeAccepter.ViewPlugIns.GetPlugIn<IShowTradeRequestAnswerPlugIn>()?.ShowTradeRequestAnswer(false);
             }
         }
 
@@ -53,11 +56,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Trade
         {
             trader.BackupInventory = new BackupItemStorage(trader.Inventory.ItemStorage);
             trader.TradingMoney = 0;
-
-            if (trader is Player player)
-            {
-                player.PlayerView.TradeView.TradeOpened();
-            }
+            trader.ViewPlugIns.GetPlugIn<IShowTradeRequestAnswerPlugIn>()?.ShowTradeRequestAnswer(true);
         }
     }
 }

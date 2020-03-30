@@ -4,22 +4,14 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
 {
+    using MUnique.OpenMU.DataModel.Entities;
+    using MUnique.OpenMU.GameLogic.Views.Inventory;
+
     /// <summary>
     /// Action to pick up an item from the floor.
     /// </summary>
     public class PickupItemAction
     {
-        private readonly IGameContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PickupItemAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public PickupItemAction(IGameContext gameContext)
-        {
-            this.gameContext = gameContext;
-        }
-
         /// <summary>
         /// Pickups the item.
         /// </summary>
@@ -30,35 +22,49 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items
             var droppedItem = player.CurrentMap.GetDrop(dropId);
             if (droppedItem == null)
             {
+                player.ViewPlugIns.GetPlugIn<IItemPickUpFailedPlugIn>()?.ItemPickUpFailed(ItemPickFailReason.General);
                 return;
             }
 
-            this.PickupItem(player, droppedItem);
+            if (this.TryPickupItem(player, droppedItem, out var stackTarget))
+            {
+                if (stackTarget != null)
+                {
+                    player.ViewPlugIns.GetPlugIn<IItemPickUpFailedPlugIn>()?.ItemPickUpFailed(ItemPickFailReason.ItemStacked);
+                    player.ViewPlugIns.GetPlugIn<IItemDurabilityChangedPlugIn>()?.ItemDurabilityChanged(stackTarget, false);
+                }
+                else
+                {
+                    player.ViewPlugIns.GetPlugIn<IItemAppearPlugIn>()?.ItemAppear(droppedItem.Item);
+                }
+            }
+            else
+            {
+                player.ViewPlugIns.GetPlugIn<IItemPickUpFailedPlugIn>()?.ItemPickUpFailed(ItemPickFailReason.General);
+            }
         }
 
-        private void PickupItem(Player player, DroppedItem droppedItem)
+        private bool TryPickupItem(Player player, DroppedItem droppedItem, out Item stackTarget)
         {
-            // Check the Distance Player <> Item
-            double dist = player.GetDistanceTo(droppedItem);
+            stackTarget = null;
+            if (!player.Alive)
+            {
+                return false;
+            }
+
+            var dist = (int)player.GetDistanceTo(droppedItem);
             if (dist > 3)
             {
-                return;
+                return false;
             }
 
-            // Check Inv Space
             int slot = player.Inventory.CheckInvSpace(droppedItem.Item);
-            if (slot < 12)
+            if (slot < InventoryConstants.EquippableSlotsCount)
             {
-                return;
+                return false;
             }
 
-            var success = droppedItem.TryPickUpBy(player);
-            if (success)
-            {
-                player.PlayerView.InventoryView.ItemAppear(droppedItem.Item);
-            }
-
-            // todo: "Obtained message" ?? guess not
+            return droppedItem.TryPickUpBy(player, out stackTarget);
         }
     }
 }

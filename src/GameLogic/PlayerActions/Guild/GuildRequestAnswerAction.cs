@@ -4,25 +4,15 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
 {
-    using System.Collections.Generic;
-    using MUnique.OpenMU.DataModel.Entities;
-    using Views;
+    using MUnique.OpenMU.GameLogic.Views.Guild;
+    using MUnique.OpenMU.Interfaces;
 
     /// <summary>
     /// Action for a guild master player to answer the guild membership request.
     /// </summary>
     public class GuildRequestAnswerAction
     {
-        private readonly IGameServerContext gameContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GuildRequestAnswerAction"/> class.
-        /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public GuildRequestAnswerAction(IGameServerContext gameContext)
-        {
-            this.gameContext = gameContext;
-        }
+        private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(GuildRequestAnswerAction));
 
         /// <summary>
         /// Answers the request.
@@ -31,29 +21,46 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.Guild
         /// <param name="accept">If set to <c>true</c>, the membership has been accepted. Otherwise, not.</param>
         public void AnswerRequest(Player player, bool accept)
         {
+            var guildServer = (player.GameContext as IGameServerContext)?.GuildServer;
+            if (guildServer == null)
+            {
+                return;
+            }
+
             var lastGuildRequester = player.LastGuildRequester;
             if (lastGuildRequester == null)
             {
                 return;
             }
 
-            if (lastGuildRequester.SelectedCharacter.GuildMemberInfo != null)
+            if (lastGuildRequester.GuildStatus != null)
             {
-                lastGuildRequester.PlayerView.GuildView.GuildJoinResponse(GuildRequestAnswerResult.AlreadyHaveGuild);
+                lastGuildRequester.ViewPlugIns.GetPlugIn<IGuildJoinResponsePlugIn>()?.ShowGuildJoinResponse(GuildRequestAnswerResult.AlreadyHaveGuild);
                 return;
+            }
+
+            if (player.GuildStatus?.Position != GuildPosition.GuildMaster)
+            {
+                Log.WarnFormat("Suspicious request for player with name: {0} (player is not a guild master), could be hack attempt.", player.Name);
+                lastGuildRequester.ViewPlugIns.GetPlugIn<IGuildJoinResponsePlugIn>()?.ShowGuildJoinResponse(GuildRequestAnswerResult.NotTheGuildMaster);
+                return;
+            }
+
+            if (player.PlayerState.CurrentState != PlayerState.EnteredWorld
+                || lastGuildRequester.PlayerState.CurrentState != PlayerState.EnteredWorld)
+            {
+                lastGuildRequester.ViewPlugIns.GetPlugIn<IGuildJoinResponsePlugIn>()?.ShowGuildJoinResponse(GuildRequestAnswerResult.GuildMasterOrRequesterIsBusy);
             }
 
             if (accept)
             {
-                var guildMember = this.gameContext.GuildServer.CreateGuildMember(player.SelectedCharacter.GuildMemberInfo.GuildId, player.LastGuildRequester.SelectedCharacter.Id, player.LastGuildRequester.SelectedCharacter.Name, GuildPosition.NormalMember);
-                player.LastGuildRequester.SelectedCharacter.GuildMemberInfo = guildMember;
+                var guildStatus = guildServer.CreateGuildMember(player.GuildStatus.GuildId, player.LastGuildRequester.SelectedCharacter.Id, lastGuildRequester.SelectedCharacter.Name, GuildPosition.NormalMember, ((IGameServerContext)player.GameContext).Id);
+                lastGuildRequester.GuildStatus = guildStatus;
 
-                player.LastGuildRequester.ShortGuildID = this.gameContext.GuildServer.GuildMemberEnterGame(guildMember.GuildId, guildMember.Name, this.gameContext.Id);
-                var playerList = new List<Player>(1) { player };
-                player.ForEachObservingPlayer(p => p.PlayerView.GuildView.AssignPlayersToGuild(playerList, false), true);
+                lastGuildRequester.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IAssignPlayersToGuildPlugIn>()?.AssignPlayerToGuild(lastGuildRequester, false), true);
             }
 
-            lastGuildRequester.PlayerView.GuildView.GuildJoinResponse(accept ? GuildRequestAnswerResult.Accepted : GuildRequestAnswerResult.Refused);
+            lastGuildRequester.ViewPlugIns.GetPlugIn<IGuildJoinResponsePlugIn>()?.ShowGuildJoinResponse(accept ? GuildRequestAnswerResult.Accepted : GuildRequestAnswerResult.Refused);
             player.LastGuildRequester = null;
         }
     }

@@ -4,35 +4,36 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions
 {
+    using System;
     using System.Collections.Generic;
+    using System.ComponentModel;
+    using System.Linq;
     using log4net;
+    using MUnique.OpenMU.GameLogic.PlugIns;
     using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.PlugIns.ChatCommands;
 
     /// <summary>
     /// Action to send chat messages.
     /// </summary>
     public class ChatMessageAction
     {
-        private static ILog log = LogManager.GetLogger(typeof(ChatMessageAction));
-
-        private readonly IGameContext gameContext;
+        private static readonly ILog Log = LogManager.GetLogger(typeof(ChatMessageAction));
 
         private readonly IDictionary<string, ChatMessageType> messagePrefixes;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ChatMessageAction"/> class.
         /// </summary>
-        /// <param name="gameContext">The game context.</param>
-        public ChatMessageAction(IGameContext gameContext)
+        public ChatMessageAction()
         {
-            this.gameContext = gameContext;
             this.messagePrefixes = new SortedDictionary<string, ChatMessageType>(new ReverseComparer())
             {
                 { "~", ChatMessageType.Party },
                 { "@", ChatMessageType.Guild },
                 { "@@", ChatMessageType.Alliance },
                 { "$", ChatMessageType.Gens },
-                { "/", ChatMessageType.Command }
+                { "/", ChatMessageType.Command },
             };
         }
 
@@ -48,76 +49,88 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions
             ChatMessageType messageType = this.GetMessageType(message, whisper);
             if (messageType != ChatMessageType.Whisper && playerName != sender.SelectedCharacter.Name)
             {
-                log.WarnFormat("Maybe Hacker, Charname in chat packet != charname\t [{0}] <> [{1}]", sender.SelectedCharacter.Name, playerName);
+                Log.WarnFormat("Maybe Hacker, Charname in chat packet != charname\t [{0}] <> [{1}]", sender.SelectedCharacter.Name, playerName);
             }
 
-            if (messageType == ChatMessageType.Command)
+            switch (messageType)
             {
-                this.ChatCommand(sender, message);
-                return;
-            }
-
-            if (messageType == ChatMessageType.Whisper)
-            {
-                log.DebugFormat("Whisper Message Received From [{0}] to [{1}]:[{1}]", sender.SelectedCharacter.Name, playerName, message);
-                var whisperReceiver = this.gameContext.GetPlayerByCharacterName(playerName);
-                if (whisperReceiver != null)
-                {
-                    whisperReceiver.PlayerView.ChatMessage(message, sender.SelectedCharacter.Name, ChatMessageType.Whisper);
-                }
-            }
-            else
-            {
-                log.DebugFormat("Chat Message Received: [{0}]:[{1}]", sender.SelectedCharacter.Name, message);
-                if (messageType == ChatMessageType.Party)
-                {
-                    if (sender.Party != null)
+                case ChatMessageType.Command:
+                    var commandKey = message.Split(' ').First();
+                    var commandHandler = sender.GameContext.PlugInManager.GetStrategy<IChatCommandPlugIn>(commandKey);
+                    if (commandHandler == null)
                     {
-                        sender.Party.SendChatMessage(message, sender.SelectedCharacter.Name);
+                        break;
                     }
-                }
-                else if (messageType == ChatMessageType.Alliance)
-                {
-                    // gameContext.GuildServer.AllianceMessage(Player.ShortGuildID, Player.SelectedCharacter.Name, message);
-                }
-                else if (messageType == ChatMessageType.Guild && sender.ShortGuildID != 0)
-                {
-                    var guildServer = (this.gameContext as IGameServerContext)?.GuildServer;
-                    if (guildServer != null)
+
+                    if (sender.SelectedCharacter.CharacterStatus >= commandHandler.MinCharacterStatusRequirement)
                     {
-                        var guildId = sender.SelectedCharacter?.GuildMemberInfo?.GuildId;
-                        if (guildId.HasValue)
+                        commandHandler.HandleCommand(sender, message);
+                    }
+                    else
+                    {
+                        Log.WarnFormat($"{sender.Name} is trying to execute {commandKey} command without meet the requirements");
+                    }
+
+                    break;
+                case ChatMessageType.Whisper:
+                    var whisperReceiver = sender.GameContext.GetPlayerByCharacterName(playerName);
+                    if (whisperReceiver != null)
+                    {
+                        var eventArgs = new CancelEventArgs();
+                        sender.GameContext.PlugInManager.GetPlugInPoint<IWhisperMessageReceivedPlugIn>()?.WhisperMessageReceived(sender, whisperReceiver, message, eventArgs);
+                        if (!eventArgs.Cancel)
                         {
-                            guildServer.GuildMessage(guildId.Value, sender.SelectedCharacter.Name, message);
+                            whisperReceiver.ViewPlugIns.GetPlugIn<IChatViewPlugIn>()?.ChatMessage(message, sender.SelectedCharacter.Name, ChatMessageType.Whisper);
                         }
                     }
-                }
-                else
-                {
-                    log.DebugFormat("Sending Chat Message to Observers, Count: {0}", sender.Observers.Count);
-                    sender.ForEachObservingPlayer(p => p.PlayerView.ChatMessage(message, sender.SelectedCharacter.Name, ChatMessageType.Normal), true);
-                }
+
+                    break;
+                default:
+                    this.HandleChatMessage(sender, message, messageType);
+                    break;
             }
         }
 
-        private void ChatCommand(Player player, string message)
+        private void HandleChatMessage(Player sender, string message, ChatMessageType messageType)
         {
-            // TODO: implement plugin system to be able to add custom commands.
-            string[] sa = message.Split(' ');
-            switch (sa[0])
+            Log.DebugFormat("Chat Message Received: [{0}]:[{1}]", sender.SelectedCharacter.Name, message);
+            var eventArgs = new CancelEventArgs();
+            sender.GameContext.PlugInManager.GetPlugInPoint<IChatMessageReceivedPlugIn>()?.ChatMessageReceived(sender, message, eventArgs);
+            if (eventArgs.Cancel)
             {
-                /* after Season 5.4 it works by a separate packet. look for WarpS54Action.
-                case "/move":
-                case "/warp":
-                    ReadWarp(sa);
+                return;
+            }
+
+            switch (messageType)
+            {
+                case ChatMessageType.Party:
+                    sender.Party?.SendChatMessage(message, sender.SelectedCharacter.Name);
                     break;
-                    */
-                case "/teleport":
-                    if (sa.Length > 2)
+                case ChatMessageType.Alliance:
+                {
+                    if (sender.GuildStatus != null)
                     {
-                        player.Move(byte.Parse(sa[1]), byte.Parse(sa[2]), MoveType.Instant);
+                        var guildServer = (sender.GameContext as IGameServerContext)?.GuildServer;
+                        guildServer?.AllianceMessage(sender.GuildStatus.GuildId, sender.SelectedCharacter.Name, message);
                     }
 
+                    break;
+                }
+
+                case ChatMessageType.Guild:
+                {
+                    if (sender.GuildStatus != null)
+                    {
+                        var guildServer = (sender.GameContext as IGameServerContext)?.GuildServer;
+                        guildServer?.GuildMessage(sender.GuildStatus.GuildId, sender.SelectedCharacter.Name, message);
+                    }
+
+                    break;
+                }
+
+                default:
+                    Log.DebugFormat("Sending Chat Message to Observers, Count: {0}", sender.Observers.Count);
+                    sender.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IChatViewPlugIn>()?.ChatMessage(message, sender.SelectedCharacter.Name, ChatMessageType.Normal), true);
                     break;
             }
         }
@@ -148,7 +161,7 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions
         {
             public int Compare(string x, string y)
             {
-                return string.Compare(y, x);
+                return string.Compare(y, x, StringComparison.InvariantCultureIgnoreCase);
             }
         }
     }

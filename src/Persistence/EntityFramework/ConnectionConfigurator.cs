@@ -28,9 +28,19 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
         Account,
 
         /// <summary>
-        /// The configuration role which can load configuration data.
+        /// The role which can load configuration data.
         /// </summary>
         Configuration,
+
+        /// <summary>
+        /// The role which can load guild data.
+        /// </summary>
+        Guild,
+
+        /// <summary>
+        /// The role which can load friend data.
+        /// </summary>
+        Friend,
     }
 
     /// <summary>
@@ -38,6 +48,10 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
     /// </summary>
     public static class ConnectionConfigurator
     {
+        private const string DbHostVariableName = "DB_HOST";
+        private const string DbAdminUserVariableName = "DB_ADMIN_USER";
+        private const string DbAdminPasswordVariableName = "DB_ADMIN_PW";
+
         private static readonly IDictionary<Type, ConnectionSetting> Settings = LoadSettings();
 
         /// <summary>
@@ -70,7 +84,13 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
         /// <exception cref="NotImplementedException">At the moment only Npgsql engine (PostgreSQL) is implemented.</exception>
         internal static void Configure(this DbContext context, DbContextOptionsBuilder optionsBuilder)
         {
-            if (Settings.TryGetValue(context.GetType(), out ConnectionSetting setting))
+            var type = context.GetType();
+            if (type.IsGenericType)
+            {
+                type = type.GetGenericTypeDefinition();
+            }
+
+            if (Settings.TryGetValue(type, out ConnectionSetting setting))
             {
                 switch (setting.DatabaseEngine)
                 {
@@ -82,7 +102,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
                 }
             }
 
-            throw new Exception($"No configuration found for context type {context.GetType()}");
+            throw new ArgumentException($"No configuration found for context type {context.GetType()}", nameof(context));
         }
 
         private static Type GetContextTypeOfRole(DatabaseRole role)
@@ -95,9 +115,12 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
                     return typeof(EntityDataContext);
                 case DatabaseRole.Configuration:
                     return typeof(ConfigurationContext);
+                case DatabaseRole.Guild:
+                    return typeof(GuildContext);
+                case DatabaseRole.Friend:
+                    return typeof(FriendContext);
+                default: throw new ArgumentException($"Role {role} unknown.");
             }
-
-            throw new ArgumentException($"Role {role} unknown.");
         }
 
         private static IDictionary<Type, ConnectionSetting> LoadSettings()
@@ -109,7 +132,7 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
                 IgnoreWhitespace = true,
                 DtdProcessing = DtdProcessing.Ignore,
                 CloseInput = true,
-                XmlResolver = null
+                XmlResolver = null,
             };
             var result = new Dictionary<Type, ConnectionSetting>();
 
@@ -124,16 +147,39 @@ namespace MUnique.OpenMU.Persistence.EntityFramework
                         foreach (var setting in xmlSettings.Connections)
                         {
                             Type contextType = Type.GetType(setting.ContextTypeName, true, true);
-                            if (contextType != null)
-                            {
-                                result.Add(contextType, setting);
-                            }
+                            ApplyEnvironmentVariables(setting);
+
+                            result.Add(contextType, setting);
                         }
                     }
                 }
             }
 
             return result;
+        }
+
+        private static void ApplyEnvironmentVariables(ConnectionSetting setting)
+        {
+            if (Environment.GetEnvironmentVariable(DbHostVariableName) is string dbHost
+                                            && !string.IsNullOrEmpty(dbHost))
+            {
+                setting.ConnectionString = setting.ConnectionString.Replace("Server=localhost;", $"Server={dbHost};");
+            }
+
+            if (setting.ConnectionString.Contains("User Id=postgres;"))
+            {
+                if (Environment.GetEnvironmentVariable(DbAdminUserVariableName) is string dbAdminUser
+                    && !string.IsNullOrEmpty(dbAdminUser))
+                {
+                    setting.ConnectionString = setting.ConnectionString.Replace("User Id=postgres;", $"User Id={dbAdminUser};");
+                }
+
+                if (Environment.GetEnvironmentVariable(DbAdminPasswordVariableName) is string dbAdminPassword
+                    && !string.IsNullOrEmpty(dbAdminPassword))
+                {
+                    setting.ConnectionString = setting.ConnectionString.Replace("Password=admin;", $"Password={dbAdminPassword};");
+                }
+            }
         }
     }
 }

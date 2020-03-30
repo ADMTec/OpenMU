@@ -5,37 +5,24 @@
 namespace MUnique.OpenMU.AdminPanel
 {
     using System;
-    using System.Collections.Generic;
-    using Nancy.Json;
+    using System.Text.Json;
+    using System.Text.Json.Serialization;
 
     /// <summary>
-    /// A converter which converts timespans.
+    /// Converter for <see cref="TimeSpan"/>s which converts them to and from a string in their default format.
     /// </summary>
-    public class TimeSpanConverter : DefaultJavaScriptConverter
+    public class TimeSpanConverter : JsonConverter<TimeSpan>
     {
-        /// <inheritdoc/>
-        public override IEnumerable<Type> SupportedTypes
+        /// <inheritdoc />
+        public override TimeSpan Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            get
-            {
-                yield return typeof(TimeSpan);
-            }
+            return TimeSpan.Parse(reader.GetString());
         }
 
-        /// <inheritdoc/>
-        public override object Deserialize(IDictionary<string, object> dictionary, Type type, JavaScriptSerializer serializer)
+        /// <inheritdoc />
+        public override void Write(Utf8JsonWriter writer, TimeSpan value, JsonSerializerOptions options)
         {
-            if (dictionary.TryGetValue("Ticks", out object timeSpanTicks) && timeSpanTicks is string timeSpanStr)
-            {
-                return new TimeSpan(int.Parse(timeSpanStr));
-            }
-
-            if (dictionary.TryGetValue("TotalMilliseconds", out object timeSpanMilliseconds) && timeSpanMilliseconds is string timeSpanMillisecondsStr)
-            {
-                return new TimeSpan(int.Parse(timeSpanMillisecondsStr) * TimeSpan.TicksPerMillisecond);
-            }
-
-            throw new ArgumentException("timespan property not found; only Ticks and TotalMilliseconds supported.");
+            writer.WriteStringValue(value.ToString());
         }
     }
 }

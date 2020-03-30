@@ -4,7 +4,11 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.PlayerStore
 {
+    using System.Linq;
     using log4net;
+    using MUnique.OpenMU.GameLogic.PlugIns;
+    using MUnique.OpenMU.GameLogic.Views;
+    using MUnique.OpenMU.GameLogic.Views.Inventory;
     using MUnique.OpenMU.Interfaces;
 
     /// <summary>
@@ -12,7 +16,8 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.PlayerStore
     /// </summary>
     public class BuyRequestAction
     {
-        private static ILog log = LogManager.GetLogger(typeof(BuyRequestAction));
+        private static readonly ILog Log = LogManager.GetLogger(typeof(BuyRequestAction));
+        private readonly CloseStoreAction closeStoreAction = new CloseStoreAction();
 
         /// <summary>
         /// Buys the item from another player shop.
@@ -24,28 +29,30 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.PlayerStore
         {
             if (!requestedPlayer.ShopStorage.StoreOpen)
             {
-                log.DebugFormat("Store not open, Character {0}", requestedPlayer.SelectedCharacter.Name);
-                player.PlayerView.ShowMessage("Player's Store not open.", MessageType.BlueNormal);
+                Log.DebugFormat("Store not open, Character {0}", requestedPlayer.SelectedCharacter.Name);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Player's Store not open.", MessageType.BlueNormal); // Code: 3
                 return;
             }
 
             if (slot < InventoryConstants.FirstStoreItemSlotIndex)
             {
-                log.WarnFormat("Store Slot too low: {0}, possible hacker", slot);
+                Log.WarnFormat("Store Slot too low: {0}, possible hacker", slot);
                 return;
             }
 
             var item = requestedPlayer.ShopStorage.GetItem(slot);
-            if (item == null)
+            if (item?.StorePrice == null)
             {
-                log.DebugFormat("Item unavailable, Slot {0}", slot);
-                player.PlayerView.ShowMessage("Item unavailable.", MessageType.BlueNormal);
+                Log.DebugFormat("Item unavailable, Slot {0}", slot);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Item unavailable.", MessageType.BlueNormal); // Code 5?
                 return;
             }
 
-            if (player.SelectedCharacter.Money < requestedPlayer.ShopStorage.StorePrices[slot - InventoryConstants.FirstStoreItemSlotIndex])
+            var itemPrice = item.StorePrice.Value;
+
+            if (player.Money < itemPrice)
             {
-                player.PlayerView.ShowMessage("Not enough Zen.", MessageType.BlueNormal);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Not enough Zen.", MessageType.BlueNormal);
                 return;
             }
 
@@ -53,34 +60,71 @@ namespace MUnique.OpenMU.GameLogic.PlayerActions.PlayerStore
             int freeslot = player.Inventory.CheckInvSpace(item);
             if (freeslot == -1)
             {
-                player.PlayerView.ShowMessage("Not enough Space in your Inventory.", MessageType.BlueNormal);
+                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Not enough Space in your Inventory.", MessageType.BlueNormal);
                 return;
             }
 
+            bool itemSold = false;
             lock (requestedPlayer.ShopStorage.StoreLock)
             {
-                item = requestedPlayer.ShopStorage.GetItem(slot);
-                if (item == null)
+                if (!requestedPlayer.ShopStorage.StoreOpen)
                 {
-                    player.PlayerView.ShowMessage("Sorry, Item was sold in the meantime.", MessageType.BlueNormal);
+                    Log.DebugFormat("Store not open anymore, Character {0}", requestedPlayer.SelectedCharacter.Name);
+                    player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Player's Store not open anymore.", MessageType.BlueNormal);
                     return;
                 }
 
-                int price = (int)requestedPlayer.ShopStorage.StorePrices[slot - InventoryConstants.FirstStoreItemSlotIndex];
+                item = requestedPlayer.ShopStorage.GetItem(slot);
+                if (item == null)
+                {
+                    player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Sorry, Item was sold in the meantime.", MessageType.BlueNormal);
+                    return;
+                }
 
-                // Remove Item, Add Money
-                log.DebugFormat("BuyRequest, Item Price: {0}", price);
-                player.ShopStorage.RemoveItem(item);
-                requestedPlayer.TryAddMoney(price);
-                requestedPlayer.PlayerView.InventoryView.UpdateMoney();
-                requestedPlayer.PlayerView.InventoryView.ItemSoldByPlayerShop(slot, player);
-                item.ItemSlot = (byte)freeslot;
-                player.Inventory.AddItem(item.ItemSlot, item);
+                Log.DebugFormat("BuyRequest, Item Price: {0}", itemPrice);
+                if (player.TryRemoveMoney(itemPrice))
+                {
+                    if (requestedPlayer.TryAddMoney(itemPrice))
+                    {
+                        using (var itemContext = requestedPlayer.GameContext.PersistenceContextProvider.CreateNewTradeContext())
+                        {
+                            itemContext.Attach(item);
+                            requestedPlayer.ShopStorage.RemoveItem(item);
+                            requestedPlayer.ViewPlugIns.GetPlugIn<IUpdateMoneyPlugIn>()?.UpdateMoney();
+                            requestedPlayer.ViewPlugIns.GetPlugIn<IItemSoldByPlayerShopPlugIn>()?.ItemSoldByPlayerShop(slot, player);
+                            requestedPlayer.ViewPlugIns.GetPlugIn<Views.Inventory.IItemRemovedPlugIn>()?.RemoveItem(slot);
+                            item.ItemSlot = (byte)freeslot;
+                            item.StorePrice = null;
+                            player.Inventory.AddItem(item);
+                            requestedPlayer.PersistenceContext.Detach(item);
+                            itemContext.SaveChanges();
+                            player.PersistenceContext.Attach(item);
+                            player.ViewPlugIns.GetPlugIn<IItemBoughtFromPlayerShopPlugIn>()?.ItemBoughtFromPlayerShop(item);
+                            player.ViewPlugIns.GetPlugIn<IUpdateMoneyPlugIn>()?.UpdateMoney();
+                            itemSold = true;
 
-                // Add Item, Remove Money
-                player.PlayerView.InventoryView.ItemBoughtFromPlayerShop(item);
-                player.TryRemoveMoney(price);
-                player.PlayerView.InventoryView.UpdateMoney();
+                            player.GameContext.PlugInManager.GetPlugInPoint<IItemSoldToOtherPlayerPlugIn>()?.ItemSold(requestedPlayer, item, player);
+                        }
+                    }
+                    else
+                    {
+                        player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("The inventory of the seller is full.", MessageType.BlueNormal);
+                        player.TryAddMoney(itemPrice);
+                    }
+                }
+            }
+
+            if (itemSold)
+            {
+                if (requestedPlayer.ShopStorage.Items.Any())
+                {
+                    // this update may be sent to other players as well which are currently looking at the store
+                    player.ViewPlugIns.GetPlugIn<Views.PlayerShop.IShowShopItemListPlugIn>()?.ShowShopItemList(requestedPlayer, true);
+                }
+                else
+                {
+                    this.closeStoreAction.CloseStore(requestedPlayer);
+                }
             }
         }
     }

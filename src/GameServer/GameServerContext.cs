@@ -2,119 +2,217 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
-namespace MUnique.OpenMU.GameServer
+namespace MUnique.OpenMU.GameServer;
+
+using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
+using MUnique.OpenMU.DataModel.Configuration;
+using MUnique.OpenMU.GameLogic;
+using MUnique.OpenMU.GameLogic.Views.Guild;
+using MUnique.OpenMU.Interfaces;
+using MUnique.OpenMU.Persistence;
+using MUnique.OpenMU.PlugIns;
+
+/// <summary>
+/// The context of a game server which contains all important configurations and services used by one game server instance.
+/// </summary>
+public class GameServerContext : GameContext, IGameServerContext
 {
-    using System;
-    using MUnique.OpenMU.DataModel.Configuration;
-    using MUnique.OpenMU.GameLogic;
-    using MUnique.OpenMU.GameLogic.Views.Guild;
-    using MUnique.OpenMU.Interfaces;
-    using MUnique.OpenMU.Persistence;
+    private readonly GameServerDefinition _gameServerDefinition;
+
+    private readonly ConcurrentDictionary<uint, List<Player>> _playersByGuild = new ();
 
     /// <summary>
-    /// The context of a game server which contains all important configurations and services used by one game server instance.
+    /// Initializes a new instance of the <see cref="GameServerContext" /> class.
     /// </summary>
-    public class GameServerContext : GameContext, IGameServerContext
+    /// <param name="gameServerDefinition">The game server definition.</param>
+    /// <param name="guildServer">The guild server.</param>
+    /// <param name="loginServer">The login server.</param>
+    /// <param name="friendServer">The friend server.</param>
+    /// <param name="persistenceContextProvider">The persistence context provider.</param>
+    /// <param name="mapInitializer">The map initializer.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    /// <param name="plugInManager">The plug in manager.</param>
+    /// <param name="dropGenerator">The drop generator.</param>
+    public GameServerContext(
+        GameServerDefinition gameServerDefinition,
+        IGuildServer guildServer,
+        ILoginServer loginServer,
+        IFriendServer friendServer,
+        IPersistenceContextProvider persistenceContextProvider,
+        IMapInitializer mapInitializer,
+        ILoggerFactory loggerFactory,
+        PlugInManager plugInManager,
+        IDropGenerator dropGenerator)
+        : base(
+            gameServerDefinition.GameConfiguration ?? throw new InvalidOperationException("GameServerDefinition requires a GameConfiguration"),
+            persistenceContextProvider,
+            mapInitializer,
+            loggerFactory,
+            plugInManager,
+            dropGenerator)
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GameServerContext" /> class.
-        /// </summary>
-        /// <param name="gameServerDefinition">The game server definition.</param>
-        /// <param name="guildServer">The guild server.</param>
-        /// <param name="loginServer">The login server.</param>
-        /// <param name="friendServer">The friend server.</param>
-        /// <param name="persistenceContextProvider">The persistence context provider.</param>
-        /// <param name="mapInitializer">The map initializer.</param>
-        public GameServerContext(
-            GameServerDefinition gameServerDefinition,
-            IGuildServer guildServer,
-            ILoginServer loginServer,
-            IFriendServer friendServer,
-            IPersistenceContextProvider persistenceContextProvider,
-            IMapInitializer mapInitializer)
-            : base(gameServerDefinition.GameConfiguration, persistenceContextProvider, mapInitializer)
+        this._gameServerDefinition = gameServerDefinition;
+        this.Id = gameServerDefinition.ServerID;
+        this.GuildServer = guildServer;
+        this.LoginServer = loginServer;
+        this.FriendServer = friendServer;
+        this.ServerConfiguration = gameServerDefinition.ServerConfiguration ?? throw new InvalidOperationException("GameServerDefinition requires a ServerConfiguration");
+    }
+
+    /// <summary>
+    /// Occurs when a guild has been deleted.
+    /// </summary>
+    public event EventHandler<GuildDeletedEventArgs>? GuildDeleted;
+
+    /// <inheritdoc/>
+    public byte Id { get; }
+
+    /// <inheritdoc/>
+    public IGuildServer GuildServer { get; }
+
+    /// <inheritdoc/>
+    public ILoginServer LoginServer { get; }
+
+    /// <inheritdoc/>
+    public IFriendServer FriendServer { get; }
+
+    /// <inheritdoc/>
+    public GameServerConfiguration ServerConfiguration { get; }
+
+    /// <inheritdoc />
+    public override float ExperienceRate => base.ExperienceRate * this._gameServerDefinition.ExperienceRate;
+
+    /// <inheritdoc />
+    public void ForEachGuildPlayer(uint guildId, Action<Player> action)
+    {
+        if (!this._playersByGuild.TryGetValue(guildId, out var playerList))
         {
-            this.Id = gameServerDefinition.ServerID;
-            this.GuildServer = guildServer;
-            this.LoginServer = loginServer;
-            this.FriendServer = friendServer;
-            this.ServerConfiguration = gameServerDefinition.ServerConfiguration;
+            return;
         }
 
-        /// <summary>
-        /// Occurs when a guild has been deleted.
-        /// </summary>
-        public event EventHandler<GuildDeletedEventArgs> GuildDeleted;
-
-        /// <inheritdoc/>
-        public byte Id { get; }
-
-        /// <inheritdoc/>
-        public IGuildServer GuildServer { get; }
-
-        /// <inheritdoc/>
-        public ILoginServer LoginServer { get; }
-
-        /// <inheritdoc/>
-        public IFriendServer FriendServer { get; }
-
-        /// <inheritdoc/>
-        public GameServerConfiguration ServerConfiguration { get; }
-
-        /// <inheritdoc/>
-        public override void AddPlayer(Player player)
+        lock (playerList)
         {
-            base.AddPlayer(player);
-            player.PlayerLeftWorld += this.PlayerLeftWorld;
-            player.PlayerEnteredWorld += this.PlayerEnteredWorld;
-        }
-
-        /// <inheritdoc/>
-        public override void RemovePlayer(Player player)
-        {
-            if (player == null)
+            for (int i = playerList.Count - 1; i >= 0; i--)
             {
-                return;
-            }
-
-            player.PlayerEnteredWorld -= this.PlayerEnteredWorld;
-            player.PlayerLeftWorld -= this.PlayerLeftWorld;
-            base.RemovePlayer(player);
-        }
-
-        /// <summary>
-        /// Raises the <see cref="GuildDeleted"/> event.
-        /// </summary>
-        /// <param name="guildId">The guild identifier.</param>
-        internal void RaiseGuildDeleted(uint guildId)
-        {
-            this.GuildDeleted?.Invoke(this, new GuildDeletedEventArgs(guildId));
-        }
-
-        private void PlayerEnteredWorld(object sender, EventArgs e)
-        {
-            if (sender is Player player)
-            {
-                this.FriendServer.SetOnlineState(player.SelectedCharacter.Id, player.SelectedCharacter.Name, this.Id);
-                player.GuildStatus = this.GuildServer.PlayerEnteredGame(player.SelectedCharacter.Id, player.SelectedCharacter.Name, this.Id);
-                if (player.GuildStatus != null)
-                {
-                    player.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IAssignPlayersToGuildPlugIn>()?.AssignPlayerToGuild(player, true), true);
-                }
+                var player = playerList[i];
+                action(player);
             }
         }
+    }
 
-        private void PlayerLeftWorld(object sender, EventArgs e)
+    /// <inheritdoc />
+    public void ForEachAlliancePlayer(uint guildId, Action<Player> action)
+    {
+        if (!this._playersByGuild.TryGetValue(guildId, out var playerList))
         {
-            if (sender is Player player)
+            return;
+        }
+
+        // TODO: iterate other guilds of the alliance as well; maybe introduce another dictionary with alliance players
+
+        lock (playerList)
+        {
+            for (int i = playerList.Count - 1; i >= 0; i--)
             {
-                this.FriendServer.SetOnlineState(player.SelectedCharacter.Id, player.SelectedCharacter.Name, 0xFF);
-                if (player.GuildStatus != null)
-                {
-                    this.GuildServer.GuildMemberLeftGame(player.GuildStatus.GuildId, player.SelectedCharacter.Id, this.Id);
-                    player.GuildStatus = null;
-                }
+                var player = playerList[i];
+                action(player);
             }
         }
+    }
+
+    /// <inheritdoc/>
+    public override void AddPlayer(Player player)
+    {
+        base.AddPlayer(player);
+        player.PlayerLeftWorld += this.PlayerLeftWorld;
+        player.PlayerEnteredWorld += this.PlayerEnteredWorld;
+    }
+
+    /// <inheritdoc/>
+    public override void RemovePlayer(Player player)
+    {
+        player.PlayerEnteredWorld -= this.PlayerEnteredWorld;
+        player.PlayerLeftWorld -= this.PlayerLeftWorld;
+        base.RemovePlayer(player);
+    }
+
+    /// <inheritdoc />
+    public void RemoveGuild(uint guildId)
+    {
+        this._playersByGuild.Remove(guildId, out _);
+        this.GuildDeleted?.Invoke(this, new GuildDeletedEventArgs(guildId));
+    }
+
+    /// <inheritdoc />
+    public void RegisterGuildMember(Player guildMember)
+    {
+        if (guildMember.GuildStatus is null)
+        {
+            return;
+        }
+
+        var guildId = guildMember.GuildStatus.GuildId;
+        var guildList = this._playersByGuild.GetOrAdd(guildId, id => new List<Player>());
+        lock (guildList)
+        {
+            guildList.Add(guildMember);
+        }
+    }
+
+    /// <inheritdoc />
+    public void UnregisterGuildMember(Player guildMember)
+    {
+        if (guildMember.GuildStatus is null)
+        {
+            return;
+        }
+
+        var guildId = guildMember.GuildStatus.GuildId;
+        if (!this._playersByGuild.TryGetValue(guildId, out var guildList))
+        {
+            return;
+        }
+
+        lock (guildList)
+        {
+            guildList.Remove(guildMember);
+        }
+    }
+
+    private void PlayerEnteredWorld(object? sender, EventArgs e)
+    {
+        if (sender is not Player { SelectedCharacter: { } selectedCharacter } player)
+        {
+            return;
+        }
+
+        this.FriendServer.SetOnlineState(selectedCharacter.Id, selectedCharacter.Name, this.Id);
+        player.GuildStatus = this.GuildServer.PlayerEnteredGame(selectedCharacter.Id, selectedCharacter.Name, this.Id);
+        if (player.GuildStatus is null)
+        {
+            return;
+        }
+
+        player.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IAssignPlayersToGuildPlugIn>()?.AssignPlayerToGuild(player, true), true);
+        this.RegisterGuildMember(player);
+    }
+
+    private void PlayerLeftWorld(object? sender, EventArgs e)
+    {
+        if (sender is not Player { SelectedCharacter: { } selectedCharacter } player)
+        {
+            return;
+        }
+
+        this.FriendServer.SetOnlineState(selectedCharacter.Id, selectedCharacter.Name, 0xFF);
+        if (player.GuildStatus is not { } guildStatus)
+        {
+            return;
+        }
+
+        this.GuildServer.GuildMemberLeftGame(guildStatus.GuildId, selectedCharacter.Id, this.Id);
+        this.UnregisterGuildMember(player);
+        player.GuildStatus = null;
     }
 }

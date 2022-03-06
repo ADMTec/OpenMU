@@ -88,7 +88,7 @@
       <Code>F1</Code>
       <SubCode>01</SubCode>
       <Name>LoginLongPassword</Name>
-      <Length>43</Length>
+      <Length>60</Length>
       <Direction>ClientToServer</Direction>
       <SentWhen>The player tries to log into the game.</SentWhen>
       <CausedReaction>The server is authenticating the sent login name and password. If it's correct, the state of the player is proceeding to be logged in.</CausedReaction>
@@ -118,6 +118,12 @@
           <Name>ClientVersion</Name>
           <Length>5</Length>
         </Field>
+        <Field>
+          <Index>43</Index>
+          <Type>Binary</Type>
+          <Name>ClientSerial</Name>
+          <Length>16</Length>
+        </Field>
       </Fields>
     </Packet>
     <Packet>
@@ -125,7 +131,7 @@
       <Code>F1</Code>
       <SubCode>01</SubCode>
       <Name>LoginShortPassword</Name>
-      <Length>33</Length>
+      <Length>50</Length>
       <Direction>ClientToServer</Direction>
       <SentWhen>The player tries to log into the game.</SentWhen>
       <CausedReaction>The server is authenticating the sent login name and password. If it's correct, the state of the player is proceeding to be logged in.</CausedReaction>
@@ -155,6 +161,12 @@
           <Name>ClientVersion</Name>
           <Length>5</Length>
         </Field>
+        <Field>
+          <Index>33</Index>
+          <Type>Binary</Type>
+          <Name>ClientSerial</Name>
+          <Length>16</Length>
+        </Field>
       </Fields>
     </Packet>
     <Packet>
@@ -162,7 +174,7 @@
       <Code>F1</Code>
       <SubCode>01</SubCode>
       <Name>Login075</Name>
-      <Length>31</Length>
+      <Length>48</Length>
       <Direction>ClientToServer</Direction>
       <SentWhen>The player tries to log into the game.</SentWhen>
       <CausedReaction>The server is authenticating the sent login name and password. If it's correct, the state of the player is proceeding to be logged in.</CausedReaction>
@@ -191,6 +203,12 @@
           <Type>Binary</Type>
           <Name>ClientVersion</Name>
           <Length>3</Length>
+        </Field>
+        <Field>
+          <Index>31</Index>
+          <Type>Binary</Type>
+          <Name>ClientSerial</Name>
+          <Length>16</Length>
         </Field>
       </Fields>
     </Packet>
@@ -439,9 +457,51 @@
         </Field>
         <Field>
           <Index>5</Index>
+          <Type>Enum</Type>
+          <TypeName>FruitUsage</TypeName>
+          <Name>FruitConsumption</Name>
+          <Description>Defines how the fruit is used. Only applies, if the the item is a fruit.</Description>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>FruitUsage</Name>
+          <Description>Defines how the fruit is used. Only applies, if the the item is a fruit.</Description>
+          <Values>
+            <EnumValue>
+              <Name>AddPoints</Name>
+              <Description>Adds 1~3 stat points to the character.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>RemovePoints</Name>
+              <Description>Removes 1~9 stat points from the character.</Description>
+              <Value>1</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>26</Code>
+      <Name>ConsumeItemRequest075</Name>
+      <Length>5</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>A player requests to 'consume' an item. This can be a potion which recovers some kind of attribute, or a jewel to upgrade a target item.</SentWhen>
+      <CausedReaction>The server tries to 'consume' the specified item and responses accordingly.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
           <Type>Byte</Type>
-          <Name>ItemUseType</Name>
-          <Description>Unknown field, we don't know what it's good for.</Description>
+          <Name>ItemSlot</Name>
+          <Description>The inventory slot index of the item which should be consumed.</Description>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>TargetSlot</Name>
+          <Description>If the item has an effect on another item, e.g. upgrading it, this field contains the inventory slot index of the target item.</Description>
         </Field>
       </Fields>
     </Packet>
@@ -546,18 +606,114 @@
       </Fields>
     </Packet>
     <Packet>
-      <HeaderType>C1Header</HeaderType>
+      <HeaderType>C3Header</HeaderType>
       <Code>1C</Code>
       <Name>EnterGateRequest</Name>
       <Length>8</Length>
       <Direction>ClientToServer</Direction>
-      <SentWhen>When the player enters an area on the game map which is configured as gate at the client data files.</SentWhen>
+      <SentWhen>Usually: When the player enters an area on the game map which is configured as gate at the client data files. In the special case of wizards, this packet is also used for the teleport skill. When this is the case, GateNumber is 0 and the target coordinates are specified.</SentWhen>
       <CausedReaction>If the player is allowed to enter the "gate", it's moved to the corresponding exit gate area.</CausedReaction>
       <Fields>
         <Field>
           <Index>4</Index>
           <Type>ShortLittleEndian</Type>
           <Name>GateNumber</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>TeleportTargetX</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>Byte</Type>
+          <Name>TeleportTargetY</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C3Header</HeaderType>
+      <Code>1C</Code>
+      <Name>EnterGateRequest075</Name>
+      <Length>6</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>Usually: When the player enters an area on the game map which is configured as gate at the client data files. In the special case of wizards, this packet is also used for the teleport skill. When this is the case, GateNumber is 0 and the target coordinates are specified.</SentWhen>
+      <CausedReaction>If the player is allowed to enter the "gate", it's moved to the corresponding exit gate area.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>GateNumber</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>TeleportTargetX</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>TeleportTargetY</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>82</Code>
+      <SubCode>00</SubCode>
+      <Name>UnlockVault</Name>
+      <Length>7</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>The player wants to unlock the protected vault with a pin.</SentWhen>
+      <CausedReaction>The vault lock state on the server is updated. VaultProtectionInformation is sent as response.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>Pin</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>82</Code>
+      <SubCode>01</SubCode>
+      <Name>SetVaultPin</Name>
+      <Length>27</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>The player wants to set a new pin for the vault when it's in unlocked state.</SentWhen>
+      <CausedReaction>The vault pin is set. VaultProtectionInformation is sent as response.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>Pin</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>String</Type>
+          <Name>Password</Name>
+          <Description>The password of the account, which is required to set a new vault pin.</Description>
+          <Length>20</Length>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>82</Code>
+      <SubCode>02</SubCode>
+      <Name>RemoveVaultPin</Name>
+      <Length>27</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>The player wants to remove the pin for the vault when it's in unlocked state.</SentWhen>
+      <CausedReaction>The vault pin is removed. VaultProtectionInformation is sent as response.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>6</Index>
+          <Type>String</Type>
+          <Name>Password</Name>
+          <Description>The password of the account, which is required to remove the vault pin.</Description>
+          <Length>20</Length>
         </Field>
       </Fields>
     </Packet>
@@ -819,6 +975,60 @@
         </Field>
         <Field>
           <Index>5</Index>
+          <LeftShifted>0</LeftShifted>
+          <Type>Byte</Type>
+          <Name>StepCount</Name>
+          <Length>4</Length>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <LeftShifted>4</LeftShifted>
+          <Type>Byte</Type>
+          <Name>TargetRotation</Name>
+          <Length>4</Length>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Binary</Type>
+          <Name>Directions</Name>
+          <Description>The directions of the walking path. The target is calculated by taking the source coordinates and applying the directions to it.</Description>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>10</Code>
+      <Name>WalkRequest075</Name>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>A player wants to walk on the game map.</SentWhen>
+      <CausedReaction>The player gets moved on the map, visible for other surrounding players.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SourceX</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>SourceY</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <LeftShifted>0</LeftShifted>
+          <Type>Byte</Type>
+          <Name>StepCount</Name>
+          <Length>4</Length>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <LeftShifted>4</LeftShifted>
+          <Type>Byte</Type>
+          <Name>TargetRotation</Name>
+          <Length>4</Length>
+        </Field>
+        <Field>
+          <Index>6</Index>
           <Type>Binary</Type>
           <Name>Directions</Name>
           <Description>The directions of the walking path. The target is calculated by taking the source coordinates and applying the directions to it.</Description>
@@ -1085,7 +1295,7 @@
       </Fields>
     </Packet>
     <Packet>
-      <HeaderType>C3Header</HeaderType>
+      <HeaderType>C1Header</HeaderType>
       <Code>19</Code>
       <Name>TargetedSkill075</Name>
       <Length>6</Length>
@@ -1096,12 +1306,51 @@
         <Field>
           <Index>3</Index>
           <Type>Byte</Type>
-          <Name>SkillId</Name>
+          <Name>SkillIndex</Name>
+          <Description>The index of the skill in the skill list.</Description>
         </Field>
         <Field>
           <Index>4</Index>
           <Type>ShortBigEndian</Type>
           <Name>TargetId</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C3Header</HeaderType>
+      <Code>19</Code>
+      <Name>TargetedSkill095</Name>
+      <Length>6</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>A player performs a skill with a target, e.g. attacking or buffing.</SentWhen>
+      <CausedReaction>Damage is calculated and the target is hit, if the attack was successful. A response is sent back with the caused damage, and all surrounding players get an animation message.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SkillIndex</Name>
+          <Description>The index of the skill in the skill list.</Description>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>TargetId</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>1B</Code>
+      <Name>MagicEffectCancelRequest</Name>
+      <Length>5</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>A player cancels a specific magic effect of a skill, usually 'Infinity Arrow' and 'Wizardy Enhance'.</SentWhen>
+      <CausedReaction>The effect is cancelled and an update is sent to the player and all surrounding players.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>SkillId</Name>
         </Field>
       </Fields>
     </Packet>
@@ -1189,6 +1438,181 @@
           <Description>A sequential animation counter which acts as a reference to the previously sent Area Skill Animation packet.</Description>
         </Field>
       </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>1E</Code>
+      <Name>AreaSkill075</Name>
+      <Length>7</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>A player is performing an skill which affects an area of the map.</SentWhen>
+      <CausedReaction>It's forwarded to all surrounding players, so that the animation is visible. In the original server implementation, no damage is done yet for attack skills - there are separate hit packets.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SkillIndex</Name>
+          <Description>The index of the skill in the skill list.</Description>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>TargetX</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>TargetY</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>Rotation</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>1D</Code>
+      <Name>AreaSkillHit075</Name>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>An area skill was performed and the client decided to hit one or more targets.</SentWhen>
+      <CausedReaction>The server is calculating the damage and applying it to the targets. The attacker gets a response back with the caused damage.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SkillIndex</Name>
+          <Description>The index of the skill in the skill list.</Description>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>TargetX</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>TargetY</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>TargetCount</Name>
+          <Description>The number of targets which are hit.</Description>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>Structure[]</Type>
+          <TypeName>TargetData</TypeName>
+          <Name>Targets</Name>
+          <ItemCountField>TargetCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>TargetData</Name>
+          <Description>Contains the data of the target</Description>
+          <Length>2</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>TargetId</Name>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C3Header</HeaderType>
+      <Code>1E</Code>
+      <Name>AreaSkill095</Name>
+      <Length>7</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>A player is performing an skill which affects an area of the map.</SentWhen>
+      <CausedReaction>It's forwarded to all surrounding players, so that the animation is visible. In the original server implementation, no damage is done yet for attack skills - there are separate hit packets.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SkillIndex</Name>
+          <Description>The index of the skill in the skill list.</Description>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>TargetX</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>TargetY</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>Rotation</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C3Header</HeaderType>
+      <Code>1D</Code>
+      <Name>AreaSkillHit095</Name>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>An area skill was performed and the client decided to hit one or more targets.</SentWhen>
+      <CausedReaction>The server is calculating the damage and applying it to the targets. The attacker gets a response back with the caused damage.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SkillIndex</Name>
+          <Description>The index of the skill in the skill list.</Description>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>TargetX</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>TargetY</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>Counter</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>Byte</Type>
+          <Name>TargetCount</Name>
+          <Description>The number of targets which are hit.</Description>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Structure[]</Type>
+          <TypeName>TargetData</TypeName>
+          <Name>Targets</Name>
+          <ItemCountField>TargetCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>TargetData</Name>
+          <Description>Contains the data of the target</Description>
+          <Length>2</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>TargetId</Name>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
     </Packet>
     <Packet>
       <HeaderType>C1Header</HeaderType>
@@ -1429,6 +1853,30 @@
     </Packet>
     <Packet>
       <HeaderType>C1Header</HeaderType>
+      <Code>55</Code>
+      <Name>GuildCreateRequest075</Name>
+      <Length>43</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>When a player wants to create a guild.</SentWhen>
+      <CausedReaction>The guild is created and the player is set as the new guild master of the guild.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>String</Type>
+          <Name>GuildName</Name>
+          <Length>8</Length>
+        </Field>
+        <Field>
+          <Index>11</Index>
+          <Type>Binary</Type>
+          <Name>GuildEmblem</Name>
+          <Length>32</Length>
+          <Description>The guild emblem in a custom bitmap format. It supports 16 colors (one transparent) per pixel and has a size of 8 * 8 pixel.</Description>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
       <Code>54</Code>
       <Name>GuildMasterAnswer</Name>
       <Length>4</Length>
@@ -1441,6 +1889,33 @@
           <Type>Boolean</Type>
           <Name>ShowCreationDialog</Name>
           <Description>A value whether the guild creation dialog should be shown. Otherwise, the guild creation is cancelled and the dialog was closed.</Description>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>57</Code>
+      <Name>CancelGuildCreation</Name>
+      <Length>3</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>The player has the dialog of the guild creation dialog opened and decided against creating a guild.</SentWhen>
+      <CausedReaction>It either cancels the guild creation.</CausedReaction>
+      <Fields>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>61</Code>
+      <Name>GuildWarResponse</Name>
+      <Length>4</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>A guild master requested a guild war against another guild.</SentWhen>
+      <CausedReaction>If the guild master confirms, the war is declared.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Boolean</Type>
+          <Name>Accepted</Name>
         </Field>
       </Fields>
     </Packet>
@@ -1481,7 +1956,7 @@
       <HeaderType>C1Header</HeaderType>
       <Code>86</Code>
       <Name>ChaosMachineMixRequest</Name>
-      <Length>4</Length>
+      <Length>5</Length>
       <Direction>ClientToServer</Direction>
       <SentWhen>The player has the dialog of the chaos machine open and decided to mix (craft) the items which he put into the chaos machine dialog.</SentWhen>
       <CausedReaction>Based on the type of mix and it's corresponding success rate, the mix succeeds or fails. The client gets a corresponding response with the created, changed or lost items.</CausedReaction>
@@ -1492,6 +1967,12 @@
           <TypeName>ChaosMachineMixType</TypeName>
           <Name>MixType</Name>
           <Description>The identifier which tells the server which kind of mix should be executed.</Description>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>SocketSlot</Name>
+          <Description>The 0-based slot index of the socket at which a seed sphere should be mounted or removed. May only be available for the corresponding mixes, so access with care.</Description>
         </Field>
       </Fields>
       <Enums>
@@ -1561,8 +2042,8 @@
     <Packet>
       <HeaderType>C1Header</HeaderType>
       <Code>87</Code>
-      <Name>CloseChaosMachineRequest</Name>
-      <Caption>Close Chaos Machine</Caption>
+      <Name>CraftingDialogCloseRequest</Name>
+      <Caption>Close Crafting Dialog</Caption>
       <Length>3</Length>
       <Direction>ClientToServer</Direction>
       <SentWhen>A player closes the dialog which was opened by an interaction with the chaos machine goblin.</SentWhen>
@@ -1718,14 +2199,69 @@
       </Fields>
     </Packet>
     <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>A7</Code>
+      <Name>PetCommandRequest</Name>
+      <Length>7</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>The player wants to command its equipped pet (raven).</SentWhen>
+      <CausedReaction></CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>PetType</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Enum</Type>
+          <TypeName>PetCommandMode</TypeName>
+          <Name>CommandMode</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>TargetId</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>A9</Code>
+      <Name>PetInfoRequest</Name>
+      <Length>6</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>The player hovers over a pet. The client sends this request to retrieve information (level, experience) of the pet (dark raven, horse).</SentWhen>
+      <CausedReaction>The server sends a PetInfoResponse.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>PetType</TypeName>
+          <Name>Pet</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Enum</Type>
+          <TypeName>StorageType</TypeName>
+          <Name>Storage</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>ItemSlot</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
       <HeaderType>C1HeaderWithSubCode</HeaderType>
       <Code>F6</Code>
       <SubCode>0A</SubCode>
-      <Name>QuestStartRequest</Name>
+      <Name>QuestSelectRequest</Name>
       <Length>9</Length>
       <Direction>ClientToServer</Direction>
-      <SentWhen>The client opened an quest NPC dialog and decided to start an available quests.</SentWhen>
-      <CausedReaction>The server decides if the character can start the quest. A character can run up to 3 concurrent quests at a time.</CausedReaction>
+      <SentWhen>The client opened an quest NPC dialog and selected an available quests.</SentWhen>
+      <CausedReaction>If the quest is already active, it responds with the QuestProgress. If the quest is inactive, the server decides if the character can start the quest and responds with a QuestStepInfo with the StartingNumber. A character can run up to 3 concurrent quests at a time.</CausedReaction>
       <Fields>
         <Field>
           <Index>4</Index>
@@ -1767,10 +2303,34 @@
         </Field>
         <Field>
           <Index>8</Index>
-          <Type>Byte</Type>
-          <Name>NextState</Name>
+          <Type>Enum</Type>
+          <TypeName>QuestProceedAction</TypeName>
+          <Name>ProceedAction</Name>
         </Field>
       </Fields>
+      <Enums>
+        <Enum>
+          <Name>QuestProceedAction</Name>
+          <Description>Describes how to proceed with the specified quest.</Description>
+          <Values>
+            <EnumValue>
+              <Name>Undefined</Name>
+              <Description>Undefined action.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>AcceptQuest</Name>
+              <Description>The quest is accepted and started.</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>RefuseQuest</Name>
+              <Description>The quest is refused and not started.</Description>
+              <Value>2</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
     </Packet>
     <Packet>
       <HeaderType>C1HeaderWithSubCode</HeaderType>
@@ -1904,6 +2464,50 @@
       <CausedReaction>The server should check if the correct Quest NPC (e.g. Elf Soldier) dialog is opened and the player didn't reach the level limit yet. If that's both the case, it adds a defined buff (MagicEffect) to the player; Otherwise, a message is sent to the player.</CausedReaction>
       <Fields />
     </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>90</Code>
+      <Name>DevilSquareEnterRequest</Name>
+      <Length>5</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>The player requests to enter the devil square through the Charon NPC.</SentWhen>
+      <CausedReaction>The server checks if the player can enter the event and sends a response (Code 0x90) back to the client. If it was successful, the character gets moved to the event map.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SquareLevel</Name>
+          <Description>The level of the devil square, minus 1.</Description>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>TicketItemInventoryIndex</Name>
+          <Description>The index of the ticket item in the inventory. Be aware, that the value is 12 higher than it should be - it makes no sense, but it is what it is...</Description>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>91</Code>
+      <Name>RequestEventRemainingTime</Name>
+      <Length>5</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>The player requests to get the remaining time of the currently entered event.</SentWhen>
+      <CausedReaction>The remaining time is sent back to the client.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>EventType</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>EventLevel</Name>
+        </Field>
+      </Fields>
+    </Packet>
   </Packets>
   <Enums>
     <Enum>
@@ -1924,6 +2528,89 @@
           <Name>Red</Name>
           <Description>This state is only sent to the client. After some seconds the client is changing back to normal Unchecked.</Description>
           <Value>2</Value>
+        </EnumValue>
+      </Values>
+    </Enum>
+    <Enum>
+      <Name>StorageType</Name>
+      <Description>Describes the type of storage.</Description>
+      <Values>
+        <EnumValue>
+          <Name>Inventory</Name>
+          <Description>The inventory of the player.</Description>
+          <Value>0</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Vault</Name>
+          <Description>The vault of the player.</Description>
+          <Value>1</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>TradeOwn</Name>
+          <Description>The own trading storage.</Description>
+          <Value>2</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>TradeOther</Name>
+          <Description>The trading storage of the other player.</Description>
+          <Value>3</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Crafting</Name>
+          <Description>The crafting storage of the player.</Description>
+          <Value>4</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>PersonalShop</Name>
+          <Description>The shop storage of another player.</Description>
+          <Value>5</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>InventoryPetSlot</Name>
+          <Description>The inventory slot of the pet. That's used when a pet leveled up.</Description>
+          <Value>254</Value>
+        </EnumValue>
+      </Values>
+    </Enum>
+    <Enum>
+      <Name>PetType</Name>
+      <Description>Describes the type of pet.</Description>
+      <Values>
+        <EnumValue>
+          <Name>DarkRaven</Name>
+          <Description>The dark raven pet.</Description>
+          <Value>0</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>DarkHorse</Name>
+          <Description>The dark horse pet.</Description>
+          <Value>1</Value>
+        </EnumValue>
+      </Values>
+    </Enum>
+    <Enum>
+      <Name>PetCommandMode</Name>
+      <Description>Describes the pet command mode.</Description>
+      <Values>
+        <EnumValue>
+          <Name>Normal</Name>
+          <Description>The pet is in a normal mode, where it doesn't attack.</Description>
+          <Value>0</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>AttackRandom</Name>
+          <Description>The pet attacks random targets.</Description>
+          <Value>1</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>AttackWithOwner</Name>
+          <Description>The pet attacks the same targets as the owner.</Description>
+          <Value>2</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>AttackTarget</Name>
+          <Description>The pet attacks a specific target until it's dead.</Description>
+          <Value>3</Value>
         </EnumValue>
       </Values>
     </Enum>

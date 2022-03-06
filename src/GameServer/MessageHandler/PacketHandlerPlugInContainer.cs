@@ -2,201 +2,216 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
-namespace MUnique.OpenMU.GameServer.MessageHandler
+namespace MUnique.OpenMU.GameServer.MessageHandler;
+
+using System.Collections.Concurrent;
+using System.ComponentModel.Design;
+using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using MUnique.OpenMU.GameLogic;
+using MUnique.OpenMU.GameServer.RemoteView;
+using MUnique.OpenMU.Network.Packets;
+using MUnique.OpenMU.PlugIns;
+
+/// <summary>
+/// A plugin container which provides the effective packet handler plugins for the specified version.
+/// Base class for different kind of packet handler interfaces.
+/// </summary>
+/// <typeparam name="THandler">The type of the handler interface.</typeparam>
+public class PacketHandlerPlugInContainer<THandler> : StrategyPlugInProvider<byte, THandler>, IDisposable
+    where THandler : class, IPacketHandlerPlugInBase
 {
-    using System;
-    using System.Collections.Concurrent;
-    using System.Linq;
-    using System.Reflection;
-    using log4net;
-    using MUnique.OpenMU.GameLogic;
-    using MUnique.OpenMU.GameServer.RemoteView;
-    using MUnique.OpenMU.Network.Packets;
-    using MUnique.OpenMU.PlugIns;
-    using Unity;
-    using Unity.Lifetime;
+    /// <summary>
+    /// Since packet handler plugins are not holding any player state, they can be kept as singleton instances to save some memory.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Type, THandler> HandlerCache = new ();
+
+    private readonly IClientVersionProvider _clientVersionProvider;
+
+    private readonly ServiceContainer _serviceContainer;
+    private bool _disposedValue;
 
     /// <summary>
-    /// A plugin container which provides the effective packet handler plugins for the specified version.
-    /// Base class for different kind of packet handler interfaces.
+    /// Initializes a new instance of the <see cref="PacketHandlerPlugInContainer{THandler}" /> class.
     /// </summary>
-    /// <typeparam name="THandler">The type of the handler interface.</typeparam>
-    public class PacketHandlerPlugInContainer<THandler> : StrategyPlugInProvider<byte, THandler>
-        where THandler : class, IPacketHandlerPlugInBase
+    /// <param name="clientVersionProvider">The client version provider.</param>
+    /// <param name="manager">The manager.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    public PacketHandlerPlugInContainer(IClientVersionProvider clientVersionProvider, PlugInManager manager, ILoggerFactory loggerFactory)
+        : base(manager, loggerFactory)
     {
-        /// <summary>
-        /// The logger of this class.
-        /// </summary>
-        private static readonly ILog Log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        this._clientVersionProvider = clientVersionProvider;
+        this._clientVersionProvider.ClientVersionChanged += this.OnClientVersionChanged;
+        this._serviceContainer = new ServiceContainer();
+        this._serviceContainer.AddService(typeof(IClientVersionProvider), clientVersionProvider);
+        this._serviceContainer.AddService(typeof(PlugInManager), manager);
+        this._serviceContainer.AddService(typeof(ILoggerFactory), loggerFactory);
+    }
 
-        /// <summary>
-        /// Since packet handler plugins are not holding any player state, they can be kept as singleton instances to save some memory.
-        /// </summary>
-        private static readonly ConcurrentDictionary<Type, THandler> HandlerCache = new ConcurrentDictionary<Type, THandler>();
-
-        private readonly IClientVersionProvider clientVersionProvider;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PacketHandlerPlugInContainer{THandler}"/> class.
-        /// </summary>
-        /// <param name="clientVersionProvider">The client version provider.</param>
-        /// <param name="manager">The manager.</param>
-        public PacketHandlerPlugInContainer(IClientVersionProvider clientVersionProvider, PlugInManager manager)
-            : base(manager)
+    /// <summary>
+    /// Initializes this instance.
+    /// </summary>
+    public void Initialize()
+    {
+        foreach (var plugInType in this.Manager.GetKnownPlugInsOf<THandler>().Where(this.Manager.IsPlugInActive))
         {
-            this.clientVersionProvider = clientVersionProvider;
-            this.clientVersionProvider.ClientVersionChanged += this.OnClientVersionChanged;
+            this.BeforeActivatePlugInType(plugInType);
         }
+    }
 
-        /// <summary>
-        /// Initializes this instance.
-        /// </summary>
-        public void Initialize()
+    /// <summary>
+    /// Handles the incoming data packet by selecting the correct plugin.
+    /// </summary>
+    /// <param name="player">The player.</param>
+    /// <param name="packet">The packet.</param>
+    public void HandlePacket(RemotePlayer player, in Span<byte> packet)
+    {
+        var typeIndex = packet[0] % 2 == 1 ? 2 : 3;
+        var packetType = packet[typeIndex];
+        var handler = this[packetType];
+        this.HandlePacket(player, packet, handler);
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases unmanaged and - optionally - managed resources.
+    /// </summary>
+    /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this._disposedValue)
         {
-            foreach (var plugInType in this.Manager.GetKnownPlugInsOf<THandler>().Where(this.Manager.IsPlugInActive))
+            if (disposing)
             {
-                this.BeforeActivatePlugInType(plugInType);
-            }
-        }
-
-        /// <summary>
-        /// Handles the incoming data packet by selecting the correct plugin.
-        /// </summary>
-        /// <param name="player">The player.</param>
-        /// <param name="packet">The packet.</param>
-        public void HandlePacket(RemotePlayer player, in Span<byte> packet)
-        {
-            var typeIndex = packet[0] % 2 == 1 ? 2 : 3;
-            var packetType = packet[typeIndex];
-            var handler = this[packetType];
-            this.HandlePacket(player, packet, handler);
-        }
-
-        /// <summary>
-        /// Handles the incoming data packet by using the specified handler plugin.
-        /// </summary>
-        /// <param name="player">The player.</param>
-        /// <param name="packet">The packet.</param>
-        /// <param name="handler">The handler.</param>
-        protected void HandlePacket(Player player, in Span<byte> packet, THandler handler)
-        {
-            if (handler == null)
-            {
-                // unknown packet
-                return;
+                this._serviceContainer.Dispose();
             }
 
-            if (handler.IsEncryptionExpected && (packet[0] < 0xC3))
-            {
-                Log.Warn($"Packet was not encrypted and will not be handled: {packet.AsString()}");
-                return;
-            }
+            this._disposedValue = true;
+        }
+    }
 
-            handler.HandlePacket(player, packet);
+    /// <summary>
+    /// Handles the incoming data packet by using the specified handler plugin.
+    /// </summary>
+    /// <param name="player">The player.</param>
+    /// <param name="packet">The packet.</param>
+    /// <param name="handler">The handler.</param>
+    protected void HandlePacket(Player player, in Span<byte> packet, THandler? handler)
+    {
+        if (handler is null)
+        {
+            // unknown packet
+            return;
         }
 
-        /// <inheritdoc/>
-        protected override void BeforeActivatePlugInType(Type plugInType)
+        if (handler.IsEncryptionExpected && (packet[0] < 0xC3))
         {
-            base.BeforeActivatePlugInType(plugInType);
-
-            var knownPlugIn = this.FindKnownPlugin(plugInType);
-            if (knownPlugIn == null && this.clientVersionProvider.ClientVersion.IsPlugInSuitable(plugInType))
-            {
-                var plugIn = this.CreatePlugIn(plugInType);
-                this.AddPlugIn(plugIn, true);
-            }
+            this.Logger.LogWarning($"Packet was not encrypted and will not be handled: {packet.AsString()}");
+            return;
         }
 
-        /// <inheritdoc />
-        protected override void ActivatePlugIn(THandler plugIn)
+        handler.HandlePacket(player, packet);
+    }
+
+    /// <inheritdoc/>
+    protected override void BeforeActivatePlugInType(Type plugInType)
+    {
+        base.BeforeActivatePlugInType(plugInType);
+
+        var knownPlugIn = this.FindKnownPlugin(plugInType);
+        if (knownPlugIn is null && this._clientVersionProvider.ClientVersion.IsPlugInSuitable(plugInType))
         {
-            var newPlugInIsEffective = false;
-            if (this.TryGetPlugIn(plugIn.Key, out var currentlyActivePlugIn))
-            {
-                if (currentlyActivePlugIn == plugIn)
-                {
-                    return;
-                }
-
-                if (currentlyActivePlugIn.IsPreferedTo(plugIn))
-                {
-                    return;
-                }
-
-                newPlugInIsEffective = true;
-            }
-
-            base.ActivatePlugIn(plugIn);
-            if (newPlugInIsEffective)
-            {
-                this.SetEffectivePlugin(plugIn);
-            }
+            var plugIn = this.CreatePlugIn(plugInType);
+            this.AddPlugIn(plugIn, true);
         }
+    }
 
-        /// <inheritdoc />
-        protected override void DeactivatePlugIn(THandler plugIn)
+    /// <inheritdoc />
+    protected override void ActivatePlugIn(THandler plugIn)
+    {
+        var newPlugInIsEffective = false;
+        if (this.TryGetPlugIn(plugIn.Key, out var currentlyActivePlugIn))
         {
-            var isEffectivePlugIn = this.TryGetPlugIn(plugIn.Key, out var currentlyActivePlugIn) && currentlyActivePlugIn == plugIn;
-            base.DeactivatePlugIn(plugIn);
-
-            if (!isEffectivePlugIn)
+            if (currentlyActivePlugIn == plugIn)
             {
                 return;
             }
 
-            // find available replacement if the plugin was effective before
-            var replacement = this.ActivePlugIns
-                .Where(p => p.Key == plugIn.Key)
-                .OrderByDescending(p => p.GetType().GetCustomAttribute(typeof(MinimumClientAttribute)))
+            if (currentlyActivePlugIn.IsPreferedTo(plugIn))
+            {
+                return;
+            }
+
+            newPlugInIsEffective = true;
+            this.DeactivatePlugIn(currentlyActivePlugIn);
+        }
+
+        base.ActivatePlugIn(plugIn);
+        if (newPlugInIsEffective)
+        {
+            this.SetEffectivePlugin(plugIn);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void AfterDeactivatePlugInType(THandler deactivatedPlugIn)
+    {
+        base.AfterDeactivatePlugInType(deactivatedPlugIn);
+
+        if (!this.TryGetPlugIn(deactivatedPlugIn.Key, out _))
+        {
+            // the plugin was effective before, so we need to set a replacement active.
+            var replacement = this.KnownPlugIns
+                .Where(p => p.Key == deactivatedPlugIn.Key && p != deactivatedPlugIn)
+                .OrderByDescending(p => p.GetType().GetCustomAttribute(typeof(MinimumClientAttribute), inherit: false))
                 .FirstOrDefault();
             if (replacement != null)
             {
                 this.SetEffectivePlugin(replacement);
             }
         }
+    }
 
-        private THandler CreatePlugIn(Type plugInType)
+    private THandler CreatePlugIn(Type plugInType)
+    {
+        if (!HandlerCache.TryGetValue(plugInType, out var plugIn))
         {
-            if (!HandlerCache.TryGetValue(plugInType, out var plugIn))
+            plugIn = (THandler)ActivatorUtilities.CreateInstance(this._serviceContainer, plugInType);
+            if (plugInType.GetConstructors().Any(c => c.GetParameters().All(p => p.ParameterType != typeof(IClientVersionProvider))))
             {
-                if (plugInType.GetConstructors().Any(c => !c.GetParameters().Any()))
-                {
-                    plugIn = Activator.CreateInstance(plugInType) as THandler;
-                    HandlerCache.TryAdd(plugInType, plugIn);
-                }
-                else
-                {
-                    using (var unityContainer = new UnityContainer())
-                    {
-                        unityContainer.RegisterInstance(typeof(PlugInManager), this.Manager, new ExternallyControlledLifetimeManager());
-                        unityContainer.RegisterInstance(typeof(IClientVersionProvider), this.clientVersionProvider, new ExternallyControlledLifetimeManager());
-                        plugIn = unityContainer.Resolve(plugInType) as THandler;
-                        if (plugIn is GroupPacketHandlerPlugIn groupPacketHandler)
-                        {
-                            groupPacketHandler.Initialize();
-                        }
-                    }
-                }
+                HandlerCache.TryAdd(plugInType, plugIn);
             }
 
-            return plugIn;
-        }
-
-        private void OnClientVersionChanged(object sender, EventArgs e)
-        {
-            Log.Warn("Client version changed");
-
-            foreach (var knownPlugIn in this.KnownPlugIns)
+            if (plugIn is GroupPacketHandlerPlugIn groupPacketHandler)
             {
-                if (!this.clientVersionProvider.ClientVersion.IsPlugInSuitable(knownPlugIn.GetType()))
-                {
-                    this.DeactivatePlugIn(knownPlugIn);
-                    this.RemovePlugIn(knownPlugIn);
-                }
+                groupPacketHandler.Initialize();
             }
-
-            this.Initialize();
         }
+
+        return plugIn;
+    }
+
+    private void OnClientVersionChanged(object? sender, EventArgs e)
+    {
+        this.Logger.LogWarning("Client version changed");
+
+        foreach (var knownPlugIn in this.KnownPlugIns)
+        {
+            if (!this._clientVersionProvider.ClientVersion.IsPlugInSuitable(knownPlugIn.GetType()))
+            {
+                this.DeactivatePlugIn(knownPlugIn);
+                this.RemovePlugIn(knownPlugIn);
+            }
+        }
+
+        this.Initialize();
     }
 }

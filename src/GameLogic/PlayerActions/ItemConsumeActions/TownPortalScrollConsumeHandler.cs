@@ -4,34 +4,32 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
-{
-    using System.Linq;
-    using MUnique.OpenMU.DataModel.Configuration;
-    using MUnique.OpenMU.DataModel.Entities;
+namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions;
 
-    /// <summary>
-    /// Consume handler for the town portal scroll.
-    /// It warps the player to the nearest town.
-    /// </summary>
-    /// <remarks>
-    /// We might need a field for the "nearest" town in the <see cref="GameMapDefinition"/>.
-    /// <see cref="GameMapDefinition.SafezoneMap"/> might not be suitable.
-    /// </remarks>
-    public class TownPortalScrollConsumeHandler : BaseConsumeHandler
+/// <summary>
+/// Consume handler for the town portal scroll.
+/// It warps the player to the nearest town.
+/// </summary>
+/// <remarks>
+/// We might need a field for the "nearest" town in the <see cref="GameMapDefinition"/>.
+/// <see cref="GameMapDefinition.SafezoneMap"/> might not be suitable.
+/// </remarks>
+public class TownPortalScrollConsumeHandler : BaseConsumeHandler
+{
+    /// <inheritdoc />
+    public override bool ConsumeItem(Player player, Item item, Item? targetItem, FruitUsage fruitUsage)
     {
-        /// <inheritdoc />
-        public override bool ConsumeItem(Player player, Item item, Item targetItem)
+        if (base.ConsumeItem(player, item, targetItem, fruitUsage))
         {
-            if (base.ConsumeItem(player, item, targetItem))
+            var targetMapDef = player.CurrentMap!.Definition.SafezoneMap ?? player.SelectedCharacter!.CharacterClass!.HomeMap;
+            if (targetMapDef is { }
+                && player.GameContext.GetMap((ushort)targetMapDef.Number) is { SafeZoneSpawnGate: { } spawnGate })
             {
-                var targetMap = player.CurrentMap.Definition.SafezoneMap ?? player.SelectedCharacter.CharacterClass.HomeMap;
-                var exitGate = targetMap.ExitGates.Where(g => g.IsSpawnGate).SelectRandom();
-                player.WarpTo(exitGate);
+                player.WarpTo(spawnGate);
                 return true;
             }
-
-            return false;
         }
+
+        return false;
     }
 }

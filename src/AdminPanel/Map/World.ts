@@ -6,21 +6,21 @@ import { Player } from "./Player";
 import { GameObject, attackableAlphaMapTexture } from "./Attackable";
 import { NonPlayerCharacter as NPC } from "./NonPlayerCharacter";
 
-// import { addPlayer, removePlayer, highlightPlayerOnMap, unhighlightPlayerOnMap } from "../stores/map/actions";
 import { NpcData, PlayerData, Step } from "./Types";
 
 export class World extends THREE.Object3D {
-
-    objects:
+    private static readonly sideLength: number = 256;
+    private objects:
         {
-            [id: number]: GameObject
+            [id: number]: GameObject,
         };
-    attacks: Attacks;
-    ready: boolean;
+    private attacks: Attacks;
+    private ready: boolean;
 
     /*
      * Constructs a new World object.
-     * It's automatically initializes and updates it's containing objects by using the WorldUpdater which uses SignalR to talk with the server.
+     * It's automatically initializes and updates it's containing objects by using
+     * the WorldUpdater which uses SignalRto talk with the server.
      * @constructor
      * @param {Store} store - the redux store which holds a map State with a player list
      * @param {number} serverId - the id of the server where the map is hosted
@@ -29,29 +29,32 @@ export class World extends THREE.Object3D {
     constructor(serverId: number, mapId: number) {
         super();
         this.objects = {};
+
+        const attacksZ = 100;
         this.attacks = new Attacks();
-        this.attacks.position.z = 100;
+        this.attacks.position.z = attacksZ;
         this.add(this.attacks);
 
-        let planeMesh = new THREE.Mesh(
-            new THREE.PlaneGeometry(256, 256, 1, 1),
+        const segments = 1;
+
+        const planeMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(World.sideLength, World.sideLength, segments, segments),
             new THREE.ShaderMaterial(terrainShader));
         this.add(planeMesh);
 
-        var textureLoader = new THREE.TextureLoader();
+        const textureLoader = new THREE.TextureLoader();
         textureLoader.load('terrain/' + serverId + '/' + mapId, (texture: THREE.Texture) => {
             texture.magFilter = THREE.NearestFilter;
             terrainShader.uniforms.tColor.value = texture;
         });
     }
 
-
-    public update() {
+    public update(): void {
         this.attacks.update();
-        let objects = this.objects;
-        for (let o in objects) {
+        const objects = this.objects;
+        for (const o in objects) {
             if (objects.hasOwnProperty(o)) {
-                let object = objects[o];
+                const object = objects[o];
                 if (object instanceof Player) {
                     object.update();
                 }
@@ -59,11 +62,12 @@ export class World extends THREE.Object3D {
         }
     }
 
-    public async addOrUpdateNpc(npcData: NpcData) {
-        let obj = this.getObjectById(npcData.id);
+    public async addOrUpdateNpc(npcData: NpcData): Promise<void> {
+        const obj = this.getObjectById(npcData.id);
         if (obj === undefined || obj === null) {
+            const waitTimeMs = 50;
             while (attackableAlphaMapTexture === undefined) {
-                await new Promise(resolve => setTimeout(resolve, 50));
+                await new Promise(resolve => setTimeout(resolve, waitTimeMs));
             }
 
             console.debug("Adding npc", npcData);
@@ -74,11 +78,12 @@ export class World extends THREE.Object3D {
         }
     }
 
-    public async addOrUpdatePlayer(playerData: PlayerData) {
-        let obj = this.getObjectById(playerData.id);
+    public async addOrUpdatePlayer(playerData: PlayerData): Promise<void> {
+        const obj = this.getObjectById(playerData.id);
         if (obj === undefined || obj === null) {
+            const waitTimeMs = 50;
             while (attackableAlphaMapTexture === undefined) {
-                await new Promise(resolve => setTimeout(resolve, 50));
+                await new Promise(resolve => setTimeout(resolve, waitTimeMs));
             }
 
             console.debug("Adding player", playerData);
@@ -89,57 +94,58 @@ export class World extends THREE.Object3D {
         }
     }
 
-    public killObject(killedObjectId: number, killerObjectId: number) {
-        var killedObject = this.getObjectById(killedObjectId);
-        killedObject.gotKilled();
+    public killObject(killedObjectId: number, killerObjectId: number): void {
+        const killedObject = this.getObjectById(killedObjectId);
+        killedObject?.gotKilled();
     }
 
-    public objectMoved(id: number, newX: number, newY: number, moveType: any, walkDelay: number, steps: Step[]) {
-        let obj = this.getObjectById(id);
-        obj.moveTo(newX, newY, moveType, walkDelay, steps);
+    public objectMoved(id: number, newX: number, newY: number, moveType: any, walkDelay: number, steps: Step[]): void {
+        const obj = this.getObjectById(id);
+        obj?.moveTo(newX, newY, moveType, walkDelay, steps);
     }
 
-    public addSkillAnimation(playerId: number, targetId: number, skill: number) {
-        let animating = this.getObjectById(playerId);
-        let target = this.getObjectById(targetId);
+    public addSkillAnimation(playerId: number, targetId: number, skill: number): void {
+        const animating = this.getObjectById(playerId);
+        const target = this.getObjectById(targetId);
         this.attacks.addAttack(animating, target);
         // todo add effect
     }
 
-    public addAreaSkillAnimation(playerId: number, skill: number, x: number, y: number, rotation: number) {
-        let animating = this.getObjectById(playerId);
+    public addAreaSkillAnimation(playerId: number, skill: number, x: number, y: number, rotation: number): void {
+        const animating = this.getObjectById(playerId);
         if (animating !== undefined && animating !== null) {
             animating.rotateTo(rotation);
             // todo add effect
         }
     }
 
-    public addAnimation(animatingId: number, animation: number, targetId: number, direction: number) {
-        let animating = this.getObjectById(animatingId);
+    public addAnimation(animatingId: number, animation: number, targetId: number, direction: number): void {
+        const animating = this.getObjectById(animatingId);
         if (animating !== undefined && animating !== null) {
-            animating.rotateTo(direction / 0x10);
+            const rotationMultiplier = 0x10;
+            animating.rotateTo(direction / rotationMultiplier);
         }
 
         if (targetId !== null) {
-            let target = this.getObjectById(targetId);
+            const target = this.getObjectById(targetId);
             this.attacks.addAttack(animating, target);
             // todo add effect instead of attack
         }
     }
 
-    public dispose() {
+    public dispose(): void {
         delete this.objects;
     }
 
-    highlightOn(objectId: number): any {
-        let player = this.getObjectById(objectId) as Player;
+    public highlightOn(objectId: number): void {
+        const player = this.getObjectById(objectId) as Player;
         if (player != null) {
             player.data = { ... player.data, isHighlighted: true };
         }
     }
 
-    highlightOff(objectId: number): any {
-        let player = this.getObjectById(objectId) as Player;
+    public highlightOff(objectId: number): void {
+        const player = this.getObjectById(objectId) as Player;
         if (player != null) {
             player.data = { ... player.data, isHighlighted: false };
         }
@@ -149,15 +155,15 @@ export class World extends THREE.Object3D {
      * Is called when the size of the render target changed.
      * This will set the size of the highlighted edges - their width should be exactly 1 pixel
      */
-    public onSizeChanged(newSize: number) {
-        terrainShader.uniforms.tPixelSize.value = 256.0 / newSize;
+    public onSizeChanged(newSize: number): void {
+        terrainShader.uniforms.tPixelSize.value = World.sideLength / newSize;
     }
 
     /*
      * Adds a new non-player-character to the map with the specified data.
      */
-    public addNpc(data: NpcData) {
-        let npc = new NPC(data);
+    public addNpc(data: NpcData): void {
+        const npc = new NPC(data);
         this.addObjectMesh(npc);
         npc.respawn(data);
     }
@@ -165,8 +171,8 @@ export class World extends THREE.Object3D {
     /*
      * Adds a new player to the map with the specified data.
      */
-    public addPlayer(data: PlayerData) {
-        let player = new Player(data);
+    public addPlayer(data: PlayerData): void {
+        const player = new Player(data);
         this.addObjectMesh(player);
         player.respawn(data);
     }
@@ -174,8 +180,8 @@ export class World extends THREE.Object3D {
     /*
      * Removes the object with the specified id from the map.
      */
-    public removeObject(objectId: number) {
-        let mesh = this.objects[objectId];
+    public removeObject(objectId: number): void {
+        const mesh = this.objects[objectId];
         console.debug("Removing object", mesh.data);
         this.remove(mesh as THREE.Object3D);
         delete this.objects[objectId];
@@ -188,7 +194,7 @@ export class World extends THREE.Object3D {
         return this.objects[objectId];
     }
 
-    private addObjectMesh(mesh: GameObject) {
+    private addObjectMesh(mesh: GameObject): void {
         this.add(mesh);
         this.objects[mesh.data.id] = mesh;
     }

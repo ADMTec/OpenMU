@@ -1,5 +1,6 @@
 ﻿@typeparam TValue
-@inherits InputBase<TValue>
+@using System.Diagnostics.CodeAnalysis
+@inherits NotifyableInputBase<TValue>
 
 <div>
     <FieldLabel Text="@Label" ValueExpression="@this.ValueExpression" />
@@ -8,13 +9,15 @@
 </div>
 
 @code {
+
     /// <summary>
     /// Gets or sets the label.
     /// </summary>
-    [Parameter] public string Label { get; set; }
+    [Parameter]
+    public string? Label { get; set; }
 
     /// <inheritdoc />
-    protected override bool TryParseValueFromString(string value, out TValue result, out string validationErrorMessage)
+    protected override bool TryParseValueFromString(string? value, [MaybeNullWhen(false)] out TValue result, [NotNullWhen(false)] out string? validationErrorMessage)
     {
         throw new NotImplementedException();
     }

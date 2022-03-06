@@ -2,29 +2,39 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
-namespace MUnique.OpenMU.ConnectServer
+namespace MUnique.OpenMU.ConnectServer;
+
+using Microsoft.Extensions.Logging;
+using MUnique.OpenMU.Interfaces;
+using MUnique.OpenMU.Network.PlugIns;
+
+/// <summary>
+/// The connect server factory.
+/// </summary>
+public class ConnectServerFactory
 {
-    using System;
-    using MUnique.OpenMU.Interfaces;
-    using MUnique.OpenMU.Network.PlugIns;
+    private readonly ILoggerFactory _loggerFactory;
 
     /// <summary>
-    /// The connect server factory.
+    /// Initializes a new instance of the <see cref="ConnectServerFactory"/> class.
     /// </summary>
-    public static class ConnectServerFactory
+    /// <param name="loggerFactory">The logger factory.</param>
+    public ConnectServerFactory(ILoggerFactory loggerFactory)
     {
-        /// <summary>
-        /// Creates a new connect server instance.
-        /// </summary>
-        /// <param name="settings">The settings.</param>
-        /// <param name="clientVersion">The client version.</param>
-        /// <param name="configurationId">The configuration identifier.</param>
-        /// <returns>
-        /// The new connect server instance.
-        /// </returns>
-        public static OpenMU.Interfaces.IConnectServer CreateConnectServer(IConnectServerSettings settings, ClientVersion clientVersion, Guid configurationId)
-        {
-            return new ConnectServer(settings, clientVersion, configurationId);
-        }
+        this._loggerFactory = loggerFactory;
+    }
+
+    /// <summary>
+    /// Creates a new connect server instance.
+    /// </summary>
+    /// <param name="settings">The settings.</param>
+    /// <param name="clientVersion">The client version.</param>
+    /// <param name="configurationId">The configuration identifier.</param>
+    /// <returns>
+    /// The new connect server instance.
+    /// </returns>
+    public OpenMU.Interfaces.IConnectServer CreateConnectServer(IConnectServerSettings settings, ClientVersion clientVersion, Guid configurationId)
+    {
+        return new ConnectServer(settings, clientVersion, configurationId, this._loggerFactory);
     }
 }

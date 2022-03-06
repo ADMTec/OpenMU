@@ -4,47 +4,33 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions
+namespace MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions;
+
+using MUnique.OpenMU.AttributeSystem;
+using MUnique.OpenMU.GameLogic.Attributes;
+using MUnique.OpenMU.GameLogic.Views.Character;
+
+/// <summary>
+/// The consume handler for a potion that recovers health.
+/// </summary>
+public abstract class HealthPotionConsumeHandler : RecoverConsumeHandler.ManaHealthConsumeHandler, IItemConsumeHandler
 {
-    using MUnique.OpenMU.AttributeSystem;
-    using MUnique.OpenMU.DataModel.Entities;
-    using MUnique.OpenMU.GameLogic.Attributes;
-    using MUnique.OpenMU.GameLogic.Views.Character;
+    /// <inheritdoc/>
+    protected override AttributeDefinition MaximumAttribute => Stats.MaximumHealth;
 
-    /// <summary>
-    /// The consume handler for a potion that recovers health.
-    /// </summary>
-    public abstract class HealthPotionConsumeHandler : RecoverConsumeHandler.ManaHealthConsumeHandler, IItemConsumeHandler
+    /// <inheritdoc/>
+    protected override AttributeDefinition CurrentAttribute => Stats.CurrentHealth;
+
+    /// <inheritdoc/>
+    public override bool ConsumeItem(Player player, Item item, Item? targetItem, FruitUsage fruitUsage)
     {
-        /// <inheritdoc/>
-        protected override AttributeDefinition MaximumAttribute
+        if (base.ConsumeItem(player, item, targetItem, fruitUsage))
         {
-            get
-            {
-                return Stats.MaximumHealth;
-            }
+            // maybe instead of calling UpdateCurrentHealth etc. provide a more general method where we pass this.CurrentAttribute. The view can then decide what to do with it.
+            player.ViewPlugIns.GetPlugIn<IUpdateCurrentHealthPlugIn>()?.UpdateCurrentHealth();
+            return true;
         }
 
-        /// <inheritdoc/>
-        protected override AttributeDefinition CurrentAttribute
-        {
-            get
-            {
-                return Stats.CurrentHealth;
-            }
-        }
-
-        /// <inheritdoc/>
-        public override bool ConsumeItem(Player player, Item item, Item targetItem)
-        {
-            if (base.ConsumeItem(player, item, targetItem))
-            {
-                // maybe instead of calling UpdateCurrentHealth etc. provide a more general method where we pass this.CurrentAttribute. The view can then decide what to do with it.
-                player.ViewPlugIns.GetPlugIn<IUpdateCurrentHealthPlugIn>()?.UpdateCurrentHealth();
-                return true;
-            }
-
-            return false;
-        }
+        return false;
     }
 }

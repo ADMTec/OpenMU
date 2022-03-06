@@ -2,68 +2,64 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
-namespace MUnique.OpenMU.GameLogic.PlayerActions.Character
+namespace MUnique.OpenMU.GameLogic.PlayerActions.Character;
+
+using MUnique.OpenMU.GameLogic.PlugIns;
+using MUnique.OpenMU.GameLogic.Views;
+using MUnique.OpenMU.GameLogic.Views.Character;
+using MUnique.OpenMU.Interfaces;
+
+/// <summary>
+/// Action to delete a character in the character selection screen.
+/// </summary>
+public class DeleteCharacterAction
 {
-    using System;
-    using System.Linq;
-    using MUnique.OpenMU.GameLogic.PlugIns;
-    using MUnique.OpenMU.GameLogic.Views;
-    using MUnique.OpenMU.GameLogic.Views.Character;
-    using MUnique.OpenMU.Interfaces;
-
     /// <summary>
-    /// Action to delete a character in the character selection screen.
+    /// Tries to delete the character.
     /// </summary>
-    public class DeleteCharacterAction
+    /// <param name="player">The player.</param>
+    /// <param name="characterName">Name of the character.</param>
+    /// <param name="securityCode">The security code.</param>
+    public void DeleteCharacter(Player player, string characterName, string securityCode)
     {
-        private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(DeleteCharacterAction));
+        using var loggerScope = player.Logger.BeginScope(this.GetType());
+        var result = this.DeleteCharacterRequest(player, characterName, securityCode);
+        player.ViewPlugIns.GetPlugIn<IShowCharacterDeleteResponsePlugIn>()?.ShowCharacterDeleteResponse(result);
+    }
 
-        /// <summary>
-        /// Tries to delete the character.
-        /// </summary>
-        /// <param name="player">The player.</param>
-        /// <param name="characterName">Name of the character.</param>
-        /// <param name="securityCode">The security code.</param>
-        public void DeleteCharacter(Player player, string characterName, string securityCode)
+    private CharacterDeleteResult DeleteCharacterRequest(Player player, string characterName, string securityCode)
+    {
+        if (player.PlayerState.CurrentState != PlayerState.CharacterSelection)
         {
-            var result = this.DeleteCharacterRequest(player, characterName, securityCode);
-            player.ViewPlugIns.GetPlugIn<IShowCharacterDeleteResponsePlugIn>()?.ShowCharacterDeleteResponse(result);
+            player.Logger.LogError($"Account {player.Account?.LoginName} not in the right state, but {player.PlayerState.CurrentState}.");
+            return CharacterDeleteResult.Unsuccessful;
         }
 
-        private CharacterDeleteResult DeleteCharacterRequest(Player player, string characterName, string securityCode)
+        var character = player.Account!.Characters.FirstOrDefault(c => c.Name == characterName);
+
+        if (character is null)
         {
-            if (player.PlayerState.CurrentState != PlayerState.CharacterSelection)
-            {
-                Log.Error($"Account {player.Account.LoginName} not in the right state, but {player.PlayerState.CurrentState}.");
-                return CharacterDeleteResult.Unsuccessful;
-            }
+            player.Logger.LogError("Character not found. Hacker maybe tried to delete other players character!" +
+                                   Environment.NewLine + "\tAccName: " + player.Account.LoginName +
+                                   Environment.NewLine + "\tTried to delete Character: " + characterName);
 
-            var character = player.Account.Characters.FirstOrDefault(c => c.Name == characterName);
-
-            if (character == null)
-            {
-                Log.Error("Character not found. Hacker maybe tried to delete other players character!" +
-                    Environment.NewLine + "\tAccName: " + player.Account.LoginName +
-                    Environment.NewLine + "\tTried to delete Character: " + characterName);
-
-                return CharacterDeleteResult.Unsuccessful;
-            }
-
-            if (player.Account.SecurityCode != null && player.Account.SecurityCode != securityCode)
-            {
-                return CharacterDeleteResult.WrongSecurityCode;
-            }
-
-            if (player.GameContext is IGameServerContext gameServerContext && gameServerContext.GuildServer.GetGuildPosition(character.Id) != null)
-            {
-                player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Can't delete a guild member. Remove the character from guild first.", MessageType.BlueNormal);
-                return CharacterDeleteResult.Unsuccessful;
-            }
-
-            player.Account.Characters.Remove(character);
-            player.GameContext.PlugInManager.GetPlugInPoint<ICharacterDeletedPlugIn>()?.CharacterDeleted(player, character);
-            player.PersistenceContext.Delete(character);
-            return CharacterDeleteResult.Successful;
+            return CharacterDeleteResult.Unsuccessful;
         }
+
+        if (player.Account.SecurityCode != null && player.Account.SecurityCode != securityCode)
+        {
+            return CharacterDeleteResult.WrongSecurityCode;
+        }
+
+        if (player.GameContext is IGameServerContext gameServerContext && gameServerContext.GuildServer.GetGuildPosition(character.Id) != null)
+        {
+            player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Can't delete a guild member. Remove the character from guild first.", MessageType.BlueNormal);
+            return CharacterDeleteResult.Unsuccessful;
+        }
+
+        player.Account.Characters.Remove(character);
+        player.GameContext.PlugInManager.GetPlugInPoint<ICharacterDeletedPlugIn>()?.CharacterDeleted(player, character);
+        player.PersistenceContext.Delete(character);
+        return CharacterDeleteResult.Successful;
     }
 }

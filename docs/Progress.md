@@ -1,10 +1,12 @@
 ﻿# Project feature progress
 
-Here we track the progress of the project (compared to the features of the original server).
-Each tracked feature is basically a packet handler and the game logic behind it.
+For the progress of the project as a whole, please have a look at the [projects page](https://github.com/MUnique/OpenMU/projects).
 
-The complexity is a number between 1 (low complexity and effort) and 10 (high complexity and effort).
-Complexity 0 means we wont implement it.
+In this document we track the progress of the packet handlers.
+Each packet handler requires some game logic behind it.
+
+The complexity is a number between 1 (low complexity and effort) and 10 (high
+complexity and effort). Complexity 0 means we wont implement it.
 
 | Feature                     | Packet code       | Progress | Complexity | Note                                          |
 |-----------------------------|-------------------|----------|------------|-----------------------------------------------|
@@ -16,7 +18,7 @@ Complexity 0 means we wont implement it.
 | *SkillAttack*                | 0x19              | 100%     | 10         |                                               |
 | MagicCancel                 | 0x1B              | 0%       | 2          |                                               |
 | *WarpGate*                    | 0x1C              | 100%     | 5          |                                               |
-| AreaSkill                   | 0x1E              | 90%      | 10         |                                               |
+| AreaSkill                   | 0x1E              | 100%      | 10         |                                               |
 | *PickupItem*                  | 0x22              | 100%     | 6          |                                               |
 | *DropItem*                    | 0x23              | 100%     | 6          |                                               |
 | *InventoryMove*               | 0x24              | 100%     | 7          |                                               |
@@ -42,14 +44,14 @@ Complexity 0 means we wont implement it.
 | *GuildKickPlayer*             | 0x53              | 100%     | 1          |                                               |
 | *GuildMasterAnswer*           | 0x54              | 100%     | 1          |                                               |
 | *GuildMasterInfoSave*         | 0x55              | 100%     | 2          |                                               |
-| GuildMasterCreateCancel     | 0x56              | 0%       | 1          |                                               |
-| GuildWarReqRes              | 0x61              | 0%       | 3          |                                               |
+| GuildMasterCreateCancel     | 0x56              | 100%       | 1          |                                               |
+| GuildWarReqRes              | 0x61              | 100%       | 3          |                                               |
 | *GuildInfoRequest*            | 0x66              | 100%     | 2          |                                               |
 | GGAuth                      | 0x73              | 0%       | 0          |                                               |
 | *WarehouseMoneyInOut*         | 0x81              | 100%     | 3          |                                               |
 | *WarehouseClose*              | 0x82              | 100%     | 3          |                                               |
-| WarehousePassword           | 0x83              | 0%       | 1          |                                               |
-| ChaosMachineMix             | 0x86              | 40%      | 5          | configurable, configuration needs rework      |
+| WarehousePassword           | 0x83              | 100%       | 1          |                                               |
+| ChaosMachineMix             | 0x86              | 100%     | 5          |                                               |
 | *ChaosMachineClose*           | 0x87              | 100%     | 1          |                                               |
 | *WarpCommand*                 | 0x8E              | 100%     | 5          |                                               |
 | DevilSquareEnter            | 0x90              | 0%       | 2          |                                               |
@@ -63,8 +65,8 @@ Complexity 0 means we wont implement it.
 | BCStuff                     | 0x9B              | 0%       | 1          |                                               |
 | RequestLottoRegister        | 0x9D              | 0%       | 0          |                                               |
 | RequestEventEnterCount      | 0x9F              | 0%       | 0          |                                               |
-| RequestQuestInfo            | 0xA0              | 0%       | 4          |                                               |
-| SetQuestState               | 0xA2              | 0%       | 2          |                                               |
+| *RequestQuestInfo*            | 0xA0              | 100%     | 4          |                                               |
+| *SetQuestState*               | 0xA2              | 100%     | 2          |                                               |
 | PetItemCommand              | 0xA7              | 0%       | 5          |                                               |
 | RequestPetItemInfo          | 0xA9              | 0%       | 3          |                                               |
 | RequestDuelStart            | 0xAA              | 0%       | 4          |                                               |

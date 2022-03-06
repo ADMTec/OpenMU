@@ -2,42 +2,35 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
-namespace MUnique.OpenMU.GameLogic.PlugIns.ChatCommands
+namespace MUnique.OpenMU.GameLogic.PlugIns.ChatCommands;
+
+using System.Runtime.InteropServices;
+using MUnique.OpenMU.PlugIns;
+
+/// <summary>
+/// A command which lists all available chat commands with their usage.
+/// </summary>
+[Guid("a5b0a3e5-bb2a-4287-821a-cd97714fe209")]
+[PlugIn("List command", "Lists all the commands.")]
+[ChatCommandHelp(Command, null)]
+public class ListCommand : IChatCommandPlugIn
 {
-    using System.Linq;
-    using System.Runtime.InteropServices;
-    using System.Text;
-    using MUnique.OpenMU.DataModel.Entities;
-    using MUnique.OpenMU.PlugIns;
+    private const string Command = "/list";
 
-    /// <summary>
-    /// Help command
-    /// </summary>
-    [Guid("a5b0a3e5-bb2a-4287-821a-cd97714fe209")]
-    [PlugIn("List command", "Lists all the commands.")]
-    [ChatCommandHelp(Command, null)]
-    public class ListCommand : IChatCommandPlugIn
+    /// <inheritdoc />
+    public string Key => Command;
+
+    /// <inheritdoc />
+    public CharacterStatus MinCharacterStatusRequirement => CharacterStatus.Normal;
+
+    /// <inheritdoc />
+    public void HandleCommand(Player player, string command)
     {
-        private const string Command = "/list";
+        var commands = player.GetAvailableChatCommands();
 
-        /// <inheritdoc />
-        public string Key => Command;
-
-        /// <inheritdoc />
-        public CharacterStatus MinCharacterStatusRequirement => CharacterStatus.Normal;
-
-        /// <inheritdoc />
-        public void HandleCommand(Player player, string command)
+        foreach (var commandUsage in commands.Select(x => x.Usage))
         {
-            var commands = player.GetAvailableChatCommands();
-
-            var stringBuilder = new StringBuilder();
-            foreach (var commandUsage in commands.Select(x => x.Usage))
-            {
-                stringBuilder.AppendLine(commandUsage);
-            }
-
-            player.ShowMessage(stringBuilder.ToString());
+            player.ShowMessage(commandUsage);
         }
     }
 }

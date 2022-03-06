@@ -41,6 +41,90 @@
         </Field>
       </Fields>
     </Structure>
+    <Structure>
+      <Name>QuestIdentification</Name>
+      <Description>Defines the information which identifies a quest.</Description>
+      <Length>4</Length>
+      <Fields>
+        <Field>
+          <Index>0</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>Number</Name>
+        </Field>
+        <Field>
+          <Index>2</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>Group</Name>
+        </Field>
+      </Fields>
+    </Structure>
+    <Structure>
+      <Name>QuestCondition</Name>
+      <Description>Defines a condition which must be fulfilled to complete the quest.</Description>
+      <Length>26</Length>
+      <Fields>
+        <Field>
+          <Index>0</Index>
+          <Type>Enum</Type>
+          <TypeName>ConditionType</TypeName>
+          <Name>Type</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>RequirementId</Name>
+          <Description>Depending on the condition type, this field contains the identifier of the required thing, e.g. Monster Number, Item Id, Level.</Description>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>RequiredCount</Name>
+        </Field>
+        <Field>
+          <Index>10</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>CurrentCount</Name>
+        </Field>
+        <Field>
+          <Index>14</Index>
+          <Type>Binary</Type>
+          <Name>RequiredItemData</Name>
+          <Description>If the condition type is 'Item', this field contains the item data, excluding the item id. The item id can be found in the RequirementId field.</Description>
+          <Length>12</Length>
+        </Field>
+      </Fields>
+    </Structure>
+    <Structure>
+      <Name>QuestReward</Name>
+      <Description>Defines a reward which is given when the quest is completed.</Description>
+      <Length>22</Length>
+      <Fields>
+        <Field>
+          <Index>0</Index>
+          <Type>Enum</Type>
+          <TypeName>RewardType</TypeName>
+          <Name>Type</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>RewardId</Name>
+          <Description>Depending on the condition type, this field contains the identifier of the required thing, e.g. Monster Number, Item Id, Level.</Description>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>RewardCount</Name>
+        </Field>
+        <Field>
+          <Index>10</Index>
+          <Type>Binary</Type>
+          <Name>RewardedItemData</Name>
+          <Description>If the reward type is 'Item', this field contains its item data.</Description>
+          <Length>12</Length>
+        </Field>
+      </Fields>
+    </Structure>
   </Structures>
   <Packets>
     <Packet>
@@ -101,6 +185,33 @@
           <Index>6</Index>
           <Type>Byte</Type>
           <Name>EffectId</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>0F</Code>
+      <Name>WeatherStatusUpdate</Name>
+      <Length>4</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The weather on the current map has been changed or the player entered the map.</SentWhen>
+      <CausedReaction>The game client updates the weather effects.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <LeftShifted>4</LeftShifted>
+          <Type>Byte</Type>
+          <Name>Weather</Name>
+          <Description>A random value between 0 and 2 (inclusive).</Description>
+          <Length>4</Length>
+        </Field>
+        <Field>
+          <Index>3</Index>
+          <LeftShifted>0</LeftShifted>
+          <Type>Byte</Type>
+          <Name>Variation</Name>
+          <Description>A random value between 0 and 9 (inclusive).</Description>
+          <Length>4</Length>
         </Field>
       </Fields>
     </Packet>
@@ -187,7 +298,7 @@
               <Index>35</Index>
               <Type>Byte</Type>
               <Name>EffectCount</Name>
-              <Description>Defines the number of effects which would be sent after this field. This is currently not supported.</Description>
+              <Description>Defines the number of effects which would be sent after this field.</Description>
             </Field>
             <Field>
               <Index>36</Index>
@@ -309,6 +420,113 @@
             </Field>
             <Field>
               <Index>26</Index>
+              <LeftShifted>0</LeftShifted>
+              <Type>Enum</Type>
+              <TypeName>CharacterHeroState</TypeName>
+              <Name>HeroState</Name>
+              <Length>4</Length>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>12</Code>
+      <Name>AddCharactersToScope095</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>One or more character got into the observed scope of the player.</SentWhen>
+      <CausedReaction>The client adds the character to the shown map.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>CharacterCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>CharacterData</TypeName>
+          <Name>Characters</Name>
+          <ItemCountField>CharacterCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>CharacterData</Name>
+          <Description>Contains the data of an NPC.</Description>
+          <Length>31</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>Id</Name>
+            </Field>
+            <Field>
+              <Index>2</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionX</Name>
+            </Field>
+            <Field>
+              <Index>3</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionY</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <Type>Binary</Type>
+              <Name>Appearance</Name>
+              <Length>13</Length>
+            </Field>
+            <Field>
+              <Index>17</Index>
+              <LeftShifted>0</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsPoisoned</Name>
+            </Field>
+            <Field>
+              <Index>17</Index>
+              <LeftShifted>1</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsIced</Name>
+            </Field>
+            <Field>
+              <Index>17</Index>
+              <LeftShifted>2</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsDamageBuffed</Name>
+            </Field>
+            <Field>
+              <Index>17</Index>
+              <LeftShifted>3</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsDefenseBuffed</Name>
+            </Field>
+            <Field>
+              <Index>18</Index>
+              <Type>String</Type>
+              <Name>Name</Name>
+              <Length>10</Length>
+            </Field>
+            <Field>
+              <Index>28</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionX</Name>
+            </Field>
+            <Field>
+              <Index>29</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionY</Name>
+            </Field>
+            <Field>
+              <Index>30</Index>
+              <LeftShifted>4</LeftShifted>
+              <Type>Byte</Type>
+              <Name>Rotation</Name>
+              <Length>4</Length>
+            </Field>
+            <Field>
+              <Index>30</Index>
               <LeftShifted>0</LeftShifted>
               <Type>Enum</Type>
               <TypeName>CharacterHeroState</TypeName>
@@ -486,6 +704,393 @@
       </Structures>
     </Packet>
     <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>13</Code>
+      <Name>AddNpcsToScope095</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>One or more NPCs got into the observed scope of the player.</SentWhen>
+      <CausedReaction>The client adds the NPCs to the shown map.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>NpcCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>NpcData</TypeName>
+          <Name>NPCs</Name>
+          <ItemCountField>NpcCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>NpcData</Name>
+          <Description>Contains the data of an NPC.</Description>
+          <Length>12</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>Id</Name>
+            </Field>
+            <Field>
+              <Index>2</Index>
+              <Type>Byte</Type>
+              <Name>TypeNumber</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <LeftShifted>0</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsPoisoned</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <LeftShifted>1</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsIced</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <LeftShifted>2</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsDamageBuffed</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <LeftShifted>3</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsDefenseBuffed</Name>
+            </Field>
+            <Field>
+              <Index>6</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionX</Name>
+            </Field>
+            <Field>
+              <Index>7</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionY</Name>
+            </Field>
+            <Field>
+              <Index>8</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionX</Name>
+            </Field>
+            <Field>
+              <Index>9</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionY</Name>
+            </Field>
+            <Field>
+              <Index>10</Index>
+              <LeftShifted>4</LeftShifted>
+              <Type>Byte</Type>
+              <Name>Rotation</Name>
+              <Length>4</Length>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>1F</Code>
+      <Name>AddSummonedMonstersToScope</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>One or more summoned monsters got into the observed scope of the player.</SentWhen>
+      <CausedReaction>The client adds the monsters to the shown map.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>MonsterCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>SummonedMonsterData</TypeName>
+          <Name>SummonedMonsters</Name>
+          <ItemCountField>MonsterCount</ItemCountField>
+          <UseCustomIndexer>true</UseCustomIndexer>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>SummonedMonsterData</Name>
+          <Description>Contains the data of an NPC.</Description>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>Id</Name>
+            </Field>
+            <Field>
+              <Index>2</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>TypeNumber</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionX</Name>
+            </Field>
+            <Field>
+              <Index>5</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionY</Name>
+            </Field>
+            <Field>
+              <Index>6</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionX</Name>
+            </Field>
+            <Field>
+              <Index>7</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionY</Name>
+            </Field>
+            <Field>
+              <Index>8</Index>
+              <LeftShifted>4</LeftShifted>
+              <Type>Byte</Type>
+              <Name>Rotation</Name>
+              <Length>4</Length>
+            </Field>
+            <Field>
+              <Index>9</Index>
+              <Type>String</Type>
+              <Name>OwnerCharacterName</Name>
+              <Length>10</Length>
+            </Field>
+            <Field>
+              <Index>19</Index>
+              <Type>Byte</Type>
+              <Name>EffectCount</Name>
+              <Description>Defines the number of effects which would be sent after this field. This is currently not supported.</Description>
+            </Field>
+            <Field>
+              <Index>20</Index>
+              <Type>Structure[]</Type>
+              <TypeName>EffectId</TypeName>
+              <Name>Effects</Name>
+              <ItemCountField>EffectCount</ItemCountField>
+            </Field>
+          </Fields>
+        </Structure>
+        <Structure>
+          <Name>EffectId</Name>
+          <Description>Contains the id of a magic effect.</Description>
+          <Length>1</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>Byte</Type>
+              <Name>Id</Name>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>1F</Code>
+      <Name>AddSummonedMonstersToScope075</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>One or more summoned monsters got into the observed scope of the player.</SentWhen>
+      <CausedReaction>The client adds the monsters to the shown map.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>MonsterCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>SummonedMonsterData</TypeName>
+          <Name>SummonedMonsters</Name>
+          <ItemCountField>MonsterCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>SummonedMonsterData</Name>
+          <Description>Contains the data of an NPC.</Description>
+          <Length>19</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>Id</Name>
+            </Field>
+            <Field>
+              <Index>2</Index>
+              <Type>Byte</Type>
+              <Name>TypeNumber</Name>
+            </Field>
+            <Field>
+              <Index>3</Index>
+              <LeftShifted>0</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsPoisoned</Name>
+            </Field>
+            <Field>
+              <Index>3</Index>
+              <LeftShifted>1</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsIced</Name>
+            </Field>
+            <Field>
+              <Index>3</Index>
+              <LeftShifted>2</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsDamageBuffed</Name>
+            </Field>
+            <Field>
+              <Index>3</Index>
+              <LeftShifted>3</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsDefenseBuffed</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionX</Name>
+            </Field>
+            <Field>
+              <Index>5</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionY</Name>
+            </Field>
+            <Field>
+              <Index>6</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionX</Name>
+            </Field>
+            <Field>
+              <Index>7</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionY</Name>
+            </Field>
+            <Field>
+              <Index>8</Index>
+              <LeftShifted>4</LeftShifted>
+              <Type>Byte</Type>
+              <Name>Rotation</Name>
+              <Length>4</Length>
+            </Field>
+            <Field>
+              <Index>9</Index>
+              <Type>String</Type>
+              <Name>OwnerCharacterName</Name>
+              <Length>10</Length>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>1F</Code>
+      <Name>AddSummonedMonstersToScope095</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>One or more summoned monsters got into the observed scope of the player.</SentWhen>
+      <CausedReaction>The client adds the monsters to the shown map.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>MonsterCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>SummonedMonsterData</TypeName>
+          <Name>SummonedMonsters</Name>
+          <ItemCountField>MonsterCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>SummonedMonsterData</Name>
+          <Description>Contains the data of an NPC.</Description>
+          <Length>20</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>Id</Name>
+            </Field>
+            <Field>
+              <Index>2</Index>
+              <Type>Byte</Type>
+              <Name>TypeNumber</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <LeftShifted>0</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsPoisoned</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <LeftShifted>1</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsIced</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <LeftShifted>2</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsDamageBuffed</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <LeftShifted>3</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsDefenseBuffed</Name>
+            </Field>
+            <Field>
+              <Index>5</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionX</Name>
+            </Field>
+            <Field>
+              <Index>6</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionY</Name>
+            </Field>
+            <Field>
+              <Index>7</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionX</Name>
+            </Field>
+            <Field>
+              <Index>8</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionY</Name>
+            </Field>
+            <Field>
+              <Index>9</Index>
+              <LeftShifted>4</LeftShifted>
+              <Type>Byte</Type>
+              <Name>Rotation</Name>
+              <Length>4</Length>
+            </Field>
+            <Field>
+              <Index>10</Index>
+              <Type>String</Type>
+              <Name>OwnerCharacterName</Name>
+              <Length>10</Length>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
       <HeaderType>C1Header</HeaderType>
       <Code>14</Code>
       <Name>MapObjectOutOfScope</Name>
@@ -521,7 +1126,7 @@
         </Structure>
       </Structures>
     </Packet>
-	  <Packet>
+    <Packet>
       <HeaderType>C1Header</HeaderType>
       <Code>17</Code>
       <Name>ObjectGotKilled</Name>
@@ -534,6 +1139,11 @@
           <Index>3</Index>
           <Type>ShortBigEndian</Type>
           <Name>KilledId</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>SkillId</Name>
         </Field>
         <Field>
           <Index>7</Index>
@@ -615,7 +1225,7 @@
       <Name>SkillAnimation</Name>
       <Length>9</Length>
       <Direction>ServerToClient</Direction>
-      <SentWhen>An object performs a skill which is directly targetted to another object.</SentWhen>
+      <SentWhen>An object performs a skill which is directly targeted to another object.</SentWhen>
       <CausedReaction>The animation is shown on the user interface.</CausedReaction>
       <Fields>
         <Field>
@@ -630,6 +1240,184 @@
         </Field>
         <Field>
           <Index>7</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>TargetId</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>1E</Code>
+      <Name>AreaSkillAnimation075</Name>
+      <Length>9</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>An object performs a skill which has effect on an area.</SentWhen>
+      <CausedReaction>The animation is shown on the user interface.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SkillId</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>PlayerId</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>PointX</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>Byte</Type>
+          <Name>PointY</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Byte</Type>
+          <Name>Rotation</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C3Header</HeaderType>
+      <Code>1E</Code>
+      <Name>AreaSkillAnimation095</Name>
+      <Length>9</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>An object performs a skill which has effect on an area.</SentWhen>
+      <CausedReaction>The animation is shown on the user interface.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SkillId</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>PlayerId</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>PointX</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>Byte</Type>
+          <Name>PointY</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Byte</Type>
+          <Name>Rotation</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>19</Code>
+      <Name>SkillAnimation075</Name>
+      <Length>8</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>An object performs a skill which is directly targeted to another object.</SentWhen>
+      <CausedReaction>The animation is shown on the user interface.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SkillId</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>PlayerId</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>TargetId</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <LeftShifted>7</LeftShifted>
+          <Type>Boolean</Type>
+          <Name>EffectApplied</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C3Header</HeaderType>
+      <Code>19</Code>
+      <Name>SkillAnimation095</Name>
+      <Length>8</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>An object performs a skill which is directly targeted to another object.</SentWhen>
+      <CausedReaction>The animation is shown on the user interface.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SkillId</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>PlayerId</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>TargetId</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <LeftShifted>7</LeftShifted>
+          <Type>Boolean</Type>
+          <Name>EffectApplied</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>1B</Code>
+      <Name>MagicEffectCancelled</Name>
+      <Length>7</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>A player cancelled a specific magic effect of a skill (Infinity Arrow, Wizardry Enhance), or an effect was removed due a timeout (Ice, Poison) or antidote.</SentWhen>
+      <CausedReaction>The effect is removed from the target object.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>SkillId</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>TargetId</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>1B</Code>
+      <Name>MagicEffectCancelled075</Name>
+      <Length>6</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>A player cancelled a specific magic effect of a skill (Infinity Arrow, Wizardry Enhance), or an effect was removed due a timeout (Ice, Poison) or antidote.</SentWhen>
+      <CausedReaction>The effect is removed from the target object.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>SkillId</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
           <Type>ShortBigEndian</Type>
           <Name>TargetId</Name>
         </Field>
@@ -760,6 +1548,64 @@
       </Structures>
     </Packet>
     <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>42</Code>
+      <SubCode>01</SubCode>
+      <Name>PartyList075</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>A player joined a party or requested the current party list by opening the party dialog.</SentWhen>
+      <CausedReaction>The party list is updated.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>Count</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>PartyMember</TypeName>
+          <Name>Members</Name>
+          <ItemCountField>Count</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>PartyMember</Name>
+          <Description>Data about a party member.</Description>
+          <Length>14</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>String</Type>
+              <Name>Name</Name>
+              <Length>10</Length>
+            </Field>
+            <Field>
+              <Index>10</Index>
+              <Type>Byte</Type>
+              <Name>Index</Name>
+            </Field>
+            <Field>
+              <Index>11</Index>
+              <Type>Byte</Type>
+              <Name>MapId</Name>
+            </Field>
+            <Field>
+              <Index>12</Index>
+              <Type>Byte</Type>
+              <Name>PositionX</Name>
+            </Field>
+            <Field>
+              <Index>13</Index>
+              <Type>Byte</Type>
+              <Name>PositionY</Name>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
       <HeaderType>C1Header</HeaderType>
       <Code>43</Code>
       <Name>RemovePartyMember</Name>
@@ -849,7 +1695,7 @@
       <CausedReaction>The game client updates the trade button state accordingly.</CausedReaction>
       <Fields>
         <Field>
-          <Index>4</Index>
+          <Index>3</Index>
           <Type>Enum</Type>
           <TypeName>TradeButtonState</TypeName>
           <Name>State</Name>
@@ -965,7 +1811,7 @@
       <CausedReaction>The trade dialog is closed. Depending on the result, a message is shown.</CausedReaction>
       <Fields>
         <Field>
-          <Index>4</Index>
+          <Index>3</Index>
           <Type>Enum</Type>
           <TypeName>TradeResult</TypeName>
           <Name>Result</Name>
@@ -1385,6 +2231,39 @@
       </Fields>
     </Packet>
     <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>10</Code>
+      <Name>ObjectWalked075</Name>
+      <Length>8</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>An object in the observed scope (including the own player) walked to another position.</SentWhen>
+      <CausedReaction>The object is animated to walk to the new position.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>ObjectId</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>TargetX</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>TargetY</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <LeftShifted>4</LeftShifted>
+          <Type>Byte</Type>
+          <Name>TargetRotation</Name>
+          <Length>4</Length>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
       <HeaderType>C3Header</HeaderType>
       <Code>16</Code>
       <Name>ExperienceGained</Name>
@@ -1423,7 +2302,8 @@
         <Field>
           <Index>4</Index>
           <Type>Boolean</Type>
-          <Name>Success</Name>
+          <Name>IsMapChange</Name>
+          <Description>If false, it shows the teleport animation (white bubbles), and the client doesn't remove all of the objects in its scope.</Description>
           <DefaultValue>true</DefaultValue>
         </Field>
         <Field>
@@ -1443,6 +2323,44 @@
         </Field>
         <Field>
           <Index>9</Index>
+          <Type>Byte</Type>
+          <Name>Rotation</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C3Header</HeaderType>
+      <Code>1C</Code>
+      <Name>MapChanged075</Name>
+      <Length>8</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The map was changed on the server side.</SentWhen>
+      <CausedReaction>The game client changes to the specified map and coordinates.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Boolean</Type>
+          <Name>IsMapChange</Name>
+          <Description>If false, it shows the teleport animation (white bubbles), and the client doesn't remove all of the objects in its scope.</Description>
+          <DefaultValue>true</DefaultValue>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>MapNumber</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>PositionX</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>PositionY</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
           <Type>Byte</Type>
           <Name>Rotation</Name>
         </Field>
@@ -1521,6 +2439,125 @@
           </Fields>
         </Structure>
       </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>20</Code>
+      <Name>MoneyDropped</Name>
+      <Length>21</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>Money dropped on the ground.</SentWhen>
+      <CausedReaction>The client adds the money to the ground.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>ItemCount</Name>
+          <DefaultValue>1</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>Id</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <LeftShifted>7</LeftShifted>
+          <Type>Boolean</Type>
+          <Name>IsFreshDrop</Name>
+          <Description>If this flag is set, the money is added to the map with an animation and sound. Otherwise it's just added like it was already on the ground before.</Description>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>Byte</Type>
+          <Name>PositionX</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Byte</Type>
+          <Name>PositionY</Name>
+        </Field>
+        <Field>
+          <Index>9</Index>
+          <Type>Byte</Type>
+          <Name>MoneyNumber</Name>
+          <DefaultValue>15</DefaultValue>
+        </Field>
+        <Field>
+          <Index>10</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>Amount</Name>
+          <UseCustomIndexer>true</UseCustomIndexer><!-- Trick to get a partial struct -->
+        </Field>
+        <Field>
+          <Index>14</Index>
+          <LeftShifted>4</LeftShifted>
+          <Type>Byte</Type>
+          <Name>MoneyGroup</Name>
+          <DefaultValue>14</DefaultValue>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>20</Code>
+      <Name>MoneyDropped075</Name>
+      <Length>14</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>Money dropped on the ground.</SentWhen>
+      <CausedReaction>The client adds the money to the ground.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>ItemCount</Name>
+          <DefaultValue>1</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>Id</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <LeftShifted>7</LeftShifted>
+          <Type>Boolean</Type>
+          <Name>IsFreshDrop</Name>
+          <Description>If this flag is set, the money is added to the map with an animation and sound. Otherwise it's just added like it was already on the ground before.</Description>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>Byte</Type>
+          <Name>PositionX</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Byte</Type>
+          <Name>PositionY</Name>
+        </Field>
+        <Field>
+          <Index>9</Index>
+          <LeftShifted>0</LeftShifted>
+          <Type>Byte</Type>
+          <Name>MoneyNumber</Name>
+          <DefaultValue>15</DefaultValue>
+          <Length>4</Length>
+        </Field>
+        <Field>
+          <Index>9</Index>
+          <LeftShifted>4</LeftShifted>
+          <Type>Byte</Type>
+          <Name>MoneyGroup</Name>
+          <DefaultValue>14</DefaultValue>
+          <Length>4</Length>
+        </Field>
+        <Field>
+          <Index>10</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>Amount</Name>
+          <UseCustomIndexer>true</UseCustomIndexer><!-- Trick to get a partial struct -->
+        </Field>
+      </Fields>
     </Packet>
     <Packet>
       <HeaderType>C2Header</HeaderType>
@@ -1904,6 +2941,297 @@
       </Fields>
     </Packet>
     <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>2C</Code>
+      <Name>FruitConsumptionResponse</Name>
+      <Length>7</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The player requested to consume a fruit.</SentWhen>
+      <CausedReaction>The client updates the user interface, by changing the added stat points and used fruit points.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>FruitConsumptionResult</TypeName>
+          <Name>Result</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>StatPoints</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Enum</Type>
+          <TypeName>FruitStatType</TypeName>
+          <Name>StatType</Name>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>FruitConsumptionResult</Name>
+          <Description>Defines the result of the fruit consumption request.</Description>
+          <Values>
+            <EnumValue>
+              <Name>PlusSuccess</Name>
+              <Description>Consumption to add points was successful.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>PlusFailed</Name>
+              <Description>Consumption to add points failed.</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>PlusPrevented</Name>
+              <Description>Consumption to add points was prevented because some conditions were not correct.</Description>
+              <Value>2</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>MinusSuccess</Name>
+              <Description>Consumption to remove points was successful.</Description>
+              <Value>3</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>MinusFailed</Name>
+              <Description>Consumption to remove points failed.</Description>
+              <Value>4</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>MinusPrevented</Name>
+              <Description>Consumption to remove points was prevented because some conditions were not correct.</Description>
+              <Value>5</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>MinusSuccessCashShopFruit</Name>
+              <Description>Consumption to remove points was successful, removed by a fruit acquired through the cash shop.</Description>
+              <Value>6</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>PreventedByEquippedItems</Name>
+              <Description>Consumption was prevented because an item was equipped.</Description>
+              <Value>16</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>PlusPreventedByMaximum</Name>
+              <Description>Consumption to add points was prevented because the maximum amount of points have been added.</Description>
+              <Value>33</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>MinusPreventedByMaximum</Name>
+              <Description>Consumption to remove points was prevented because the maximum amount of points have been removed.</Description>
+              <Value>37</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>MinusPreventedByDefault</Name>
+              <Description>Consumption to remove points was prevented because the base amount of stat points of the character class cannot be undercut.</Description>
+              <Value>38</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+        <Enum>
+          <Name>FruitStatType</Name>
+          <Description>Defines the type of stat which the fruit modifies.</Description>
+          <Values>
+            <EnumValue>
+              <Name>Energy</Name>
+              <Description>Fruit which modifies the energy stat.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Vitality</Name>
+              <Description>Fruit which modifies the vitality stat.</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Agility</Name>
+              <Description>Fruit which modifies the agility stat.</Description>
+              <Value>2</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Strength</Name>
+              <Description>Fruit which modifies the strength stat.</Description>
+              <Value>3</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Leadership</Name>
+              <Description>Fruit which modifies the leadership stat.</Description>
+              <Value>4</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>2D</Code>
+      <Name>EffectItemConsumption</Name>
+      <Length>17</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The player requested to consume an item which gives a magic effect.</SentWhen>
+      <CausedReaction>The client updates the user interface, it shows the remaining time at the effect icon.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Enum</Type>
+          <TypeName>EffectOrigin</TypeName>
+          <Name>Origin</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Enum</Type>
+          <TypeName>EffectType</TypeName>
+          <Name>Type</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Enum</Type>
+          <TypeName>EffectAction</TypeName>
+          <Name>Action</Name>
+        </Field>
+        <Field>
+          <Index>12</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>RemainingSeconds</Name>
+        </Field>
+        <Field>
+          <Index>16</Index>
+          <Type>Byte</Type>
+          <Name>MagicEffectNumber</Name>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>EffectOrigin</Name>
+          <Description>Defines the origin of the effect.</Description>
+          <Values>
+            <EnumValue>
+              <Name>Undefined</Name>
+              <Description>Not defined.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>HalloweenAndCherryBlossomEvent</Name>
+              <Description>Options of Halloween and Cherry Blossom Event items.</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>CashShopItem</Name>
+              <Description>Options of cash shop items, like Seals.</Description>
+              <Value>2</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+        <Enum>
+          <Name>EffectAction</Name>
+          <Description>Defines the effect option.</Description>
+          <Values>
+            <EnumValue>
+              <Name>Add</Name>
+              <Description>Effect is added.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Remove</Name>
+              <Description>Effect is removed.</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Replace</Name>
+              <Description>Effect is removed, because its getting replaced.</Description>
+              <Value>2</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+        <Enum>
+          <Name>EffectType</Name>
+          <Description>Defines the kind of effect which was applied.</Description>
+          <Values>
+            <EnumValue>
+              <Name>AttackSpeed</Name>
+              <Description>Attack speed increase.</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Damage</Name>
+              <Description>Damage increase.</Description>
+              <Value>2</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Defense</Name>
+              <Description>Defense increase.</Description>
+              <Value>3</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>MaximumHealth</Name>
+              <Description>Maximum Health increase.</Description>
+              <Value>4</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>MaximumMana</Name>
+              <Description>Maximum Mana increase.</Description>
+              <Value>5</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>ExperienceRate</Name>
+              <Description>Experience rate increase.</Description>
+              <Value>6</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>DropRate</Name>
+              <Description>Drop rate increase.</Description>
+              <Value>7</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Sustenance</Name>
+              <Description>Sustenance effect, means no experience is gained during this effect.</Description>
+              <Value>8</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Strength</Name>
+              <Description>Strength stat increase.</Description>
+              <Value>9</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Agility</Name>
+              <Description>Agility stat increase.</Description>
+              <Value>10</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Vitality</Name>
+              <Description>Vitality stat increase.</Description>
+              <Value>11</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Energy</Name>
+              <Description>Energy stat increase.</Description>
+              <Value>12</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Leadership</Name>
+              <Description>Leadership stat increase.</Description>
+              <Value>13</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>PhysicalDamage</Name>
+              <Description>Physical damage increase.</Description>
+              <Value>14</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>WizardryDamage</Name>
+              <Description>Wizardry damage increase.</Description>
+              <Value>15</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Mobility</Name>
+              <Description>Mobility increase.</Description>
+              <Value>16</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
       <HeaderType>C3Header</HeaderType>
       <Code>30</Code>
       <Name>NpcWindowResponse</Name>
@@ -2058,7 +3386,13 @@
       <Fields>
         <Field>
           <Index>4</Index>
-          <Type>ShortBigEndian</Type>
+          <Type>Enum</Type>
+          <TypeName>ItemWindow</TypeName>
+          <Name>Type</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
           <Name>ItemCount</Name>
         </Field>
         <Field>
@@ -2069,6 +3403,29 @@
           <ItemCountField>ItemCount</ItemCountField>
         </Field>
       </Fields>
+      <Enums>
+        <Enum>
+          <Name>ItemWindow</Name>
+          <Description>Defines the kind of npc window which should be shown on the client.</Description>
+          <Values>
+            <EnumValue>
+              <Name>Normal</Name>
+              <Description>A normal window.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>ChaosMachine</Name>
+              <Description>A chaos machine window.</Description>
+              <Value>3</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>ResurrectionFailed</Name>
+              <Description>A failed resurrection (of Dark Horse or Dark Raven) storage dialog.</Description>
+              <Value>5</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
     </Packet>
     <Packet>
       <HeaderType>C1HeaderWithSubCode</HeaderType>
@@ -2366,6 +3723,270 @@
       </Structures>
     </Packet>
     <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>45</Code>
+      <Name>AddTransformedCharactersToScope075</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The player wears a monster transformation ring.</SentWhen>
+      <CausedReaction>The character appears as monster, defined by the Skin property.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>CharacterCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>CharacterData</TypeName>
+          <Name>Characters</Name>
+          <ItemCountField>CharacterCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>CharacterData</Name>
+          <Description>Contains the data of an transformed character.</Description>
+          <Length>19</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>Id</Name>
+            </Field>
+            <Field>
+              <Index>2</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionX</Name>
+            </Field>
+            <Field>
+              <Index>3</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionY</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <Type>Byte</Type>
+              <Name>Skin</Name>
+            </Field>
+            <Field>
+              <Index>5</Index>
+              <LeftShifted>0</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsPoisoned</Name>
+            </Field>
+            <Field>
+              <Index>5</Index>
+              <LeftShifted>1</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsIced</Name>
+            </Field>
+            <Field>
+              <Index>5</Index>
+              <LeftShifted>2</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsDamageBuffed</Name>
+            </Field>
+            <Field>
+              <Index>5</Index>
+              <LeftShifted>3</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsDefenseBuffed</Name>
+            </Field>
+            <Field>
+              <Index>6</Index>
+              <Type>String</Type>
+              <Name>Name</Name>
+              <Length>10</Length>
+            </Field>
+            <Field>
+              <Index>16</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionX</Name>
+            </Field>
+            <Field>
+              <Index>17</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionY</Name>
+            </Field>
+            <Field>
+              <Index>18</Index>
+              <LeftShifted>4</LeftShifted>
+              <Type>Byte</Type>
+              <Name>Rotation</Name>
+              <Length>4</Length>
+            </Field>
+            <Field>
+              <Index>18</Index>
+              <LeftShifted>0</LeftShifted>
+              <Type>Enum</Type>
+              <TypeName>CharacterHeroState</TypeName>
+              <Name>HeroState</Name>
+              <Length>4</Length>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>45</Code>
+      <Name>AddTransformedCharactersToScope</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The player wears a monster transformation ring.</SentWhen>
+      <CausedReaction>The character appears as monster, defined by the Skin property.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>CharacterCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>CharacterData</TypeName>
+          <Name>Characters</Name>
+          <ItemCountField>CharacterCount</ItemCountField>
+          <UseCustomIndexer>true</UseCustomIndexer>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>CharacterData</Name>
+          <Description>Contains the data of an transformed character.</Description>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>Id</Name>
+            </Field>
+            <Field>
+              <Index>2</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionX</Name>
+            </Field>
+            <Field>
+              <Index>3</Index>
+              <Type>Byte</Type>
+              <Name>CurrentPositionY</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>Skin</Name>
+            </Field>
+            <Field>
+              <Index>6</Index>
+              <Type>String</Type>
+              <Name>Name</Name>
+              <Length>10</Length>
+            </Field>
+            <Field>
+              <Index>16</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionX</Name>
+            </Field>
+            <Field>
+              <Index>17</Index>
+              <Type>Byte</Type>
+              <Name>TargetPositionY</Name>
+            </Field>
+            <Field>
+              <Index>18</Index>
+              <LeftShifted>4</LeftShifted>
+              <Type>Byte</Type>
+              <Name>Rotation</Name>
+              <Length>4</Length>
+            </Field>
+            <Field>
+              <Index>18</Index>
+              <LeftShifted>0</LeftShifted>
+              <Type>Enum</Type>
+              <TypeName>CharacterHeroState</TypeName>
+              <Name>HeroState</Name>
+              <Length>4</Length>
+            </Field>
+            <Field>
+              <Index>19</Index>
+              <Type>Binary</Type>
+              <Name>Appearance</Name>
+              <Length>18</Length>
+            </Field>
+            <Field>
+              <Index>37</Index>
+              <Type>Byte</Type>
+              <Name>EffectCount</Name>
+              <Description>Defines the number of effects which would be sent after this field.</Description>
+            </Field>
+            <Field>
+              <Index>38</Index>
+              <Type>Structure[]</Type>
+              <TypeName>EffectId</TypeName>
+              <Name>Effects</Name>
+              <ItemCountField>EffectCount</ItemCountField>
+            </Field>
+          </Fields>
+        </Structure>
+        <Structure>
+          <Name>EffectId</Name>
+          <Description>Contains the id of a magic effect.</Description>
+          <Length>1</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>Byte</Type>
+              <Name>Id</Name>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>48</Code>
+      <Name>ShowEffect</Name>
+      <Length>6</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After a player achieved or lost something.</SentWhen>
+      <CausedReaction>An effect is shown for the affected player.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>PlayerId</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Enum</Type>
+          <TypeName>EffectType</TypeName>
+          <Name>Effect</Name>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>EffectType</Name>
+          <Description>Defines the effect which is shown for the player.</Description>
+          <Values>
+            <EnumValue>
+              <Name>ShieldPotion</Name>
+              <Description>The player gained shield by drinking a potion.</Description>
+              <Value>3</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>LevelUp</Name>
+              <Description>A level up effect is shown for the player.</Description>
+              <Value>16</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>ShieldLost</Name>
+              <Description>The players shield depleted.</Description>
+              <Value>17</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
       <HeaderType>C1HeaderWithSubCode</HeaderType>
       <Code>F3</Code>
       <SubCode>00</SubCode>
@@ -2443,7 +4064,6 @@
               <Type>Binary</Type>
               <Name>Appearance</Name>
               <Length>18</Length>
-              <!-- 0.75 has a length of 9 -->
             </Field>
             <Field>
               <Index>33</Index>
@@ -2496,7 +4116,7 @@
             </Field>
             <Field>
               <Index>11</Index>
-              <Type>ShortLittleEndian</Type>
+              <Type>ShortBigEndian</Type>
               <Name>Level</Name>
             </Field>
             <Field>
@@ -2518,6 +4138,74 @@
               <Type>Binary</Type>
               <Name>Appearance</Name>
               <Length>9</Length>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>00</SubCode>
+      <Name>CharacterList095</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the game client requested it, usually after a successful login.</SentWhen>
+      <CausedReaction>The game client shows the available characters of the account.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>CharacterCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>CharacterData</TypeName>
+          <Name>Characters</Name>
+          <ItemCountField>CharacterCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>CharacterData</Name>
+          <Description>Data of one character in the list.</Description>
+          <Length>26</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>Byte</Type>
+              <Name>SlotIndex</Name>
+            </Field>
+            <Field>
+              <Index>1</Index>
+              <Type>String</Type>
+              <Name>Name</Name>
+              <Length>10</Length>
+            </Field>
+            <Field>
+              <Index>12</Index>
+              <Type>ShortLittleEndian</Type>
+              <Name>Level</Name>
+            </Field>
+            <Field>
+              <Index>14</Index>
+              <Type>Enum</Type>
+              <TypeName>CharacterStatus</TypeName>
+              <Name>Status</Name>
+              <Length>4</Length>
+            </Field>
+            <Field>
+              <Index>14</Index>
+              <LeftShifted>4</LeftShifted>
+              <Type>Boolean</Type>
+              <Name>IsItemBlockActive</Name>
+              <Length>4</Length>
+            </Field>
+            <Field>
+              <Index>15</Index>
+              <Type>Binary</Type>
+              <Name>Appearance</Name>
+              <Length>11</Length>
             </Field>
           </Fields>
         </Structure>
@@ -2584,6 +4272,137 @@
       <SentWhen>After the server processed a character creation request without success.</SentWhen>
       <CausedReaction>A message is shown that it failed. </CausedReaction>
       <Fields />
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>04</SubCode>
+      <Name>RespawnAfterDeath075</Name>
+      <Length>20</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The character respawned after death.</SentWhen>
+      <CausedReaction>The character respawns with the specified attributes at the specified map.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>PositionX</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>PositionY</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>MapNumber</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>Byte</Type>
+          <Name>Direction</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>CurrentHealth</Name>
+        </Field>
+        <Field>
+          <Index>10</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>CurrentMana</Name>
+        </Field>
+        <Field>
+          <Index>12</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>Experience</Name>
+        </Field>
+        <Field>
+          <Index>16</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>Money</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>04</SubCode>
+      <Name>RespawnAfterDeath095</Name>
+      <Length>22</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The character respawned after death.</SentWhen>
+      <CausedReaction>The character respawns with the specified attributes at the specified map.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>PositionX</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>PositionY</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>MapNumber</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>Byte</Type>
+          <Name>Direction</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>CurrentHealth</Name>
+        </Field>
+        <Field>
+          <Index>10</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>CurrentMana</Name>
+        </Field>
+        <Field>
+          <Index>12</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>CurrentAbility</Name>
+        </Field>
+        <Field>
+          <Index>14</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>Experience</Name>
+        </Field>
+        <Field>
+          <Index>18</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>Money</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>07</SubCode>
+      <Name>PoisonDamage</Name>
+      <Length>8</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The character got damaged by being poisoned on old client versions.</SentWhen>
+      <CausedReaction>Removes the damage from the health without showing a damage number.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>HealthDamage</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>CurrentShield</Name>
+        </Field>
+      </Fields>
     </Packet>
     <Packet>
       <HeaderType>C1HeaderWithSubCode</HeaderType>
@@ -2722,7 +4541,63 @@
       <Code>F3</Code>
       <SubCode>11</SubCode>
       <Name>SkillAdded075</Name>
+      <Length>8</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After a skill got added to the skill list, e.g. by equipping an item or learning a skill.</SentWhen>
+      <CausedReaction>The skill is added to the skill list on client side.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>Flag</Name>
+          <DefaultValue>1</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>SkillIndex</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>SkillNumberAndLevel</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>11</SubCode>
+      <Name>SkillRemoved075</Name>
       <Length>10</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After a skill got removed from the skill list, e.g. by removing an equipped item.</SentWhen>
+      <CausedReaction>The skill is added to the skill list on client side.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>Flag</Name>
+          <DefaultValue>0</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>SkillIndex</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>SkillNumberAndLevel</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>11</SubCode>
+      <Name>SkillAdded095</Name>
+      <Length>8</Length>
       <Direction>ServerToClient</Direction>
       <SentWhen>After a skill got added to the skill list, e.g. by equipping an item or learning a skill.</SentWhen>
       <CausedReaction>The skill is added to the skill list on client side.</CausedReaction>
@@ -2749,7 +4624,7 @@
       <HeaderType>C1HeaderWithSubCode</HeaderType>
       <Code>F3</Code>
       <SubCode>11</SubCode>
-      <Name>SkillRemoved075</Name>
+      <Name>SkillRemoved095</Name>
       <Length>10</Length>
       <Direction>ServerToClient</Direction>
       <SentWhen>After a skill got removed from the skill list, e.g. by removing an equipped item.</SentWhen>
@@ -3226,6 +5101,135 @@
       </Fields>
     </Packet>
     <Packet>
+      <HeaderType>C3HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>03</SubCode>
+      <Name>CharacterInformation097</Name>
+      <Length>52</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the character was selected by the player and entered the game.</SentWhen>
+      <CausedReaction>The characters enters the game world.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>X</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>Y</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>MapId</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>Byte</Type>
+          <Name>Direction</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>CurrentExperience</Name>
+        </Field>
+        <Field>
+          <Index>12</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>ExperienceForNextLevel</Name>
+        </Field>
+        <Field>
+          <Index>16</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>LevelUpPoints</Name>
+        </Field>
+        <Field>
+          <Index>18</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>Strength</Name>
+        </Field>
+        <Field>
+          <Index>20</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>Agility</Name>
+        </Field>
+        <Field>
+          <Index>22</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>Vitality</Name>
+        </Field>
+        <Field>
+          <Index>24</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>Energy</Name>
+        </Field>
+        <Field>
+          <Index>26</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>CurrentHealth</Name>
+        </Field>
+        <Field>
+          <Index>28</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>MaximumHealth</Name>
+        </Field>
+        <Field>
+          <Index>30</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>CurrentMana</Name>
+        </Field>
+        <Field>
+          <Index>32</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>MaximumMana</Name>
+        </Field>
+        <Field>
+          <Index>34</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>CurrentAbility</Name>
+        </Field>
+        <Field>
+          <Index>36</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>MaximumAbility</Name>
+        </Field>
+        <Field>
+          <Index>40</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>Money</Name>
+        </Field>
+        <Field>
+          <Index>44</Index>
+          <Type>Enum</Type>
+          <TypeName>CharacterHeroState</TypeName>
+          <Name>HeroState</Name>
+        </Field>
+        <Field>
+          <Index>45</Index>
+          <Type>Enum</Type>
+          <TypeName>CharacterStatus</TypeName>
+          <Name>Status</Name>
+        </Field>
+        <Field>
+          <Index>46</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>UsedFruitPoints</Name>
+        </Field>
+        <Field>
+          <Index>48</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>MaxFruitPoints</Name>
+        </Field>
+        <Field>
+          <Index>50</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>Leadership</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
       <HeaderType>C4HeaderWithSubCode</HeaderType>
       <Code>F3</Code>
       <SubCode>10</SubCode>
@@ -3266,6 +5270,208 @@
           <Index>5</Index>
           <Type>Binary</Type>
           <Name>ItemData</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>20</SubCode>
+      <Name>SummonHealthUpdate</Name>
+      <Length>5</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>When health of a summoned monster (Elf Skill) changed.</SentWhen>
+      <CausedReaction>The health is updated on the user interface.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>HealthPercent</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>22</SubCode>
+      <Name>GuildSoccerTimeUpdate</Name>
+      <Length>6</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>Every second during a guild soccer match.</SentWhen>
+      <CausedReaction>The time is updated on the user interface.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>Seconds</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>23</SubCode>
+      <Name>GuildSoccerScoreUpdate</Name>
+      <Length>22</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>Whenever the score of the soccer game changed, and at the beginning of the match.</SentWhen>
+      <CausedReaction>The score is updated on the user interface.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>String</Type>
+          <Name>RedTeamName</Name>
+          <Length>8</Length>
+        </Field>
+        <Field>
+          <Index>12</Index>
+          <Type>Byte</Type>
+          <Name>RedTeamGoals</Name>
+        </Field>
+        <Field>
+          <Index>13</Index>
+          <Type>String</Type>
+          <Name>BlueTeamName</Name>
+          <Length>8</Length>
+        </Field>
+        <Field>
+          <Index>21</Index>
+          <Type>Byte</Type>
+          <Name>BlueTeamGoals</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>40</SubCode>
+      <Name>ServerCommand</Name>
+      <Length>7</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>E.g. when event items are dropped to the floor, or a specific dialog should be shown.</SentWhen>
+      <CausedReaction>The client shows an effect, e.g. a firework.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>CommandType</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>Parameter1</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>Parameter2</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>40</SubCode>
+      <Name>ShowFireworks</Name>
+      <Length>7</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>E.g. when event items are dropped to the floor.</SentWhen>
+      <CausedReaction>The client shows an fireworks effect at the specified coordinates.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>EffectType</Name>
+          <DefaultValue>0</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>X</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>Y</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>40</SubCode>
+      <Name>ShowChristmasFireworks</Name>
+      <Length>7</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>E.g. when event items are dropped to the floor.</SentWhen>
+      <CausedReaction>The client shows an christmas fireworks effect at the specified coordinates.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>EffectType</Name>
+          <DefaultValue>59</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>X</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>Y</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>40</SubCode>
+      <Name>PlayFanfareSound</Name>
+      <Length>7</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>E.g. when event items are dropped to the floor.</SentWhen>
+      <CausedReaction>The client plays a fanfare sound at the specified coordinates.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>EffectType</Name>
+          <DefaultValue>2</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>X</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>Y</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>40</SubCode>
+      <Name>ShowSwirl</Name>
+      <Length>7</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>E.g. when event items are dropped to the floor.</SentWhen>
+      <CausedReaction>The client shows a swirl effect at the specified object.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>EffectType</Name>
+          <DefaultValue>58</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>TargetObjectId</Name>
         </Field>
       </Fields>
     </Packet>
@@ -3316,6 +5522,58 @@
         </Field>
         <Field>
           <Index>30</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>MaximumAbility</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F3</Code>
+      <SubCode>51</SubCode>
+      <Name>MasterCharacterLevelUpdate</Name>
+      <Length>20</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After a master character leveled up.</SentWhen>
+      <CausedReaction>Updates the master level (and other related stats) in the game client and shows an effect.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>MasterLevel</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>GainedMasterPoints</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>CurrentMasterPoints</Name>
+        </Field>
+        <Field>
+          <Index>10</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>MaximumMasterPoints</Name>
+        </Field>
+        <Field>
+          <Index>12</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>MaximumHealth</Name>
+        </Field>
+        <Field>
+          <Index>14</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>MaximumMana</Name>
+        </Field>
+        <Field>
+          <Index>16</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>MaximumShield</Name>
+        </Field>
+        <Field>
+          <Index>18</Index>
           <Type>ShortLittleEndian</Type>
           <Name>MaximumAbility</Name>
         </Field>
@@ -3622,6 +5880,68 @@
       </Structures>
     </Packet>
     <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>52</Code>
+      <Name>GuildList075</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After a game client requested the list of players of his guild, which is usually the case when the player opens the guild dialog at the game client.</SentWhen>
+      <CausedReaction>The list of player is available at the client.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Boolean</Type>
+          <Name>IsInGuild</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>GuildMemberCount</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>TotalScore</Name>
+        </Field>
+        <Field>
+          <Index>12</Index>
+          <Type>Byte</Type>
+          <Name>CurrentScore</Name>
+        </Field>
+        <Field>
+          <Index>13</Index>
+          <Type>Structure[]</Type>
+          <TypeName>GuildMember</TypeName>
+          <Name>Members</Name>
+          <ItemCountField>GuildMemberCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>GuildMember</Name>
+          <Description>Contains the data of one guild member.</Description>
+          <Length>12</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>String</Type>
+              <Name>Name</Name>
+              <Length>10</Length>
+            </Field>
+            <Field>
+              <Index>10</Index>
+              <Type>Byte</Type>
+              <Name>ServerId</Name>
+            </Field>
+            <Field>
+              <Index>11</Index>
+              <Type>Byte</Type>
+              <Name>ServerId2</Name>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
       <HeaderType>C1Header</HeaderType>
       <Code>53</Code>
       <Name>GuildKickResponse</Name>
@@ -3643,8 +5963,8 @@
           <Description>The result of the guild kick request.</Description>
           <Values>
             <EnumValue>
-              <Name>Failed</Name>
-              <Description>The kick request failed.</Description>
+              <Name>FailedPasswordIncorrect</Name>
+              <Description>The kick request failed because of an incorrect password.</Description>
               <Value>0</Value>
             </EnumValue>
             <EnumValue>
@@ -3653,9 +5973,24 @@
               <Value>1</Value>
             </EnumValue>
             <EnumValue>
+              <Name>KickFailedBecausePlayerIsNotGuildMaster</Name>
+              <Description>The kick failed because player is not guild master.</Description>
+              <Value>2</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Failed</Name>
+              <Description>The kick request failed.</Description>
+              <Value>3</Value>
+            </EnumValue>
+            <EnumValue>
               <Name>GuildDisband</Name>
               <Description>The guild has been disbanded.</Description>
-              <Value>2</Value>
+              <Value>4</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>GuildMemberWithdrawn</Name>
+              <Description>The guild member has been withdrawn.</Description>
+              <Value>5</Value>
             </EnumValue>
           </Values>
         </Enum>
@@ -3748,6 +6083,195 @@
       </Fields>
     </Packet>
     <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>60</Code>
+      <Name>GuildWarRequestResult</Name>
+      <Length>4</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>A guild master requested a guild war against another guild.</SentWhen>
+      <CausedReaction>The guild master of the other guild gets this request.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>RequestResult</TypeName>
+          <Name>Result</Name>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>RequestResult</Name>
+          <Description>Describes the result of the guild war request.</Description>
+          <Values>
+            <EnumValue>
+              <Name>GuildNotFound</Name>
+              <Description>Failed, guild not found.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>RequestSentToGuildMaster</Name>
+              <Description>Request has been sent to the guild master. Waiting for his answer.</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>GuildMasterOffline</Name>
+              <Description>Failed, because the guild master is offline.</Description>
+              <Value>2</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>NotInGuild</Name>
+              <Description>Failed, because player is not in a guild.</Description>
+              <Value>3</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Failed</Name>
+              <Description>The guild war couldn't be started, e.g. because the soccer arena is already in use.</Description>
+              <Value>4</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>NotTheGuildMaster</Name>
+              <Description>Failed, because player is not the guild master.</Description>
+              <Value>5</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>AlreadyInWar</Name>
+              <Description>Failed, because the requested guild is already in a war.</Description>
+              <Value>6</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>61</Code>
+      <Name>GuildWarRequest</Name>
+      <Length>12</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>A guild master requested a guild war against another guild.</SentWhen>
+      <CausedReaction>The guild master of the other guild gets this request.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>String</Type>
+          <Name>GuildName</Name>
+          <Length>8</Length>
+        </Field>
+        <Field>
+          <Index>11</Index>
+          <Type>Enum</Type>
+          <TypeName>GuildWarType</TypeName>
+          <Name>Type</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>62</Code>
+      <Name>GuildWarDeclared</Name>
+      <Length>13</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>A guild master requested a guild war against another guild.</SentWhen>
+      <CausedReaction>The guild master of the other guild gets this request.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>String</Type>
+          <Name>GuildName</Name>
+          <Length>8</Length>
+        </Field>
+        <Field>
+          <Index>11</Index>
+          <Type>Enum</Type>
+          <TypeName>GuildWarType</TypeName>
+          <Name>Type</Name>
+        </Field>
+        <Field>
+          <Index>12</Index>
+          <Type>Byte</Type>
+          <Name>TeamCode</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>63</Code>
+      <Name>GuildWarEnded</Name>
+      <Length>12</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The guild war ended.</SentWhen>
+      <CausedReaction>The guild war is shown as ended on the client side.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>GuildWarResult</TypeName>
+          <Name>Result</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>String</Type>
+          <Name>GuildName</Name>
+          <Length>8</Length>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>GuildWarResult</Name>
+          <Description>Describes the result of the guild war.</Description>
+          <Values>
+            <EnumValue>
+              <Name>Lost</Name>
+              <Description>The war was lost.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Won</Name>
+              <Description>The war was won.</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>OtherGuildMasterCancelledWar</Name>
+              <Description>The war was cancelled by the other guild master.</Description>
+              <Value>2</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>CancelledWar</Name>
+              <Description>The war was cancelled by the own guild master.</Description>
+              <Value>3</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>64</Code>
+      <Name>GuildWarScoreUpdate</Name>
+      <Length>6</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The guild war score changed.</SentWhen>
+      <CausedReaction>The guild score is updated on the client side.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>ScoreOfOwnGuild</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>ScoreOfEnemyGuild</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>Type</Name>
+          <DefaultValue>0</DefaultValue>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
       <HeaderType>C2Header</HeaderType>
       <Code>65</Code>
       <Name>AssignCharacterToGuild</Name>
@@ -3801,6 +6325,47 @@
       </Structures>
     </Packet>
     <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>5B</Code>
+      <Name>AssignCharacterToGuild075</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The server wants to visibly assign a player to a guild, e.g. when two players met each other and one of them is a guild member.</SentWhen>
+      <CausedReaction>The players which belong to the guild are shown as guild players. If the game client doesn't met a player of this guild yet, it will send another request to get the guild information.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>PlayerCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>GuildMemberRelation</TypeName>
+          <Name>Members</Name>
+          <ItemCountField>PlayerCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>GuildMemberRelation</Name>
+          <Description>Relation between a guild and a member.</Description>
+          <Length>4</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>PlayerId</Name>
+            </Field>
+            <Field>
+              <Index>2</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>GuildId</Name>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
       <HeaderType>C1Header</HeaderType>
       <Code>66</Code>
       <Name>GuildInformation</Name>
@@ -3833,6 +6398,82 @@
         </Field>
         <Field>
           <Index>25</Index>
+          <Type>Binary</Type>
+          <Name>Logo</Name>
+          <Length>32</Length>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C2Header</HeaderType>
+      <Code>5A</Code>
+      <Name>GuildInformations075</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>A player went into the scope of one or more guild members.</SentWhen>
+      <CausedReaction>The players which belong to the guild are shown as guild players.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>GuildCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>GuildInfo</TypeName>
+          <Name>Guilds</Name>
+          <ItemCountField>GuildCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>GuildInfo</Name>
+          <Description>Information about one guild.</Description>
+          <Length>42</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>ShortBigEndian</Type>
+              <Name>GuildId</Name>
+            </Field>
+            <Field>
+              <Index>2</Index>
+              <Type>String</Type>
+              <Name>GuildName</Name>
+              <Length>8</Length>
+            </Field>
+            <Field>
+              <Index>10</Index>
+              <Type>Binary</Type>
+              <Name>Logo</Name>
+              <Length>32</Length>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>5C</Code>
+      <Name>SingleGuildInformation075</Name>
+      <Length>45</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After a guild has been created. However, in OpenMU, we just send the GuildInformations075 message, because it works just the same.</SentWhen>
+      <CausedReaction>The players which belong to the guild are shown as guild players.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>GuildId</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>String</Type>
+          <Name>GuildName</Name>
+          <Length>8</Length>
+        </Field>
+        <Field>
+          <Index>13</Index>
           <Type>Binary</Type>
           <Name>Logo</Name>
           <Length>32</Length>
@@ -3931,6 +6572,479 @@
       </Enums>
     </Packet>
     <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>86</Code>
+      <Name>ItemCraftingResult</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the player requested to execute an item crafting, e.g. at the chaos machine.</SentWhen>
+      <CausedReaction>The game client updates the UI to show the resulting item.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>CraftingResult</TypeName>
+          <Name>Result</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Binary</Type>
+          <Name>ItemData</Name>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>CraftingResult</Name>
+          <Description>Defines the crafting result.</Description>
+          <Values>
+            <EnumValue>
+              <Name>Failed</Name>
+              <Description>The crafting failed.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Success</Name>
+              <Description>The crafting succeeded.</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>NotEnoughMoney</Name>
+              <Description>The crafting wasn't executed because of missing money.</Description>
+              <Value>2</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>TooManyItems</Name>
+              <Description>The crafting wasn't executed because of too many items.</Description>
+              <Value>3</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>CharacterLevelTooLow</Name>
+              <Description>The crafting wasn't executed because the character level is too low.</Description>
+              <Value>4</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>LackingMixItems</Name>
+              <Description>The crafting wasn't executed because of missing items.</Description>
+              <Value>6</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>IncorrectMixItems</Name>
+              <Description>The crafting wasn't executed because of incorrect items.</Description>
+              <Value>7</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>InvalidItemLevel</Name>
+              <Description>The crafting wasn't executed because of an invalid item level.</Description>
+              <Value>8</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>CharacterClassTooLow</Name>
+              <Description>The crafting wasn't executed because the character class is too low.</Description>
+              <Value>9</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>IncorrectBloodCastleItems</Name>
+              <Description>The blood castle ticket crafting wasn't executed because the BloodCastle items are not correct.</Description>
+              <Value>10</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>NotEnoughMoneyForBloodCastle</Name>
+              <Description>The crafting wasn't executed because the player has not enough money for the blood castle ticket crafting.</Description>
+              <Value>11</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>87</Code>
+      <Name>CraftingDialogClosed075</Name>
+      <Length>3</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the player requested to close the crafting dialog, this confirmation is sent back to the client.</SentWhen>
+      <CausedReaction>The game client closes the crafting dialog.</CausedReaction>
+      <Fields />
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>A0</Code>
+      <Name>LegacyQuestStateList</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the player entered the game with his character.</SentWhen>
+      <CausedReaction>The game client updates the quest state for the quest dialog accordingly.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>QuestCount</Name>
+          <DefaultValue>6</DefaultValue>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Structure[]</Type>
+          <TypeName>LegacyQuestState</TypeName>
+          <Name>States</Name>
+          <Length>0</Length>
+          <UseCustomIndexer>true</UseCustomIndexer>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <LeftShifted>0</LeftShifted>
+          <Type>Enum</Type>
+          <TypeName>LegacyQuestState</TypeName>
+          <Name>ScrollOfEmperorState</Name>
+          <Length>2</Length>
+          <DefaultValue>LegacyQuestState.Inactive</DefaultValue>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <LeftShifted>2</LeftShifted>
+          <Type>Enum</Type>
+          <TypeName>LegacyQuestState</TypeName>
+          <Name>ThreeTreasuresOfMuState</Name>
+          <Length>2</Length>
+          <DefaultValue>LegacyQuestState.Inactive</DefaultValue>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <LeftShifted>4</LeftShifted>
+          <Type>Enum</Type>
+          <TypeName>LegacyQuestState</TypeName>
+          <Name>GainHeroStatusState</Name>
+          <Length>2</Length>
+          <DefaultValue>LegacyQuestState.Inactive</DefaultValue>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <LeftShifted>6</LeftShifted>
+          <Type>Enum</Type>
+          <TypeName>LegacyQuestState</TypeName>
+          <Name>SecretOfDarkStoneState</Name>
+          <Length>2</Length>
+          <DefaultValue>LegacyQuestState.Inactive</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <LeftShifted>0</LeftShifted>
+          <Type>Enum</Type>
+          <TypeName>LegacyQuestState</TypeName>
+          <Name>CertificateOfStrengthState</Name>
+          <Length>2</Length>
+          <DefaultValue>LegacyQuestState.Inactive</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <LeftShifted>2</LeftShifted>
+          <Type>Enum</Type>
+          <TypeName>LegacyQuestState</TypeName>
+          <Name>InfiltrationOfBarrackState</Name>
+          <Length>2</Length>
+          <DefaultValue>LegacyQuestState.Inactive</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <LeftShifted>4</LeftShifted>
+          <Type>Enum</Type>
+          <TypeName>LegacyQuestState</TypeName>
+          <Name>InfiltrationOfRefugeState</Name>
+          <Length>2</Length>
+          <DefaultValue>LegacyQuestState.Inactive</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <LeftShifted>6</LeftShifted>
+          <Type>Enum</Type>
+          <TypeName>LegacyQuestState</TypeName>
+          <Name>UnusedQuestState</Name>
+          <Length>2</Length>
+          <DefaultValue>LegacyQuestState.Undefined</DefaultValue>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>A1</Code>
+      <Name>LegacyQuestStateDialog</Name>
+      <Length>5</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>When the player clicks on the quest npc.</SentWhen>
+      <CausedReaction>The game client shows the next steps in the quest dialog.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>QuestIndex</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>State</Name>
+          <Description>This is the complete byte with the state of four quests within the same byte.</Description>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>A2</Code>
+      <Name>LegacySetQuestStateResponse</Name>
+      <Length>6</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>As response to the set state request (C1A2).</SentWhen>
+      <CausedReaction>The game client shows the new quest state.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>QuestIndex</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>Result</Name>
+          <Description>This value is 0 if successful. Otherwise, 0xFF or even other magic values.</Description>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>NewState</Name>
+          <Description>This is the complete byte with the state of four quests within the same byte.</Description>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>A3</Code>
+      <Name>LegacyQuestReward</Name>
+      <Length>7</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>As response to the completed quest of a player in scope.</SentWhen>
+      <CausedReaction>The game client shows the reward accordingly.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>ShortBigEndian</Type>
+          <Name>PlayerId</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Enum</Type>
+          <TypeName>QuestRewardType</TypeName>
+          <Name>Reward</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>Count</Name>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>QuestRewardType</Name>
+          <Description>Defines the reward type in the quest reward message.</Description>
+          <Values>
+            <EnumValue>
+              <Name>LevelUpPoints</Name>
+              <Description>The character receives additional points.</Description>
+              <Value>200</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>CharacterEvolutionFirstToSecond</Name>
+              <Description>The character class changes from the first to the second class.</Description>
+              <Value>201</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>LevelUpPointsPerLevelIncrease</Name>
+              <Description>The character receives additional points per level.</Description>
+              <Value>202</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>ComboSkill</Name>
+              <Description>The character receives the ability to perform skill combinations.</Description>
+              <Value>203</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>CharacterEvolutionSecondToThird</Name>
+              <Description>The character class changes from the second to the third class.</Description>
+              <Value>204</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>A4</Code>
+      <SubCode>00</SubCode>
+      <Name>LegacyQuestMonsterKillInfo</Name>
+      <Length>48</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>As response when a player opens the quest npc with a running quest which requires monster kills.</SentWhen>
+      <CausedReaction>The game client shows the current state.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>Result</Name>
+          <DefaultValue>1</DefaultValue>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>QuestIndex</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Structure[]</Type>
+          <TypeName>MonsterKillInfo</TypeName>
+          <Name>Kills</Name>
+          <Length>5</Length>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>MonsterKillInfo</Name>
+          <Description>A pair of Monster number and the current kill count.</Description>
+          <Length>8</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>IntegerLittleEndian</Type>
+              <Name>MonsterNumber</Name>
+            </Field>
+            <Field>
+              <Index>4</Index>
+              <Type>IntegerLittleEndian</Type>
+              <Name>KillCount</Name>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>A7</Code>
+      <Name>PetMode</Name>
+      <Length>6</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the client sent a PetAttackCommand (as confirmation), or when the previous command finished and the pet is reset to Normal-mode.</SentWhen>
+      <CausedReaction>The client updates the pet mode in its user interface.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>ClientToServer.PetType</TypeName>
+          <Name>Pet</Name>
+          <DefaultValue>ClientToServer.PetType.DarkRaven</DefaultValue>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Enum</Type>
+          <TypeName>ClientToServer.PetCommandMode</TypeName>
+          <Name>PetCommandMode</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>TargetId</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>A8</Code>
+      <Name>PetAttack</Name>
+      <Length>8</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the client sent a PetAttackCommand, the pet attacks automatically. For each attack, the player and all observing players get this message.</SentWhen>
+      <CausedReaction>The client shows the pet attacking the target.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>ClientToServer.PetType</TypeName>
+          <Name>Pet</Name>
+          <DefaultValue>ClientToServer.PetType.DarkRaven</DefaultValue>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Enum</Type>
+          <TypeName>PetSkillType</TypeName>
+          <Name>SkillType</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>OwnerId</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>TargetId</Name>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>PetSkillType</Name>
+          <Description>Describes the type of the pet attack.</Description>
+          <Values>
+            <EnumValue>
+              <Name>SingleTarget</Name>
+              <Description>A single target attack, used for critical and excellent hits.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Range</Name>
+              <Description>A range attack for multiple targets, usually up to 3 additional targets which all get their own PetAttack messages with 'SingleTarget' right after the first 'Range' message.</Description>
+              <Value>1</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>A9</Code>
+      <Name>PetInfoResponse</Name>
+      <Length>12</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the client sent a PetInfoRequest for a pet (dark raven, horse).</SentWhen>
+      <CausedReaction>The client shows the information about the pet.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>ClientToServer.PetType</TypeName>
+          <Name>Pet</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Enum</Type>
+          <TypeName>ClientToServer.StorageType</TypeName>
+          <Name>Storage</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>ItemSlot</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>Level</Name>
+        </Field>
+        <Field>
+          <Index>7</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>Experience</Name>
+        </Field>
+        <Field>
+          <Index>11</Index>
+          <Type>Byte</Type>
+          <Name>Health</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
       <HeaderType>C2Header</HeaderType>
       <Code>C0</Code>
       <Name>MessengerInitialization</Name>
@@ -3975,7 +7089,7 @@
               <Length>10</Length>
             </Field>
             <Field>
-              <Index>1</Index>
+              <Index>10</Index>
               <Type>Byte</Type>
               <Name>ServerId</Name>
               <Description>The server id on which the player currently is online. 0xFF means offline.</Description>
@@ -4319,8 +7433,534 @@
         </Field>
       </Fields>
     </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F6</Code>
+      <SubCode>03</SubCode>
+      <Name>QuestEventResponse</Name>
+      <Length>12</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the game client requested the list of event quests after entering the game. It seems to be sent only if the character is not a member of a Gen.</SentWhen>
+      <CausedReaction>Unknown.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Structure[]</Type>
+          <TypeName>QuestIdentification</TypeName>
+          <Name>Quests</Name>
+          <Length>2</Length>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F6</Code>
+      <SubCode>0A</SubCode>
+      <Name>AvailableQuests</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the game client requested the list of available quests through an NPC dialog.</SentWhen>
+      <CausedReaction>The client shows the available quests for the currently interacting NPC.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestNpcNumber</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestCount</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Structure[]</Type>
+          <TypeName>QuestIdentification</TypeName>
+          <Name>Quests</Name>
+          <ItemCountField>QuestCount</ItemCountField>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F6</Code>
+      <SubCode>0B</SubCode>
+      <Name>QuestStepInfo</Name>
+      <Length>11</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the game client clicked on a quest in the quest list, proceeded with a quest or refused to start a quest.</SentWhen>
+      <CausedReaction>The client shows the corresponding description about the current quest step.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestStepNumber</Name>
+          <Description>A number specifying the description: A) when selecting a quest in the quest list, it's the "StartingNumber"; B) when a quest has been started it's the quest number; C) when the starting number has been sent previously and the player refused to start the quest, it sends a "RefuseNumber".</Description>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestGroup</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F6</Code>
+      <SubCode>0C</SubCode>
+      <Name>QuestProgress</Name>
+      <Length>251</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>First, after the game client requested to initialize a quest and the quest is already active. Second, after the game client requested the next quest step.</SentWhen>
+      <CausedReaction>The client shows the quest progress accordingly.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestNumber</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestGroup</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Byte</Type>
+          <Name>ConditionCount</Name>
+        </Field>
+        <Field>
+          <Index>9</Index>
+          <Type>Byte</Type>
+          <Name>RewardCount</Name>
+        </Field>
+        <Field>
+          <Index>11</Index>
+          <Type>Structure[]</Type>
+          <TypeName>QuestCondition</TypeName><!-- Each 26 bytes -->
+          <Name>Conditions</Name>
+          <ItemCountField>ConditionCount</ItemCountField>
+        </Field>
+        <Field>
+          <Index>141</Index>
+          <Type>Structure[]</Type>
+          <TypeName>QuestReward</TypeName><!-- Each 22 bytes -->
+          <Name>Rewards</Name>
+          <ItemCountField>RewardCount</ItemCountField>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F6</Code>
+      <SubCode>0D</SubCode>
+      <Name>QuestCompletionResponse</Name>
+      <Length>9</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The server acknowledges the completion of a quest.</SentWhen>
+      <CausedReaction>The client shows the success and possibly requests for the next available quests.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestNumber</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestGroup</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Boolean</Type>
+          <Name>IsQuestCompleted</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F6</Code>
+      <SubCode>0F</SubCode>
+      <Name>QuestCancelled</Name>
+      <Length>8</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The server acknowledges the requested cancellation of a quest.</SentWhen>
+      <CausedReaction>The client resets the state of the quest and can request a new list of available quests again. This list would then probably contain the cancelled quest again.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestNumber</Name>
+          <Description>The current quest number. In this message, it's always 0, because the group is relevant for the client.</Description>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestGroup</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F6</Code>
+      <SubCode>1A</SubCode>
+      <Name>QuestStateList</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the game client requested the list of all quests which are currently in progress or accepted.</SentWhen>
+      <CausedReaction>Unknown.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>QuestCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>QuestIdentification</TypeName>
+          <Name>Quests</Name>
+          <ItemCountField>QuestCount</ItemCountField>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1HeaderWithSubCode</HeaderType>
+      <Code>F6</Code>
+      <SubCode>1B</SubCode>
+      <Name>QuestState</Name>
+      <Length>251</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>After the game client requested it, when the player opened the quest menu and clicked on a quest.</SentWhen>
+      <CausedReaction>The client shows the quest progress accordingly.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestNumber</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>QuestGroup</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>Byte</Type>
+          <Name>ConditionCount</Name>
+        </Field>
+        <Field>
+          <Index>9</Index>
+          <Type>Byte</Type>
+          <Name>RewardCount</Name>
+        </Field>
+        <Field>
+          <Index>10</Index>
+          <Type>Byte</Type>
+          <Name>RandomRewardCount</Name>
+        </Field>
+        <Field>
+          <Index>11</Index>
+          <Type>Structure[]</Type>
+          <TypeName>QuestCondition</TypeName>
+          <Name>Conditions</Name>
+          <ItemCountField>ConditionCount</ItemCountField>
+        </Field>
+        <Field>
+          <Index>141</Index>
+          <Type>Structure[]</Type>
+          <TypeName>QuestReward</TypeName>
+          <Name>Rewards</Name>
+          <ItemCountField>RewardCount</ItemCountField>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C3HeaderWithSubCode</HeaderType>
+      <Code>F9</Code>
+      <SubCode>01</SubCode>
+      <Name>OpenNpcDialog</Name>
+      <Length>12</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The server acknowledges the requested opening of an npc dialog.</SentWhen>
+      <CausedReaction>The client opens the dialog of the specified npc.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>4</Index>
+          <Type>ShortLittleEndian</Type>
+          <Name>NpcNumber</Name>
+        </Field>
+        <Field>
+          <Index>8</Index>
+          <Type>IntegerLittleEndian</Type>
+          <Name>GensContributionPoints</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>90</Code>
+      <Name>DevilSquareEnterResult</Name>
+      <Length>4</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The player requested to enter the devil square mini game through the Charon NPC.</SentWhen>
+      <CausedReaction>In case it failed, it shows the corresponding error message.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>EnterResult</TypeName>
+          <Name>Result</Name>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>EnterResult</Name>
+          <Description>Defines the result of the enter request.</Description>
+          <Values>
+            <EnumValue>
+              <Name>Success</Name>
+              <Description>The event has been entered.</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Failed</Name>
+              <Description>Entering the event failed, e.g. by missing event ticket or level range.</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>NotOpen</Name>
+              <Description>Entering the event failed, because it's not opened.</Description>
+              <Value>2</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>CharacterLevelTooHigh</Name>
+              <Description>Entering the event failed, because the character level is too high for the requested event level.</Description>
+              <Value>3</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>CharacterLevelTooLow</Name>
+              <Description>Entering the event failed, because the character level is too low for the requested event level.</Description>
+              <Value>4</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>Full</Name>
+              <Description>Entering the event failed, because it's full.</Description>
+              <Value>5</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>91</Code>
+      <Name>MiniGameOpeningState</Name>
+      <Length>7</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The player requests to get the current opening state of a mini game event, by clicking on an ticket item.</SentWhen>
+      <CausedReaction>The opening state of the event (remaining entering time, etc.) is shown at the client.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>MiniGameType</TypeName>
+          <Name>GameType</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>RemainingEnteringTimeMinutes</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Byte</Type>
+          <Name>UserCount</Name>
+        </Field>
+        <Field>
+          <Index>6</Index>
+          <Type>Byte</Type>
+          <Name>RemainingEnteringTimeMinutes2</Name>
+        </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>92</Code>
+      <Name>UpdateMiniGameState</Name>
+      <Length>4</Length>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>The state of a mini game event is about to change in 30 seconds.</SentWhen>
+      <CausedReaction>The client side shows a message about the changing state.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Enum</Type>
+          <TypeName>MiniGameTypeState</TypeName>
+          <Name>State</Name>
+        </Field>
+      </Fields>
+      <Enums>
+        <Enum>
+          <Name>MiniGameTypeState</Name>
+          <Description>The state of the mini games.</Description>
+          <Values>
+            <EnumValue>
+              <Name>DevilSquareClosed</Name>
+              <Description>Is sent when the devil square is currently closed and will be opened. "You will enter Devil Square (x seconds from now)".</Description>
+              <Value>0</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>DevilSquareOpened</Name>
+              <Description>Is sent when the devil square game is currently opened for entrance and closing for entrance. "The gate of Devil Square will close down in x seconds".</Description>
+              <Value>1</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>DevilSquareRunning</Name>
+              <Description>Is sent when the devil square game is currently running and is about to end. "The gate of Devil Square is closing down (x seconds remaining)".</Description>
+              <Value>2</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>BloodCastleClosed</Name>
+              <Description>The blood castle game is closed. "Blood Castle Closing (in x seconds)".</Description>
+              <Value>3</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>BloodCastleOpened</Name>
+              <Description>The blood castle game is opened for entrance. "Blood Castle Infiltration (in x seconds)".</Description>
+              <Value>4</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>BloodCastleEnding</Name>
+              <Description>The blood castle game is ending. "Blood Castle ends (in x seconds)".</Description>
+              <Value>5</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>BloodCastleFinished</Name>
+              <Description>The blood castle game is finished. "Blood Castle Event shuts down (in x seconds)".</Description>
+              <Value>6</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>BloodCastleCongratulations</Name>
+              <Description>The blood castle game was finished successfully. "Congratulations".</Description>
+              <Value>7</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>ChaosCastleClosed</Name>
+              <Description>The chaos castle game is closed. "Chaos Castle Closing (in x seconds)".</Description>
+              <Value>10</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>ChaosCastleOpened</Name>
+              <Description>The chaos castle game is opened for entrance. "Chaos Castle Penetration (in x seconds)".</Description>
+              <Value>11</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>ChaosCastleEnding</Name>
+              <Description>The chaos castle game is ending. "Chaos Castle Event ends (in x seconds)".</Description>
+              <Value>12</Value>
+            </EnumValue>
+            <EnumValue>
+              <Name>ChaosCastleFinished</Name>
+              <Description>The chaos castle game is finished. Chaos Castle Event shuts down (in x seconds)".</Description>
+              <Value>13</Value>
+            </EnumValue>
+          </Values>
+        </Enum>
+      </Enums>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>93</Code>
+      <Name>MiniGameScoreTable</Name>
+      <Direction>ServerToClient</Direction>
+      <SentWhen>A mini game ended and the score table is sent to the player.</SentWhen>
+      <CausedReaction>The score table is shown at the client.</CausedReaction>
+      <Fields>
+        <Field>
+          <Index>3</Index>
+          <Type>Byte</Type>
+          <Name>PlayerRank</Name>
+        </Field>
+        <Field>
+          <Index>4</Index>
+          <Type>Byte</Type>
+          <Name>ResultCount</Name>
+        </Field>
+        <Field>
+          <Index>5</Index>
+          <Type>Structure[]</Type>
+          <TypeName>ResultItem</TypeName>
+          <Name>Results</Name>
+          <ItemCountField>ResultCount</ItemCountField>
+        </Field>
+      </Fields>
+      <Structures>
+        <Structure>
+          <Name>ResultItem</Name>
+          <Description>The result of one player.</Description>
+          <Length>24</Length>
+          <Fields>
+            <Field>
+              <Index>0</Index>
+              <Type>String</Type>
+              <Name>PlayerName</Name>
+            </Field>
+            <Field>
+              <Index>12</Index>
+              <Type>IntegerLittleEndian</Type>
+              <Name>TotalScore</Name>
+            </Field>
+            <Field>
+              <Index>16</Index>
+              <Type>IntegerLittleEndian</Type>
+              <Name>BonusExperience</Name>
+            </Field>
+            <Field>
+              <Index>20</Index>
+              <Type>IntegerLittleEndian</Type>
+              <Name>BonusMoney</Name>
+            </Field>
+          </Fields>
+        </Structure>
+      </Structures>
+    </Packet>
   </Packets>
   <Enums>
+    <Enum>
+      <Name>MiniGameType</Name>
+      <Description>Defines the type of the mini game.</Description>
+      <Values>
+        <EnumValue>
+          <Name>Undefined</Name>
+          <Description>Undefined mini game type.</Description>
+          <Value>0</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>DevilSquare</Name>
+          <Description>The devil square mini game.</Description>
+          <Value>1</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>BloodCastle</Name>
+          <Description>The blood castle mini game.</Description>
+          <Value>2</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>ChaosCastle</Name>
+          <Description>The chaos castle mini game.</Description>
+          <Value>4</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>IllusionTemple</Name>
+          <Description>The illusion temple mini game.</Description>
+          <Value>5</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Doppelganger</Name>
+          <Description>The doppelgänger mini game.</Description>
+          <Value>6</Value>
+        </EnumValue>
+      </Values>
+    </Enum>
     <Enum>
       <Name>GuildMemberRole</Name>
       <Description>Defines the role of a guild member.</Description>
@@ -4348,6 +7988,22 @@
       </Values>
     </Enum>
     <Enum>
+      <Name>GuildWarType</Name>
+      <Description>Describes the type of the guild war.</Description>
+      <Values>
+        <EnumValue>
+          <Name>Normal</Name>
+          <Description>A normal guild war.</Description>
+          <Value>0</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Soccer</Name>
+          <Description>A guild soccer match.</Description>
+          <Value>1</Value>
+        </EnumValue>
+      </Values>
+    </Enum>
+    <Enum>
       <Name>CharacterStatus</Name>
       <Description>The status of a character.</Description>
       <Values>
@@ -4365,6 +8021,229 @@
           <Name>GameMaster</Name>
           <Description>The character is a game master.</Description>
           <Value>32</Value>
+        </EnumValue>
+      </Values>
+    </Enum>
+    <Enum>
+      <Name>ConditionType</Name>
+      <Description>Defines the type of the condition.</Description>
+      <Values>
+        <EnumValue>
+          <Name>None</Name>
+          <Description>No condition is defined.</Description>
+          <Value>0</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>MonsterKills</Name>
+          <Description>The condition is to kill a specified amount of specified monsters.</Description>
+          <Value>1</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Skill</Name>
+          <Description>The condition is to learn a specified skill.</Description>
+          <Value>2</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Item</Name>
+          <Description>The condition is to find a specified item and to have it in the inventory.</Description>
+          <Value>4</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Level</Name>
+          <Description>The condition is to reach the specified character level.</Description>
+          <Value>8</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>ClientAction</Name>
+          <Description>The condition is a client action. For example, this may be the completion of a tutorial.</Description>
+          <Value>16</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>RequestBuff</Name>
+          <Description>The condition is to request a buff from an NPC.</Description>
+          <Value>32</Value>
+        </EnumValue>
+      </Values>
+    </Enum>
+    <Enum>
+      <Name>RewardType</Name>
+      <Description>Defines the reward which is given when the quest is completed.</Description>
+      <Values>
+        <EnumValue>
+          <Name>None</Name>
+          <Description>No reward is defined.</Description>
+          <Value>0</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Experience</Name>
+          <Description>The reward is added experience to the character.</Description>
+          <Value>1</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Money</Name>
+          <Description>The reward is added money to the inventory.</Description>
+          <Value>2</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Item</Name>
+          <Description>The reward is an item which is added to the inventory.</Description>
+          <Value>4</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>GensContribution</Name>
+          <Description>The reward is added gens contribution points.</Description>
+          <Value>16</Value>
+        </EnumValue>
+      </Values>
+    </Enum>
+    <Enum>
+      <Name>SocketOption</Name>
+      <Description>Defines the possible socket options.</Description>
+      <Values>
+        <EnumValue>
+          <Name>FireAttackWizByLevelIncrease</Name>
+          <Description>Fire((Level type)Attack/Wizardry increase +20)</Description>
+          <Value>0</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>FireAttackSpeedIncrease</Name>
+          <Description>Fire(Attack speed increase +7)</Description>
+          <Value>1</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>FireMaxDmgIncrease</Name>
+          <Description>Fire(Maximum attack/Wizardry increase +30)</Description>
+          <Value>2</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>FireMinDmgIncrease</Name>
+          <Description>Fire(Minimum attack/Wizardry increase +20)</Description>
+          <Value>3</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>FireAttackWizIncrease</Name>
+          <Description>Fire(Attack/Wizardry increase +20)</Description>
+          <Value>4</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>FireAgCostDecrease</Name>
+          <Description>Fire(AG cost decrease +40)</Description>
+          <Value>5</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WaterBlockRateIncrease</Name>
+          <Description>Water(Block rating increase +10)</Description>
+          <Value>10</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WaterDefenseIncrease</Name>
+          <Description>Water(Defense increase +30)</Description>
+          <Value>11</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WaterShieldProtectionIncrease</Name>
+          <Description>Water(Shield protection increase +7)</Description>
+          <Value>12</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WaterDamageReduction4</Name>
+          <Description>Water(Damage reduction +4)</Description>
+          <Value>13</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WaterDamageReduction5</Name>
+          <Description>Water(Damage reduction +5)</Description>
+          <Value>14</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>IceLifeIncrease</Name>
+          <Description>Ice(Monster destruction for the Life increase +8)</Description>
+          <Value>16</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>IceManaIncrease</Name>
+          <Description>Ice(Monster destruction for the Mana increase +8)</Description>
+          <Value>17</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>IceSkillAttackIncrease</Name>
+          <Description>Ice(Skill attack increase +37)</Description>
+          <Value>18</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>IceAttackRateIncrease</Name>
+          <Description>Ice(Attack rating increase +25)</Description>
+          <Value>19</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>IceDurabilityIncrease</Name>
+          <Description>Ice(Item durability increase +30)</Description>
+          <Value>20</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WindAutoLifeRecoveryIncrease</Name>
+          <Description>Wind(Automatic Life recovery increase +8)</Description>
+          <Value>21</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WindMaxHealthIncrease</Name>
+          <Description>Wind(Maximum Life increase +4)</Description>
+          <Value>22</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WindMaxManaIncrease</Name>
+          <Description>Wind(Maximum Mana increase +4)</Description>
+          <Value>23</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WindAutoManaRecoverIncrease</Name>
+          <Description>Wind(Automatic Mana recovery increase +7)</Description>
+          <Value>24</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WindMaxAgIncrease</Name>
+          <Description>Wind(Maximum AG increase +25)</Description>
+          <Value>25</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>WindAutoAgRecoverIncrease</Name>
+          <Description>Wind(AG value increase +26)</Description>
+          <Value>26</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>LightningExcDmgIncrease</Name>
+          <Description>Lightning(Excellent damage increase +15)</Description>
+          <Value>29</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>LightningExcDmgRateIncrease</Name>
+          <Description>Lightning(Excellent damage rate increase +10)</Description>
+          <Value>30</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>LightningCritDmgIncrease</Name>
+          <Description>Lightning(Critical damage increase +30)</Description>
+          <Value>31</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>LightningCritDmgRateIncrease</Name>
+          <Description>Lightning(Critical damage rate increase +8)</Description>
+          <Value>32</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>EarthHealhIncrease</Name>
+          <Description>Earth(Health increase +30)</Description>
+          <Value>36</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>EmptySocket</Name>
+          <Description>Empty Socket</Description>
+          <Value>254</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>NoSocket</Name>
+          <Description>No Socket</Description>
+          <Value>255</Value>
         </EnumValue>
       </Values>
     </Enum>

@@ -1,11 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.1</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Nullable>enable</Nullable>
+    <WarningsAsErrors>nullable</WarningsAsErrors>
     <Authors>MUnique</Authors>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -15,8 +16,8 @@
     <PackageTags>MUnique OpenMU MUOnline Network Packets</PackageTags>
     <PackageId>MUnique.OpenMU.Network.Packets</PackageId>
     <Description>This package contains message structs for the MMORPG "MU Online", which are primarily focused on the english version of Season 6 Episode 3.</Description>
-    <PackageVersion>0.3.5</PackageVersion>
-    <Version>0.3.5</Version>
+    <PackageVersion>0.4.0</PackageVersion>
+    <Version>0.4.0</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -30,10 +31,15 @@
   
   <ItemGroup>
     <Compile Include="..\..\SharedAssemblyInfo.cs" Link="Properties\SharedAssemblyInfo.cs" />
+    <Compile Include="..\..\SharedGlobalUsings.cs" Link="SharedGlobalUsings.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <AdditionalFiles Include="..\..\stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\.editorconfig" Link=".editorconfig" />
   </ItemGroup>
 
   <ItemGroup>
@@ -63,6 +69,7 @@
     <XslTransformation OutputPaths="ServerToClient\ConnectionExtensions.cs" XmlInputPaths="ServerToClient\ServerToClientPackets.xml" XslInputPath="GenerateExtensions.xslt" Parameters="&lt;Parameter Name='subNamespace' Value='ServerToClient'/&gt;" />
     <XslTransformation OutputPaths="ChatServer\ConnectionExtensions.cs" XmlInputPaths="ChatServer\ChatServerPackets.xml" XslInputPath="GenerateExtensions.xslt" Parameters="&lt;Parameter Name='subNamespace' Value='ChatServer'/&gt;" />
     <XslTransformation OutputPaths="ConnectServer\ConnectionExtensions.cs" XmlInputPaths="ConnectServer\ConnectServerPackets.xml" XslInputPath="GenerateExtensions.xslt" Parameters="&lt;Parameter Name='subNamespace' Value='ConnectServer'/&gt;" />
+    <Exec Command="GenerateMarkdownDocs.cmd"></Exec>
   </Target>
 
 </Project>

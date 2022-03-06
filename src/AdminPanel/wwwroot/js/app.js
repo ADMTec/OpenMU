@@ -2,10 +2,12 @@ var __extends = (this && this.__extends) || (function () {
     var extendStatics = function (d, b) {
         extendStatics = Object.setPrototypeOf ||
             ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
         return extendStatics(d, b);
     };
     return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
         extendStatics(d, b);
         function __() { this.constructor = d; }
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
@@ -79,7 +81,8 @@ System.register("Queue", [], function (exports_1, context_1) {
                     this._newestIndex++;
                 };
                 Queue.prototype.dequeue = function () {
-                    var oldestIndex = this._oldestIndex, newestIndex = this._newestIndex;
+                    var oldestIndex = this._oldestIndex;
+                    var newestIndex = this._newestIndex;
                     if (oldestIndex !== newestIndex) {
                         var deletedData = this._storage[oldestIndex];
                         delete this._storage[oldestIndex];
@@ -100,97 +103,10 @@ System.register("Queue", [], function (exports_1, context_1) {
         }
     };
 });
-System.register("Attack", ["three", "tween", "Queue"], function (exports_2, context_2) {
-    "use strict";
-    var THREE, tween_1, Queue_1, Attacks;
-    var __moduleName = context_2 && context_2.id;
-    return {
-        setters: [
-            function (THREE_1) {
-                THREE = THREE_1;
-            },
-            function (tween_1_1) {
-                tween_1 = tween_1_1;
-            },
-            function (Queue_1_1) {
-                Queue_1 = Queue_1_1;
-            }
-        ],
-        execute: function () {
-            Attacks = (function (_super) {
-                __extends(Attacks, _super);
-                function Attacks() {
-                    var _this = this;
-                    var pointsMaterial = new THREE.PointsMaterial({
-                        size: 2,
-                        vertexColors: THREE.VertexColors,
-                        sizeAttenuation: false
-                    });
-                    pointsMaterial.needsUpdate = true;
-                    var colors = [];
-                    var maximumAnimatedPoints = 10000;
-                    var animatedPointsGeometry = new THREE.Geometry();
-                    var queue = new Queue_1.Queue();
-                    for (var i = 0; i < maximumAnimatedPoints; i++) {
-                        animatedPointsGeometry.vertices.push(new THREE.Vector3(0, 0, -100));
-                        var color = new THREE.Color();
-                        color.setHex(0xEE0000);
-                        colors.push(color);
-                        queue.enqueue(i);
-                    }
-                    animatedPointsGeometry.colors = colors;
-                    animatedPointsGeometry.colorsNeedUpdate = true;
-                    animatedPointsGeometry.elementsNeedUpdate = true;
-                    _this = _super.call(this, animatedPointsGeometry, pointsMaterial) || this;
-                    _this.pointLifetimeInMs = 500;
-                    _this.freeAttackIndexes = queue;
-                    _this.geometry = animatedPointsGeometry;
-                    return _this;
-                }
-                Attacks.prototype.update = function () {
-                };
-                Attacks.prototype.addAttack = function (attacker, target) {
-                    var _this = this;
-                    if (this.freeAttackIndexes.peek() === null) {
-                        return;
-                    }
-                    if (target === undefined || target === null) {
-                        return;
-                    }
-                    var newIndex = this.freeAttackIndexes.dequeue();
-                    if (newIndex === null) {
-                        return;
-                    }
-                    this.geometry.colors[newIndex].setHex(0xFF0000 + attacker.data.Id);
-                    this.geometry.colorsNeedUpdate = true;
-                    var vertice = this.geometry.vertices[newIndex];
-                    vertice.set(attacker.position.x, attacker.position.y, 0);
-                    var state = { x: vertice.x, y: vertice.y };
-                    var tween = new tween_1.default.Tween(state)
-                        .to({ x: target.position.x, y: target.position.y }, this.pointLifetimeInMs)
-                        .onUpdate(function () {
-                        vertice.set(state.x, state.y, 0);
-                        _this.geometry.verticesNeedUpdate = true;
-                    })
-                        .onComplete(function () {
-                        vertice.z = -100;
-                        _this.geometry.verticesNeedUpdate = true;
-                        _this.freeAttackIndexes.enqueue(newIndex);
-                    })
-                        .start();
-                    this.geometry.verticesNeedUpdate = true;
-                };
-                return Attacks;
-            }(THREE.Points));
-            exports_2("Attacks", Attacks);
-            ;
-        }
-    };
-});
-System.register("Types", [], function (exports_3, context_3) {
+System.register("Types", [], function (exports_2, context_2) {
     "use strict";
     var Direction;
-    var __moduleName = context_3 && context_3.id;
+    var __moduleName = context_2 && context_2.id;
     return {
         setters: [],
         execute: function () {
@@ -205,21 +121,21 @@ System.register("Types", [], function (exports_3, context_3) {
                 Direction[Direction["North"] = 7] = "North";
                 Direction[Direction["NorthWest"] = 8] = "NorthWest";
             })(Direction || (Direction = {}));
-            exports_3("Direction", Direction);
+            exports_2("Direction", Direction);
         }
     };
 });
-System.register("Attackable", ["three", "tween"], function (exports_4, context_4) {
+System.register("Attackable", ["three", "tween"], function (exports_3, context_3) {
     "use strict";
-    var THREE, tween_2, Attackable, attackableAlphaMapTexture;
-    var __moduleName = context_4 && context_4.id;
+    var THREE, tween_1, Attackable, attackableAlphaMapTexture;
+    var __moduleName = context_3 && context_3.id;
     return {
         setters: [
-            function (THREE_2) {
-                THREE = THREE_2;
+            function (THREE_1) {
+                THREE = THREE_1;
             },
-            function (tween_2_1) {
-                tween_2 = tween_2_1;
+            function (tween_1_1) {
+                tween_1 = tween_1_1;
             }
         ],
         execute: function () {
@@ -233,22 +149,26 @@ System.register("Attackable", ["three", "tween"], function (exports_4, context_4
                 }
                 Attackable.prototype.gotKilled = function () {
                     var _this = this;
-                    var state = { opacity: 1 };
-                    var tween = new tween_2.default.Tween(state)
-                        .to({ opacity: 0.1 }, 1000)
+                    var fadeOutDurationMs = 1000;
+                    var startingOpacity = 1;
+                    var fadedOutOpacity = 0.1;
+                    var state = { opacity: startingOpacity };
+                    var tween = new tween_1.default.Tween(state)
+                        .to({ opacity: fadedOutOpacity }, fadeOutDurationMs)
                         .onUpdate(function () { return _this.material.opacity = state.opacity; })
-                        .easing(tween_2.default.Easing.Circular.Out)
+                        .easing(tween_1.default.Easing.Circular.Out)
                         .start();
                 };
                 Attackable.prototype.respawn = function (newData) {
                     var _this = this;
+                    var scaleUpDurationMs = 500;
                     this.data = newData;
                     this.material.opacity = 1.0;
                     var state = { scale: 0 };
-                    var tween = new tween_2.default.Tween(state)
-                        .to({ scale: 1 }, 500)
+                    var tween = new tween_1.default.Tween(state)
+                        .to({ scale: 1 }, scaleUpDurationMs)
                         .onUpdate(function () { return _this.scale.setScalar(state.scale); })
-                        .easing(tween_2.default.Easing.Back.Out)
+                        .easing(tween_1.default.Easing.Back.Out)
                         .start();
                     this.setObjectPositionOnMap(this.data.x, this.data.y);
                     this.setRotation(this.data.direction);
@@ -260,17 +180,18 @@ System.register("Attackable", ["three", "tween"], function (exports_4, context_4
                     if (this.moveTween !== null) {
                         this.moveTween.stop();
                     }
-                    this.moveTween = new tween_2.default.Tween(state)
+                    this.moveTween = new tween_1.default.Tween(state)
                         .onUpdate(function () { return _this.setObjectPositionOnMap(state.x, state.y); });
                     if (moveType === "Instant" || moveType === 1) {
-                        this.moveTween = this.moveTween.easing(tween_2.default.Easing.Elastic.Out)
-                            .to({ x: newX, y: newY }, 300);
+                        var moveDurationMs = 300;
+                        this.moveTween = this.moveTween.easing(tween_1.default.Easing.Elastic.Out)
+                            .to({ x: newX, y: newY }, moveDurationMs);
                     }
                     else {
                         var _loop_1 = function (i) {
                             if (steps.hasOwnProperty(i)) {
                                 var step_1 = steps[i];
-                                var stepTween = new tween_2.default.Tween(state)
+                                var stepTween = new tween_1.default.Tween(state)
                                     .to({ x: step_1.x, y: step_1.y }, walkDelay)
                                     .onStart(function () { return _this.rotateTo(step_1.direction); })
                                     .onUpdate(function () { return _this.setObjectPositionOnMap(state.x, state.y); });
@@ -291,7 +212,9 @@ System.register("Attackable", ["three", "tween"], function (exports_4, context_4
                     this.setRotation(rotation);
                 };
                 Attackable.prototype.setRotation = function (value) {
-                    this.rotation.z = THREE.Math.degToRad((value * 360) / 8);
+                    var degreesOfOneTurn = 360;
+                    var numberOfDirectionValues = 8;
+                    this.rotation.z = THREE.Math.degToRad((value * degreesOfOneTurn) / numberOfDirectionValues);
                 };
                 Attackable.prototype.setObjectPositionOnMap = function (newX, newY) {
                     var offset = 128;
@@ -300,22 +223,421 @@ System.register("Attackable", ["three", "tween"], function (exports_4, context_4
                 };
                 return Attackable;
             }(THREE.Mesh));
-            exports_4("Attackable", Attackable);
+            exports_3("Attackable", Attackable);
             ;
             new THREE.TextureLoader().load('/img/attackable_alphamap.png', function (t) {
-                exports_4("attackableAlphaMapTexture", attackableAlphaMapTexture = t);
+                exports_3("attackableAlphaMapTexture", attackableAlphaMapTexture = t);
             });
         }
     };
 });
-System.register("WorldObjectPicker", ["three"], function (exports_5, context_5) {
+System.register("Attack", ["three", "tween", "Queue"], function (exports_4, context_4) {
     "use strict";
-    var THREE, WorldObjectPicker;
+    var THREE, tween_2, Queue_1, Attacks;
+    var __moduleName = context_4 && context_4.id;
+    return {
+        setters: [
+            function (THREE_2) {
+                THREE = THREE_2;
+            },
+            function (tween_2_1) {
+                tween_2 = tween_2_1;
+            },
+            function (Queue_1_1) {
+                Queue_1 = Queue_1_1;
+            }
+        ],
+        execute: function () {
+            Attacks = (function (_super) {
+                __extends(Attacks, _super);
+                function Attacks() {
+                    var _this = this;
+                    var pointsMaterial = new THREE.PointsMaterial({
+                        size: 2,
+                        sizeAttenuation: false,
+                        vertexColors: THREE.VertexColors,
+                    });
+                    pointsMaterial.needsUpdate = true;
+                    var colors = [];
+                    var maximumAnimatedPoints = 10000;
+                    var animatedPointsGeometry = new THREE.Geometry();
+                    var queue = new Queue_1.Queue();
+                    for (var i = 0; i < maximumAnimatedPoints; i++) {
+                        animatedPointsGeometry.vertices.push(new THREE.Vector3(0, 0, -Infinity));
+                        var color = new THREE.Color();
+                        color.setHex(0xEE0000);
+                        colors.push(color);
+                        queue.enqueue(i);
+                    }
+                    animatedPointsGeometry.colors = colors;
+                    animatedPointsGeometry.colorsNeedUpdate = true;
+                    animatedPointsGeometry.elementsNeedUpdate = true;
+                    _this = _super.call(this, animatedPointsGeometry, pointsMaterial) || this;
+                    _this.pointLifetimeInMs = Attacks.defaultPointsLifetimeMs;
+                    _this.freeAttackIndexes = queue;
+                    _this.geometry = animatedPointsGeometry;
+                    return _this;
+                }
+                Attacks.prototype.update = function () {
+                };
+                Attacks.prototype.addAttack = function (attacker, target) {
+                    var _this = this;
+                    if (this.freeAttackIndexes.peek() === null) {
+                        return;
+                    }
+                    if (target === undefined || target === null) {
+                        return;
+                    }
+                    var newIndex = this.freeAttackIndexes.dequeue();
+                    if (newIndex === null) {
+                        return;
+                    }
+                    this.geometry.colors[newIndex].setHex(0xFF0000 + attacker.data.id);
+                    this.geometry.colorsNeedUpdate = true;
+                    var visibleZ = 0;
+                    var invisibleZ = -Infinity;
+                    var vertice = this.geometry.vertices[newIndex];
+                    vertice.set(attacker.position.x, attacker.position.y, visibleZ);
+                    var state = { x: vertice.x, y: vertice.y };
+                    var tween = new tween_2.default.Tween(state)
+                        .to({ x: target.position.x, y: target.position.y }, this.pointLifetimeInMs)
+                        .onUpdate(function () {
+                        vertice.set(state.x, state.y, visibleZ);
+                        _this.geometry.verticesNeedUpdate = true;
+                    })
+                        .onComplete(function () {
+                        vertice.z = invisibleZ;
+                        _this.geometry.verticesNeedUpdate = true;
+                        _this.freeAttackIndexes.enqueue(newIndex);
+                    })
+                        .start();
+                    this.geometry.verticesNeedUpdate = true;
+                };
+                Attacks.defaultPointsLifetimeMs = 500;
+                return Attacks;
+            }(THREE.Points));
+            exports_4("Attacks", Attacks);
+            ;
+        }
+    };
+});
+System.register("TerrainShader", ["three"], function (exports_5, context_5) {
+    "use strict";
+    var THREE, terrainShader;
     var __moduleName = context_5 && context_5.id;
     return {
         setters: [
             function (THREE_3) {
                 THREE = THREE_3;
+            }
+        ],
+        execute: function () {
+            exports_5("terrainShader", terrainShader = {
+                fragmentShader: [
+                    "uniform sampler2D tColor;",
+                    "uniform float tPixelSize;",
+                    "varying vec2 vUv;",
+                    "void main() {",
+                    "vec4 texel = texture2D( tColor, vUv );",
+                    "float multi = 0.1;",
+                    "for(float x = -1.0; x <= 1.0; x++) {",
+                    "for (float y = -1.0; y <= 1.0; y++) {",
+                    "if (x == 0.0 && y == 0.0) continue;",
+                    "vec4 neighborcolor = texture2D(tColor, vUv + vec2(x/256.0, y/256.0) * tPixelSize);",
+                    "if (neighborcolor != texel) { multi = 1.0; }",
+                    "}",
+                    "}",
+                    "gl_FragColor = texel * multi;",
+                    "}"
+                ].join("\n"),
+                side: THREE.DoubleSide,
+                uniforms: {
+                    tColor: { type: "t", value: 0 },
+                    tPixelSize: { type: "f", value: 0.3 },
+                },
+                vertexShader: [
+                    "varying vec2 vUv;",
+                    "void main() {",
+                    "vUv = vec2(uv.x, uv.y);",
+                    "gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);",
+                    "}"
+                ].join("\n"),
+            });
+        }
+    };
+});
+System.register("Player", ["three", "Attackable"], function (exports_6, context_6) {
+    "use strict";
+    var THREE, Attackable_1, Player;
+    var __moduleName = context_6 && context_6.id;
+    return {
+        setters: [
+            function (THREE_4) {
+                THREE = THREE_4;
+            },
+            function (Attackable_1_1) {
+                Attackable_1 = Attackable_1_1;
+            }
+        ],
+        execute: function () {
+            Player = (function (_super) {
+                __extends(Player, _super);
+                function Player(data) {
+                    return _super.call(this, data, Player.defaultGeometry, new THREE.MeshBasicMaterial({
+                        alphaMap: Attackable_1.attackableAlphaMapTexture,
+                        color: 0xFF0000 + data.id,
+                        transparent: true,
+                    })) || this;
+                }
+                Player.prototype.update = function () {
+                    var highlightedScale = 1.5;
+                    var normalScale = 1.0;
+                    if (this.data.isHighlighted) {
+                        this.scale.setScalar(highlightedScale);
+                    }
+                    else {
+                        this.scale.setScalar(normalScale);
+                    }
+                };
+                Player.size = 4;
+                Player.defaultGeometry = new THREE.BoxGeometry(Player.size, Player.size, Player.size);
+                return Player;
+            }(Attackable_1.Attackable));
+            exports_6("Player", Player);
+            ;
+        }
+    };
+});
+System.register("NonPlayerCharacter", ["three", "Attackable"], function (exports_7, context_7) {
+    "use strict";
+    var THREE, Attackable_2, NonPlayerCharacter;
+    var __moduleName = context_7 && context_7.id;
+    return {
+        setters: [
+            function (THREE_5) {
+                THREE = THREE_5;
+            },
+            function (Attackable_2_1) {
+                Attackable_2 = Attackable_2_1;
+            }
+        ],
+        execute: function () {
+            NonPlayerCharacter = (function (_super) {
+                __extends(NonPlayerCharacter, _super);
+                function NonPlayerCharacter(data) {
+                    return _super.call(this, data, NonPlayerCharacter.defaultGeometry, new THREE.MeshBasicMaterial({ color: 0x00FFFF, alphaMap: Attackable_2.attackableAlphaMapTexture, transparent: true })) || this;
+                }
+                NonPlayerCharacter.size = 4;
+                NonPlayerCharacter.defaultGeometry = new THREE.BoxGeometry(NonPlayerCharacter.size, NonPlayerCharacter.size, NonPlayerCharacter.size);
+                return NonPlayerCharacter;
+            }(Attackable_2.Attackable));
+            exports_7("NonPlayerCharacter", NonPlayerCharacter);
+            ;
+        }
+    };
+});
+System.register("World", ["three", "Attack", "TerrainShader", "Player", "Attackable", "NonPlayerCharacter"], function (exports_8, context_8) {
+    "use strict";
+    var THREE, Attack_1, TerrainShader_1, Player_1, Attackable_3, NonPlayerCharacter_1, World;
+    var __moduleName = context_8 && context_8.id;
+    return {
+        setters: [
+            function (THREE_6) {
+                THREE = THREE_6;
+            },
+            function (Attack_1_1) {
+                Attack_1 = Attack_1_1;
+            },
+            function (TerrainShader_1_1) {
+                TerrainShader_1 = TerrainShader_1_1;
+            },
+            function (Player_1_1) {
+                Player_1 = Player_1_1;
+            },
+            function (Attackable_3_1) {
+                Attackable_3 = Attackable_3_1;
+            },
+            function (NonPlayerCharacter_1_1) {
+                NonPlayerCharacter_1 = NonPlayerCharacter_1_1;
+            }
+        ],
+        execute: function () {
+            World = (function (_super) {
+                __extends(World, _super);
+                function World(serverId, mapId) {
+                    var _this = _super.call(this) || this;
+                    _this.objects = {};
+                    var attacksZ = 100;
+                    _this.attacks = new Attack_1.Attacks();
+                    _this.attacks.position.z = attacksZ;
+                    _this.add(_this.attacks);
+                    var segments = 1;
+                    var planeMesh = new THREE.Mesh(new THREE.PlaneGeometry(World.sideLength, World.sideLength, segments, segments), new THREE.ShaderMaterial(TerrainShader_1.terrainShader));
+                    _this.add(planeMesh);
+                    var textureLoader = new THREE.TextureLoader();
+                    textureLoader.load('terrain/' + serverId + '/' + mapId, function (texture) {
+                        texture.magFilter = THREE.NearestFilter;
+                        TerrainShader_1.terrainShader.uniforms.tColor.value = texture;
+                    });
+                    return _this;
+                }
+                World.prototype.update = function () {
+                    this.attacks.update();
+                    var objects = this.objects;
+                    for (var o in objects) {
+                        if (objects.hasOwnProperty(o)) {
+                            var object = objects[o];
+                            if (object instanceof Player_1.Player) {
+                                object.update();
+                            }
+                        }
+                    }
+                };
+                World.prototype.addOrUpdateNpc = function (npcData) {
+                    return __awaiter(this, void 0, void 0, function () {
+                        var obj, waitTimeMs_1;
+                        return __generator(this, function (_a) {
+                            switch (_a.label) {
+                                case 0:
+                                    obj = this.getObjectById(npcData.id);
+                                    if (!(obj === undefined || obj === null)) return [3, 4];
+                                    waitTimeMs_1 = 50;
+                                    _a.label = 1;
+                                case 1:
+                                    if (!(Attackable_3.attackableAlphaMapTexture === undefined)) return [3, 3];
+                                    return [4, new Promise(function (resolve) { return setTimeout(resolve, waitTimeMs_1); })];
+                                case 2:
+                                    _a.sent();
+                                    return [3, 1];
+                                case 3:
+                                    console.debug("Adding npc", npcData);
+                                    this.addNpc(npcData);
+                                    return [3, 5];
+                                case 4:
+                                    console.debug("Updating npc", npcData);
+                                    obj.respawn(npcData);
+                                    _a.label = 5;
+                                case 5: return [2];
+                            }
+                        });
+                    });
+                };
+                World.prototype.addOrUpdatePlayer = function (playerData) {
+                    return __awaiter(this, void 0, void 0, function () {
+                        var obj, waitTimeMs_2;
+                        return __generator(this, function (_a) {
+                            switch (_a.label) {
+                                case 0:
+                                    obj = this.getObjectById(playerData.id);
+                                    if (!(obj === undefined || obj === null)) return [3, 4];
+                                    waitTimeMs_2 = 50;
+                                    _a.label = 1;
+                                case 1:
+                                    if (!(Attackable_3.attackableAlphaMapTexture === undefined)) return [3, 3];
+                                    return [4, new Promise(function (resolve) { return setTimeout(resolve, waitTimeMs_2); })];
+                                case 2:
+                                    _a.sent();
+                                    return [3, 1];
+                                case 3:
+                                    console.debug("Adding player", playerData);
+                                    this.addPlayer(playerData);
+                                    return [3, 5];
+                                case 4:
+                                    console.debug("Updating player", playerData, obj.data);
+                                    obj.respawn(playerData);
+                                    _a.label = 5;
+                                case 5: return [2];
+                            }
+                        });
+                    });
+                };
+                World.prototype.killObject = function (killedObjectId, killerObjectId) {
+                    var killedObject = this.getObjectById(killedObjectId);
+                    killedObject === null || killedObject === void 0 ? void 0 : killedObject.gotKilled();
+                };
+                World.prototype.objectMoved = function (id, newX, newY, moveType, walkDelay, steps) {
+                    var obj = this.getObjectById(id);
+                    obj === null || obj === void 0 ? void 0 : obj.moveTo(newX, newY, moveType, walkDelay, steps);
+                };
+                World.prototype.addSkillAnimation = function (playerId, targetId, skill) {
+                    var animating = this.getObjectById(playerId);
+                    var target = this.getObjectById(targetId);
+                    this.attacks.addAttack(animating, target);
+                };
+                World.prototype.addAreaSkillAnimation = function (playerId, skill, x, y, rotation) {
+                    var animating = this.getObjectById(playerId);
+                    if (animating !== undefined && animating !== null) {
+                        animating.rotateTo(rotation);
+                    }
+                };
+                World.prototype.addAnimation = function (animatingId, animation, targetId, direction) {
+                    var animating = this.getObjectById(animatingId);
+                    if (animating !== undefined && animating !== null) {
+                        var rotationMultiplier = 0x10;
+                        animating.rotateTo(direction / rotationMultiplier);
+                    }
+                    if (targetId !== null) {
+                        var target = this.getObjectById(targetId);
+                        this.attacks.addAttack(animating, target);
+                    }
+                };
+                World.prototype.dispose = function () {
+                    delete this.objects;
+                };
+                World.prototype.highlightOn = function (objectId) {
+                    var player = this.getObjectById(objectId);
+                    if (player != null) {
+                        player.data = __assign(__assign({}, player.data), { isHighlighted: true });
+                    }
+                };
+                World.prototype.highlightOff = function (objectId) {
+                    var player = this.getObjectById(objectId);
+                    if (player != null) {
+                        player.data = __assign(__assign({}, player.data), { isHighlighted: false });
+                    }
+                };
+                World.prototype.onSizeChanged = function (newSize) {
+                    TerrainShader_1.terrainShader.uniforms.tPixelSize.value = World.sideLength / newSize;
+                };
+                World.prototype.addNpc = function (data) {
+                    var npc = new NonPlayerCharacter_1.NonPlayerCharacter(data);
+                    this.addObjectMesh(npc);
+                    npc.respawn(data);
+                };
+                World.prototype.addPlayer = function (data) {
+                    var player = new Player_1.Player(data);
+                    this.addObjectMesh(player);
+                    player.respawn(data);
+                };
+                World.prototype.removeObject = function (objectId) {
+                    var mesh = this.objects[objectId];
+                    console.debug("Removing object", mesh.data);
+                    this.remove(mesh);
+                    delete this.objects[objectId];
+                };
+                World.prototype.getObjectById = function (objectId) {
+                    return this.objects[objectId];
+                };
+                World.prototype.addObjectMesh = function (mesh) {
+                    this.add(mesh);
+                    this.objects[mesh.data.id] = mesh;
+                };
+                World.sideLength = 256;
+                return World;
+            }(THREE.Object3D));
+            exports_8("World", World);
+            ;
+        }
+    };
+});
+System.register("WorldObjectPicker", ["three"], function (exports_9, context_9) {
+    "use strict";
+    var THREE, WorldObjectPicker;
+    var __moduleName = context_9 && context_9.id;
+    return {
+        setters: [
+            function (THREE_7) {
+                THREE = THREE_7;
             }
         ],
         execute: function () {
@@ -345,302 +667,7 @@ System.register("WorldObjectPicker", ["three"], function (exports_5, context_5) 
                 };
                 return WorldObjectPicker;
             }());
-            exports_5("WorldObjectPicker", WorldObjectPicker);
-            ;
-        }
-    };
-});
-System.register("TerrainShader", ["three"], function (exports_6, context_6) {
-    "use strict";
-    var THREE, terrainShader;
-    var __moduleName = context_6 && context_6.id;
-    return {
-        setters: [
-            function (THREE_4) {
-                THREE = THREE_4;
-            }
-        ],
-        execute: function () {
-            exports_6("terrainShader", terrainShader = {
-                uniforms: {
-                    tColor: { type: "t", value: 0 },
-                    tPixelSize: { type: "f", value: 0.3 }
-                },
-                side: THREE.DoubleSide,
-                vertexShader: [
-                    "varying vec2 vUv;",
-                    "void main() {",
-                    "vUv = vec2(uv.x, uv.y);",
-                    "gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);",
-                    "}"
-                ].join("\n"),
-                fragmentShader: [
-                    "uniform sampler2D tColor;",
-                    "uniform float tPixelSize;",
-                    "varying vec2 vUv;",
-                    "void main() {",
-                    "vec4 texel = texture2D( tColor, vUv );",
-                    "float multi = 0.1;",
-                    "for(float x = -1.0; x <= 1.0; x++) {",
-                    "for (float y = -1.0; y <= 1.0; y++) {",
-                    "if (x == 0.0 && y == 0.0) continue;",
-                    "vec4 neighborcolor = texture2D(tColor, vUv + vec2(x/256.0, y/256.0) * tPixelSize);",
-                    "if (neighborcolor != texel) { multi = 1.0; }",
-                    "}",
-                    "}",
-                    "gl_FragColor = texel * multi;",
-                    "}"
-                ].join("\n")
-            });
-        }
-    };
-});
-System.register("Player", ["three", "Attackable"], function (exports_7, context_7) {
-    "use strict";
-    var THREE, Attackable_1, Player;
-    var __moduleName = context_7 && context_7.id;
-    return {
-        setters: [
-            function (THREE_5) {
-                THREE = THREE_5;
-            },
-            function (Attackable_1_1) {
-                Attackable_1 = Attackable_1_1;
-            }
-        ],
-        execute: function () {
-            Player = (function (_super) {
-                __extends(Player, _super);
-                function Player(data) {
-                    return _super.call(this, data, Player.defaultGeometry, new THREE.MeshBasicMaterial({ color: 0xFF0000 + data.id, alphaMap: Attackable_1.attackableAlphaMapTexture, transparent: true })) || this;
-                }
-                Player.prototype.update = function () {
-                    if (this.data.isHighlighted) {
-                        this.scale.setScalar(1.5);
-                    }
-                    else {
-                        this.scale.setScalar(1.0);
-                    }
-                };
-                Player.defaultGeometry = new THREE.BoxGeometry(4, 4, 4);
-                return Player;
-            }(Attackable_1.Attackable));
-            exports_7("Player", Player);
-            ;
-        }
-    };
-});
-System.register("NonPlayerCharacter", ["three", "Attackable"], function (exports_8, context_8) {
-    "use strict";
-    var THREE, Attackable_2, NonPlayerCharacter;
-    var __moduleName = context_8 && context_8.id;
-    return {
-        setters: [
-            function (THREE_6) {
-                THREE = THREE_6;
-            },
-            function (Attackable_2_1) {
-                Attackable_2 = Attackable_2_1;
-            }
-        ],
-        execute: function () {
-            NonPlayerCharacter = (function (_super) {
-                __extends(NonPlayerCharacter, _super);
-                function NonPlayerCharacter(data) {
-                    return _super.call(this, data, NonPlayerCharacter.defaultGeometry, new THREE.MeshBasicMaterial({ color: 0x00FFFF, alphaMap: Attackable_2.attackableAlphaMapTexture, transparent: true })) || this;
-                }
-                NonPlayerCharacter.defaultGeometry = new THREE.BoxGeometry(4, 4, 4);
-                return NonPlayerCharacter;
-            }(Attackable_2.Attackable));
-            exports_8("NonPlayerCharacter", NonPlayerCharacter);
-            ;
-        }
-    };
-});
-System.register("World", ["three", "Attack", "TerrainShader", "Player", "Attackable", "NonPlayerCharacter"], function (exports_9, context_9) {
-    "use strict";
-    var THREE, Attack_1, TerrainShader_1, Player_1, Attackable_3, NonPlayerCharacter_1, World;
-    var __moduleName = context_9 && context_9.id;
-    return {
-        setters: [
-            function (THREE_7) {
-                THREE = THREE_7;
-            },
-            function (Attack_1_1) {
-                Attack_1 = Attack_1_1;
-            },
-            function (TerrainShader_1_1) {
-                TerrainShader_1 = TerrainShader_1_1;
-            },
-            function (Player_1_1) {
-                Player_1 = Player_1_1;
-            },
-            function (Attackable_3_1) {
-                Attackable_3 = Attackable_3_1;
-            },
-            function (NonPlayerCharacter_1_1) {
-                NonPlayerCharacter_1 = NonPlayerCharacter_1_1;
-            }
-        ],
-        execute: function () {
-            World = (function (_super) {
-                __extends(World, _super);
-                function World(serverId, mapId) {
-                    var _this = _super.call(this) || this;
-                    _this.objects = {};
-                    _this.attacks = new Attack_1.Attacks();
-                    _this.attacks.position.z = 100;
-                    _this.add(_this.attacks);
-                    var planeMesh = new THREE.Mesh(new THREE.PlaneGeometry(256, 256, 1, 1), new THREE.ShaderMaterial(TerrainShader_1.terrainShader));
-                    _this.add(planeMesh);
-                    var textureLoader = new THREE.TextureLoader();
-                    textureLoader.load('terrain/' + serverId + '/' + mapId, function (texture) {
-                        texture.magFilter = THREE.NearestFilter;
-                        TerrainShader_1.terrainShader.uniforms.tColor.value = texture;
-                    });
-                    return _this;
-                }
-                World.prototype.update = function () {
-                    this.attacks.update();
-                    var objects = this.objects;
-                    for (var o in objects) {
-                        if (objects.hasOwnProperty(o)) {
-                            var object = objects[o];
-                            if (object instanceof Player_1.Player) {
-                                object.update();
-                            }
-                        }
-                    }
-                };
-                World.prototype.addOrUpdateNpc = function (npcData) {
-                    return __awaiter(this, void 0, void 0, function () {
-                        var obj;
-                        return __generator(this, function (_a) {
-                            switch (_a.label) {
-                                case 0:
-                                    obj = this.getObjectById(npcData.id);
-                                    if (!(obj === undefined || obj === null)) return [3, 4];
-                                    _a.label = 1;
-                                case 1:
-                                    if (!(Attackable_3.attackableAlphaMapTexture === undefined)) return [3, 3];
-                                    return [4, new Promise(function (resolve) { return setTimeout(resolve, 50); })];
-                                case 2:
-                                    _a.sent();
-                                    return [3, 1];
-                                case 3:
-                                    console.debug("Adding npc", npcData);
-                                    this.addNpc(npcData);
-                                    return [3, 5];
-                                case 4:
-                                    console.debug("Updating npc", npcData);
-                                    obj.respawn(npcData);
-                                    _a.label = 5;
-                                case 5: return [2];
-                            }
-                        });
-                    });
-                };
-                World.prototype.addOrUpdatePlayer = function (playerData) {
-                    return __awaiter(this, void 0, void 0, function () {
-                        var obj;
-                        return __generator(this, function (_a) {
-                            switch (_a.label) {
-                                case 0:
-                                    obj = this.getObjectById(playerData.id);
-                                    if (!(obj === undefined || obj === null)) return [3, 4];
-                                    _a.label = 1;
-                                case 1:
-                                    if (!(Attackable_3.attackableAlphaMapTexture === undefined)) return [3, 3];
-                                    return [4, new Promise(function (resolve) { return setTimeout(resolve, 50); })];
-                                case 2:
-                                    _a.sent();
-                                    return [3, 1];
-                                case 3:
-                                    console.debug("Adding player", playerData);
-                                    this.addPlayer(playerData);
-                                    return [3, 5];
-                                case 4:
-                                    console.debug("Updating player", playerData, obj.data);
-                                    obj.respawn(playerData);
-                                    _a.label = 5;
-                                case 5: return [2];
-                            }
-                        });
-                    });
-                };
-                World.prototype.killObject = function (killedObjectId, killerObjectId) {
-                    var killedObject = this.getObjectById(killedObjectId);
-                    killedObject.gotKilled();
-                };
-                World.prototype.objectMoved = function (id, newX, newY, moveType, walkDelay, steps) {
-                    var obj = this.getObjectById(id);
-                    obj.moveTo(newX, newY, moveType, walkDelay, steps);
-                };
-                World.prototype.addSkillAnimation = function (playerId, targetId, skill) {
-                    var animating = this.getObjectById(playerId);
-                    var target = this.getObjectById(targetId);
-                    this.attacks.addAttack(animating, target);
-                };
-                World.prototype.addAreaSkillAnimation = function (playerId, skill, x, y, rotation) {
-                    var animating = this.getObjectById(playerId);
-                    if (animating !== undefined && animating !== null) {
-                        animating.rotateTo(rotation);
-                    }
-                };
-                World.prototype.addAnimation = function (animatingId, animation, targetId, direction) {
-                    var animating = this.getObjectById(animatingId);
-                    if (animating !== undefined && animating !== null) {
-                        animating.rotateTo(direction / 0x10);
-                    }
-                    if (targetId !== null) {
-                        var target = this.getObjectById(targetId);
-                        this.attacks.addAttack(animating, target);
-                    }
-                };
-                World.prototype.dispose = function () {
-                    delete this.objects;
-                };
-                World.prototype.highlightOn = function (objectId) {
-                    var player = this.getObjectById(objectId);
-                    if (player != null) {
-                        player.data = __assign(__assign({}, player.data), { isHighlighted: true });
-                    }
-                };
-                World.prototype.highlightOff = function (objectId) {
-                    var player = this.getObjectById(objectId);
-                    if (player != null) {
-                        player.data = __assign(__assign({}, player.data), { isHighlighted: false });
-                    }
-                };
-                World.prototype.onSizeChanged = function (newSize) {
-                    TerrainShader_1.terrainShader.uniforms.tPixelSize.value = 256.0 / newSize;
-                };
-                World.prototype.addNpc = function (data) {
-                    var npc = new NonPlayerCharacter_1.NonPlayerCharacter(data);
-                    this.addObjectMesh(npc);
-                    npc.respawn(data);
-                };
-                World.prototype.addPlayer = function (data) {
-                    var player = new Player_1.Player(data);
-                    this.addObjectMesh(player);
-                    player.respawn(data);
-                };
-                World.prototype.removeObject = function (objectId) {
-                    var mesh = this.objects[objectId];
-                    console.debug("Removing object", mesh.data);
-                    this.remove(mesh);
-                    delete this.objects[objectId];
-                };
-                World.prototype.getObjectById = function (objectId) {
-                    return this.objects[objectId];
-                };
-                World.prototype.addObjectMesh = function (mesh) {
-                    this.add(mesh);
-                    this.objects[mesh.data.id] = mesh;
-                };
-                return World;
-            }(THREE.Object3D));
-            exports_9("World", World);
+            exports_9("WorldObjectPicker", WorldObjectPicker);
             ;
         }
     };
@@ -721,8 +748,9 @@ System.register("MapApp", ["three", "tween", "WorldObjectPicker", "World"], func
                     return camera;
                 };
                 MapApp.prototype.onWindowResize = function () {
-                    var preferredWidth = window.innerWidth - this.container.offsetLeft - 50;
-                    var preferredHeigth = window.innerHeight - this.container.offsetTop - 50;
+                    var margin = 50;
+                    var preferredWidth = window.innerWidth - this.container.offsetLeft - margin;
+                    var preferredHeigth = window.innerHeight - this.container.offsetTop - margin;
                     var newSize = Math.min(preferredWidth, preferredHeigth);
                     this.renderer.setSize(newSize, newSize);
                     this.world.onSizeChanged(newSize);

@@ -9,29 +9,79 @@
       <Description>Defines from or to which item storage an item is moved.</Description>
       <Values>
         <EnumValue>
-          <Value>0</Value>
           <Name>Inventory</Name>
-          <Description>The inventory storage</Description>
+          <Description>The inventory storage.</Description>
+          <Value>0</Value>
         </EnumValue>
         <EnumValue>
-          <Value>1</Value>
           <Name>Trade</Name>
-          <Description>The trade storage</Description>
+          <Description>The trade storage.</Description>
+          <Value>1</Value>
         </EnumValue>
         <EnumValue>
-          <Value>2</Value>
           <Name>Vault</Name>
-          <Description>The vault storage</Description>
+          <Description>The vault storage.</Description>
+          <Value>2</Value>
         </EnumValue>
         <EnumValue>
-          <Value>3</Value>
           <Name>ChaosMachine</Name>
-          <Description>The chaos machine storage</Description>
+          <Description>The chaos machine storage.</Description>
+          <Value>3</Value>
         </EnumValue>
         <EnumValue>
-          <Value>4</Value>
           <Name>PlayerShop</Name>
-          <Description>The player shop storage</Description>
+          <Description>The player shop storage.</Description>
+          <Value>4</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>PetTrainer</Name>
+          <Description>The pet trainer dialog storage.</Description>
+          <Value>5</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Refinery</Name>
+          <Description>The storage of the refinery of the elphis npc.</Description>
+          <Value>6</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>Smelting</Name>
+          <Description>The storage of the smelting dialog of the osbourne npc.</Description>
+          <Value>7</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>ItemRestore</Name>
+          <Description>The storage of the item restore dialog of the jerridon npc.</Description>
+          <Value>8</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>ChaosCardMaster</Name>
+          <Description>The storage of the chaos card master dialog.</Description>
+          <Value>9</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>CherryBlossomSpirit</Name>
+          <Description>The storage of the cherry blossom spirit dialog.</Description>
+          <Value>10</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>SeedCrafting</Name>
+          <Description>The storage of the seed crafting dialog.</Description>
+          <Value>11</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>SeedSphereCrafting</Name>
+          <Description>The storage of the seed sphere crafting dialog.</Description>
+          <Value>12</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>SeedMountCrafting</Name>
+          <Description>The storage of the seed sphere mount dialog.</Description>
+          <Value>13</Value>
+        </EnumValue>
+        <EnumValue>
+          <Name>SeedUnmountCrafting</Name>
+          <Description>The storage of the seed sphere unmount dialog.</Description>
+          <Value>14</Value>
         </EnumValue>
       </Values>
     </Enum>
@@ -40,24 +90,24 @@
       <Description>The quest state for the legacy quest system.</Description>
       <Values>
         <EnumValue>
-          <Value>0</Value>
           <Name>Undefined</Name>
           <Description>The state is undefined. This value is used when there is no quest defined for a specific index</Description>
+          <Value>0</Value>
         </EnumValue>
         <EnumValue>
-          <Value>1</Value>
           <Name>Active</Name>
           <Description>The quest is active and in progress.</Description>
+          <Value>1</Value>
         </EnumValue>
         <EnumValue>
-          <Value>2</Value>
           <Name>Complete</Name>
           <Description>The quest was completed.</Description>
+          <Value>2</Value>
         </EnumValue>
         <EnumValue>
-          <Value>3</Value>
           <Name>Inactive</Name>
           <Description>The quest is inactive, that means it isn't active and wasn't completed yet.</Description>
+          <Value>3</Value>
         </EnumValue>
       </Values>
     </Enum>

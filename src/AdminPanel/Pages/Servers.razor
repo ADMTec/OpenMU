@@ -2,11 +2,9 @@
 @using MUnique.OpenMU.AdminPanel.Services
 @using MUnique.OpenMU.Interfaces
 
-@inject ServerService serverService
-
 <h1>Servers</h1>
 
-@if (servers == null)
+@if (_servers == null)
 {
     <p><em>Loading...</em></p>
 }
@@ -27,7 +25,7 @@ else
             <TotalOnlineCounter />
         </tfoot>
         <tbody>
-            @foreach (var server in this.servers.OrderBy(s => s.Type).ThenBy(s => s.Description))
+            @foreach (var server in this._servers.OrderBy(s => s.Type).ThenBy(s => s.Description))
             {
                 <ServerItem Server=@server />
             }
@@ -37,12 +35,18 @@ else
 }
 
 @code {
-    private IList<IManageableServer> servers;
+    private IList<IManageableServer>? _servers;
+
+    /// <summary>
+    /// Gets or sets the <see cref="ServerService"/>.
+    /// </summary>
+    [Inject]
+    public ServerService ServerService { get; set; } = null!;
 
     /// <inheritdoc />
     protected override void OnInitialized()
     {
         base.OnInitialized();
-        this.servers = this.serverService.Servers;
+        this._servers = this.ServerService.Servers;
     }
 }

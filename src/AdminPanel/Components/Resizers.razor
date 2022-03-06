@@ -1,0 +1,43 @@
+﻿<div class='resizers'>
+    <div class='resizer top-left' @onmousedown=this.OnTopLeftStartResize></div>
+    <div class='resizer top-right' @onmousedown=this.OnTopRightStartResize></div>
+    <div class='resizer bottom-left' @onmousedown=this.OnBottomLeftStartResize></div>
+    <div class='resizer bottom-right' @onmousedown=this.OnBottomRightStartResize></div>
+</div>
+
+@code {
+
+    /// <summary>
+    /// Gets or sets an <see cref="EventCallback"/> which gets called to inform the <see cref="ResizerPosition"/> when a resizing operation takes place.
+    /// </summary>
+    [Parameter]
+    public EventCallback<ResizerPosition?> Resizing { get; set; }
+
+    private async Task OnTopLeftStartResize(MouseEventArgs args)
+    {
+        await this.Resizing.InvokeAsync(ResizerPosition.TopLeft);
+    }
+
+    private async Task OnTopRightStartResize(MouseEventArgs args)
+    {
+        await this.Resizing.InvokeAsync(ResizerPosition.TopRight);
+    }
+
+    private async Task OnBottomLeftStartResize(MouseEventArgs args)
+    {
+        await this.Resizing.InvokeAsync(ResizerPosition.BottomLeft);
+    }
+
+    private async Task OnBottomRightStartResize(MouseEventArgs args)
+    {
+        await this.Resizing.InvokeAsync(ResizerPosition.BottomRight);
+    }
+
+    public enum ResizerPosition
+    {
+        TopLeft,
+        TopRight,
+        BottomRight,
+        BottomLeft,
+    }
+}

@@ -6,7 +6,7 @@ namespace MUnique.OpenMU.GameServer.MessageHandler;
 
 using System.Runtime.InteropServices;
 using MUnique.OpenMU.GameLogic;
-using MUnique.OpenMU.GameLogic.PlayerActions;
+using MUnique.OpenMU.GameLogic.PlayerActions.Skills;
 using MUnique.OpenMU.Network.Packets.ClientToServer;
 using MUnique.OpenMU.PlugIns;
 
@@ -27,7 +27,7 @@ internal class AreaSkillHitHandlerPlugIn075 : AreaSkillHitHandlerMultiTargetPlug
     public byte Key => AreaSkillHit075.Code;
 
     /// <inheritdoc/>
-    public void HandlePacket(Player player, Span<byte> packet)
+    public async ValueTask HandlePacketAsync(Player player, Memory<byte> packet)
     {
         if (packet.Length < 7)
         {
@@ -44,7 +44,7 @@ internal class AreaSkillHitHandlerPlugIn075 : AreaSkillHitHandlerMultiTargetPlug
 
         for (var i = 0; i < message.TargetCount; i++)
         {
-            this.AttackTarget(player, skillEntry, message[i].TargetId);
+            await this.AttackTargetAsync(player, skillEntry, message[i].TargetId).ConfigureAwait(false);
         }
     }
 }

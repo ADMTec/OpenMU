@@ -5,9 +5,9 @@
 namespace MUnique.OpenMU.GameServer.RemoteView.Character;
 
 using System.Runtime.InteropServices;
+using MUnique.OpenMU.GameLogic;
 using MUnique.OpenMU.GameLogic.Attributes;
 using MUnique.OpenMU.GameLogic.Views.Character;
-using MUnique.OpenMU.Network;
 using MUnique.OpenMU.Network.Packets.ServerToClient;
 using MUnique.OpenMU.Network.PlugIns;
 using MUnique.OpenMU.PlugIns;
@@ -29,7 +29,7 @@ public class UpdateCharacterStatsPlugIn075 : IUpdateCharacterStatsPlugIn
     public UpdateCharacterStatsPlugIn075(RemotePlayer player) => this._player = player;
 
     /// <inheritdoc/>
-    public void UpdateCharacterStats()
+    public async ValueTask UpdateCharacterStatsAsync()
     {
         var connection = this._player.Connection;
         if (connection is null || this._player.Account is null)
@@ -37,31 +37,26 @@ public class UpdateCharacterStatsPlugIn075 : IUpdateCharacterStatsPlugIn
             return;
         }
 
-        using (var writer = connection.StartSafeWrite(CharacterInformation075.HeaderType, CharacterInformation075.Length))
-        {
-            _ = new CharacterInformation075(writer.Span)
-            {
-                X = this._player.Position.X,
-                Y = this._player.Position.Y,
-                MapId = (byte)this._player.SelectedCharacter!.CurrentMap!.Number,
-                CurrentExperience = (uint)this._player.SelectedCharacter.Experience,
-                ExperienceForNextLevel = (uint)this._player.GameServerContext.Configuration.ExperienceTable![(int)this._player.Attributes![Stats.Level] + 1],
-                LevelUpPoints = (ushort)this._player.SelectedCharacter.LevelUpPoints,
-                Strength = (ushort)this._player.Attributes[Stats.BaseStrength],
-                Agility = (ushort)this._player.Attributes[Stats.BaseAgility],
-                Vitality = (ushort)this._player.Attributes[Stats.BaseVitality],
-                Energy = (ushort)this._player.Attributes[Stats.BaseEnergy],
-                CurrentHealth = (ushort)this._player.Attributes[Stats.CurrentHealth],
-                MaximumHealth = (ushort)this._player.Attributes[Stats.MaximumHealth],
-                CurrentMana = (ushort)this._player.Attributes[Stats.CurrentMana],
-                MaximumMana = (ushort)this._player.Attributes[Stats.MaximumMana],
-                Money = (uint)this._player.Money,
-                HeroState = this._player.SelectedCharacter.State.Convert(),
-                Status = this._player.SelectedCharacter.CharacterStatus.Convert(),
-            };
-            writer.Commit();
-        }
+        await connection.SendCharacterInformation075Async(
+            this._player.Position.X,
+            this._player.Position.Y,
+            (byte)this._player.SelectedCharacter!.CurrentMap!.Number,
+            (uint)this._player.SelectedCharacter.Experience,
+            (uint)this._player.GameServerContext.Configuration.ExperienceTable![(int)this._player.Attributes![Stats.Level] + 1],
+            (ushort)Math.Max(this._player.SelectedCharacter.LevelUpPoints, 0),
+            (ushort)this._player.Attributes[Stats.BaseStrength],
+            (ushort)this._player.Attributes[Stats.BaseAgility],
+            (ushort)this._player.Attributes[Stats.BaseVitality],
+            (ushort)this._player.Attributes[Stats.BaseEnergy],
+            (ushort)this._player.Attributes[Stats.CurrentHealth],
+            (ushort)this._player.Attributes[Stats.MaximumHealth],
+            (ushort)this._player.Attributes[Stats.CurrentMana],
+            (ushort)this._player.Attributes[Stats.MaximumMana],
+            (uint)this._player.Money,
+            this._player.SelectedCharacter.State.Convert(),
+            this._player.SelectedCharacter.CharacterStatus.Convert())
+            .ConfigureAwait(false);
 
-        this._player.ViewPlugIns.GetPlugIn<IApplyKeyConfigurationPlugIn>()?.ApplyKeyConfiguration();
+        await this._player.InvokeViewPlugInAsync<IApplyKeyConfigurationPlugIn>(p => p.ApplyKeyConfigurationAsync()).ConfigureAwait(false);
     }
 }

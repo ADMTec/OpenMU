@@ -22,6 +22,11 @@ public record DeathInformation(ushort KillerId, string KillerName, HitInfo Final
 public interface IAttackable : IIdentifiable, ILocateable
 {
     /// <summary>
+    /// Occurs when this instance died.
+    /// </summary>
+    event EventHandler<DeathInformation>? Died;
+
+    /// <summary>
     /// Gets the attributes.
     /// </summary>
     IAttributeSystem Attributes { get; }
@@ -58,19 +63,25 @@ public interface IAttackable : IIdentifiable, ILocateable
     /// </summary>
     /// <param name="attacker">The attacker.</param>
     /// <param name="skill">The skill.</param>
-    void AttackBy(IAttacker attacker, SkillEntry? skill);
+    /// <param name="isCombo">If set to <c>true</c>, the attacker did a combination of skills.</param>
+    ValueTask AttackByAsync(IAttacker attacker, SkillEntry? skill, bool isCombo);
 
     /// <summary>
-    /// Reflects the damage which was done previously with <see cref="AttackBy" /> or even <see cref="ReflectDamage" /> to the <paramref name="reflector" />.
+    /// Reflects the damage which was done previously with <see cref="AttackByAsync" /> or even <see cref="ReflectDamageAsync" /> to the <paramref name="reflector" />.
     /// </summary>
     /// <param name="reflector">The reflector.</param>
     /// <param name="damage">The damage.</param>
-    void ReflectDamage(IAttacker reflector, uint damage);
+    ValueTask ReflectDamageAsync(IAttacker reflector, uint damage);
 
     /// <summary>
     /// Applies the poison damage.
     /// </summary>
     /// <param name="initialAttacker">The initial attacker.</param>
     /// <param name="damage">The damage.</param>
-    void ApplyPoisonDamage(IAttacker initialAttacker, uint damage);
+    ValueTask ApplyPoisonDamageAsync(IAttacker initialAttacker, uint damage);
+
+    /// <summary>
+    /// Kills the attackable instantly.
+    /// </summary>
+    ValueTask KillInstantlyAsync();
 }

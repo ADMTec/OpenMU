@@ -6,7 +6,7 @@ namespace MUnique.OpenMU.GameServer.MessageHandler;
 
 using System.Runtime.InteropServices;
 using MUnique.OpenMU.GameLogic;
-using MUnique.OpenMU.GameLogic.PlayerActions;
+using MUnique.OpenMU.GameLogic.PlayerActions.Skills;
 using MUnique.OpenMU.GameLogic.Views;
 using MUnique.OpenMU.GameLogic.Views.World;
 using MUnique.OpenMU.Network.Packets.ClientToServer;
@@ -16,10 +16,6 @@ using MUnique.OpenMU.PlugIns;
 /// <summary>
 /// Handler for area skill hit packets.
 /// </summary>
-/// <remarks>
-/// TODO: It's usually required to perform a <see cref="AreaSkillAttackAction"/> before, so this check has to be implemented.
-///       Each animation and hit is usually referenced due a counter value in the packets.
-/// </remarks>
 [PlugIn("AreaSkillHitHandlerPlugIn", "Handler for area skill hit packets.")]
 [Guid("2f5848fd-a1bd-488b-84b3-fd88bdef5ac8")]
 [MinimumClient(1, 0, ClientLanguage.Invariant)]
@@ -34,7 +30,7 @@ internal class AreaSkillHitHandlerPlugIn : IPacketHandlerPlugIn
     public byte Key => AreaSkillHit.Code;
 
     /// <inheritdoc/>
-    public void HandlePacket(Player player, Span<byte> packet)
+    public async ValueTask HandlePacketAsync(Player player, Memory<byte> packet)
     {
         if (packet.Length < 11)
         {
@@ -42,25 +38,54 @@ internal class AreaSkillHitHandlerPlugIn : IPacketHandlerPlugIn
         }
 
         AreaSkillHit message = packet;
-        if (player.SkillList is null || !player.SkillList.ContainsSkill(message.SkillId))
+        var skillId = message.SkillId;
+        if (skillId == 0)
+        {
+            skillId = player.SkillHitValidator.LastRegisteredSkillId;
+        }
+
+        if (player.SkillList is null || !player.SkillList.ContainsSkill(skillId))
         {
             return;
         }
 
-        if (player.GetObject(message.TargetId) is IAttackable target)
+        var increaseCounterAfterLoop = false;
+        var targetCount = message.TargetCount;
+        try
         {
-            if (target is IObservable observable && observable.Observers.Contains(player))
+            for (int i = 0; i < targetCount; i++)
             {
-                if (player.SkillList.GetSkill(message.SkillId) is { } skillEntry)
+                var targetInfo = message[i];
+                var (isHitValid, increaseCounter) = player.SkillHitValidator.IsHitValid(skillId, targetInfo.AnimationCounter, message.HitCounter);
+                increaseCounterAfterLoop |= increaseCounter;
+                if (!isHitValid)
                 {
-                    this._skillHitAction.AttackTarget(player, target, skillEntry);
+                    return;
+                }
+
+                if (player.GetObject(targetInfo.TargetId) is IAttackable target)
+                {
+                    if (target is IObservable observable && observable.Observers.Contains(player))
+                    {
+                        if (player.SkillList.GetSkill(skillId) is { } skillEntry)
+                        {
+                            await this._skillHitAction.AttackTargetAsync(player, target, skillEntry).ConfigureAwait(false);
+                        }
+                    }
+                    else
+                    {
+                        // Client may be out of sync (or it's an hacker attempt),
+                        // so we tell him the object is out of scope - this should prevent further attempts to attack it.
+                        await player.InvokeViewPlugInAsync<IObjectsOutOfScopePlugIn>(p => p.ObjectsOutOfScopeAsync(target.GetAsEnumerable())).ConfigureAwait(false);
+                    }
                 }
             }
-            else
+        }
+        finally
+        {
+            if (increaseCounterAfterLoop)
             {
-                // Client may be out of sync (or it's an hacker attempt),
-                // so we tell him the object is out of scope - this should prevent further attempts to attack it.
-                player.ViewPlugIns.GetPlugIn<IObjectsOutOfScopePlugIn>()?.ObjectsOutOfScope(target.GetAsEnumerable());
+                player.SkillHitValidator.IncreaseCounterAfterHit();
             }
         }
     }

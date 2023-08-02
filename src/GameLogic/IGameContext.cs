@@ -6,6 +6,7 @@ namespace MUnique.OpenMU.GameLogic;
 
 using MUnique.OpenMU.GameLogic.MiniGames;
 using MUnique.OpenMU.Interfaces;
+using MUnique.OpenMU.Pathfinding;
 using MUnique.OpenMU.Persistence;
 using MUnique.OpenMU.PlugIns;
 
@@ -30,7 +31,7 @@ public interface IGameContext
     float ExperienceRate { get; }
 
     /// <summary>
-    /// Gets the repository manager. Used to retrieve data, e.g. from a database.
+    /// Gets the repository provider. Used to retrieve data, e.g. from a database.
     /// </summary>
     IPersistenceContextProvider PersistenceContextProvider { get; }
 
@@ -70,15 +71,25 @@ public interface IGameContext
     IDropGenerator DropGenerator { get; }
 
     /// <summary>
+    /// Gets the object pool for path finders.
+    /// </summary>
+    IObjectPool<PathFinder> PathFinderPool { get; }
+
+    /// <summary>
     /// Gets the initialized maps which are hosted on this context.
     /// </summary>
-    IEnumerable<GameMap> Maps { get; }
+    ValueTask<IEnumerable<GameMap>> GetMapsAsync();
+
+    /// <summary>
+    /// Gets the players.
+    /// </summary>
+    ValueTask<IList<Player>> GetPlayersAsync();
 
     /// <summary>
     /// Adds the player to the game.
     /// </summary>
     /// <param name="player">The player.</param>
-    void AddPlayer(Player player);
+    ValueTask AddPlayerAsync(Player player);
 
     /// <summary>
     /// Gets the maps which is meant to be hosted by the game.
@@ -88,7 +99,7 @@ public interface IGameContext
     /// <returns>
     /// The hosted GameMap instance.
     /// </returns>
-    GameMap? GetMap(ushort mapId, bool createIfNotExists = true);
+    ValueTask<GameMap?> GetMapAsync(ushort mapId, bool createIfNotExists = true);
 
     /// <summary>
     /// Gets the mini game map which is meant to be hosted by the game.
@@ -98,13 +109,13 @@ public interface IGameContext
     /// <returns>
     /// The state of the mini game which contains the hosted GameMap instance.
     /// </returns>
-    MiniGameContext GetMiniGame(MiniGameDefinition miniGameDefinition, Player requester);
+    ValueTask<MiniGameContext> GetMiniGameAsync(MiniGameDefinition miniGameDefinition, Player requester);
 
     /// <summary>
     /// Removes the mini game instance from the context.
     /// </summary>
     /// <param name="miniGameContext">The context of the mini game.</param>
-    void RemoveMiniGame(MiniGameContext miniGameContext);
+    ValueTask RemoveMiniGameAsync(MiniGameContext miniGameContext);
 
     /// <summary>
     /// Gets the player object by character name.
@@ -118,13 +129,13 @@ public interface IGameContext
     /// </summary>
     /// <param name="message">The message.</param>
     /// <param name="messageType">Type of the message.</param>
-    void SendGlobalMessage(string message, MessageType messageType);
+    ValueTask SendGlobalMessageAsync(string message, MessageType messageType);
 
     /// <summary>
     /// Sends a golden global notification to all players of the game.
     /// </summary>
     /// <param name="message">The message.</param>
-    void SendGlobalNotification(string message);
+    ValueTask SendGlobalNotificationAsync(string message);
 
     /// <summary>
     /// Executes an action for each player.
@@ -133,5 +144,5 @@ public interface IGameContext
     /// <remarks>
     /// Please avoid doing actions which may lead to the connected-state of the players.
     /// </remarks>
-    void ForEachPlayer(Action<Player> action);
+    ValueTask ForEachPlayerAsync(Func<Player, Task> action);
 }

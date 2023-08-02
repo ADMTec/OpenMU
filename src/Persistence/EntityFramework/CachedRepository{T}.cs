@@ -4,6 +4,8 @@
 
 namespace MUnique.OpenMU.Persistence.EntityFramework;
 
+using System.Collections;
+
 /// <summary>
 /// A repository which caches all of its data in memory.
 /// </summary>
@@ -33,65 +35,86 @@ public class CachedRepository<T> : IRepository<T>
     protected IRepository<T> BaseRepository { get; }
 
     /// <inheritdoc/>
-    public IEnumerable<T> GetAll()
+    async ValueTask<IEnumerable> IRepository.GetAllAsync()
     {
-        if (this._allLoaded || this._loading)
+        return await this.GetAllAsync().ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IEnumerable<T>> GetAllAsync()
+    {
+        if (this._allLoaded)
         {
             return this._cache.Values;
         }
 
-        this._loading = true;
-        IEnumerable<T> values = this.BaseRepository.GetAll();
-
-        foreach (var obj in values)
+        if (this._loading)
         {
-            if (!this._cache.ContainsKey(obj.Id))
+            while (this._loading)
             {
-                this.AddToCache(obj.Id, obj);
+                await Task.Delay(10).ConfigureAwait(false);
             }
+
+            return this._cache.Values;
         }
 
-        this._loading = false;
+        this._loading = true;
+        try
+        {
+            IEnumerable<T> values = await this.BaseRepository.GetAllAsync().ConfigureAwait(false);
+            foreach (var obj in values)
+            {
+                if (!this._cache.ContainsKey(obj.Id))
+                {
+                    this.AddToCache(obj.Id, obj);
+                }
+            }
+        }
+        finally
+        {
+            this._loading = false;
+        }
+
         this._allLoaded = true;
 
         return this._cache.Values;
     }
 
     /// <inheritdoc/>
-    public T? GetById(Guid id)
+    public async ValueTask<T?> GetByIdAsync(Guid id)
     {
-        this.GetAll();
+        await this.GetAllAsync().ConfigureAwait(false);
         this._cache.TryGetValue(id, out var result);
         return result;
     }
 
     /// <inheritdoc/>
-    object? IRepository.GetById(Guid id)
+    async ValueTask<object?> IRepository.GetByIdAsync(Guid id)
     {
-        return this.GetById(id);
+        return await this.GetByIdAsync(id).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public bool Delete(object obj)
+    public async ValueTask<bool> DeleteAsync(object obj)
     {
-        if (obj is IIdentifiable identifiable)
+        if (obj is not IIdentifiable identifiable)
         {
-            return this.Delete(identifiable.Id);
+            return false;
         }
 
-        return false;
+        return await this.DeleteAsync(identifiable.Id).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public bool Delete(Guid id)
+    public async ValueTask<bool> DeleteAsync(Guid id)
     {
-        if (this.BaseRepository.Delete(id))
+        if (!await this.BaseRepository.DeleteAsync(id).ConfigureAwait(false))
         {
-            this.RemoveFromCache(id);
-            return true;
+            return false;
         }
 
-        return false;
+        this.RemoveFromCache(id);
+        return true;
     }
 
     /// <summary>
@@ -101,9 +124,9 @@ public class CachedRepository<T> : IRepository<T>
     /// <param name="obj">The object.</param>
     protected virtual void AddToCache(Guid id, T obj)
     {
-        if (this._cache.ContainsKey(id))
+        if (this._cache.TryGetValue(id, out var value))
         {
-            if (object.Equals(this._cache[id], obj))
+            if (Equals(value, obj))
             {
                 throw new ArgumentException("Other object with same id is already in cache.");
             }

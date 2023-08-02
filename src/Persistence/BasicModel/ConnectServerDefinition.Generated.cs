@@ -20,15 +20,11 @@ using MUnique.OpenMU.Persistence.Json;
 public partial class ConnectServerDefinition : MUnique.OpenMU.DataModel.Configuration.ConnectServerDefinition, IIdentifiable, IConvertibleTo<ConnectServerDefinition>
 {
     
-    /// <summary>
-    /// Gets or sets the identifier of this instance.
-    /// </summary>
-    public Guid Id { get; set; }
+    
     
     /// <summary>
     /// Gets the raw object of <see cref="Client" />.
     /// </summary>
-    [Newtonsoft.Json.JsonProperty("client")]
     [System.Text.Json.Serialization.JsonPropertyName("client")]
     public GameClientDefinition RawClient
     {
@@ -37,7 +33,6 @@ public partial class ConnectServerDefinition : MUnique.OpenMU.DataModel.Configur
     }
 
     /// <inheritdoc/>
-    [Newtonsoft.Json.JsonIgnore]
     [System.Text.Json.Serialization.JsonIgnore]
     public override MUnique.OpenMU.DataModel.Configuration.GameClientDefinition Client
     {

@@ -169,7 +169,7 @@ internal abstract class AccountInitializerBase : InitializerBase
         }
 
         character.Attributes.First(a => a.Definition == Stats.Level).Value = level;
-        character.Experience = GameConfigurationInitializer.CalculateNeededExperience(level);
+        character.Experience = GameConfigurationInitializerBase.CalculateNeededExperience(level);
         character.LevelUpPoints = (int)((character.Attributes.First(a => a.Definition == Stats.Level).Value - 1)
                                         * character.CharacterClass.StatAttributes.First(a => a.Attribute == Stats.PointsPerLevelUp).BaseValue);
         character.Inventory = this.Context.CreateNew<ItemStorage>();
@@ -298,8 +298,8 @@ internal abstract class AccountInitializerBase : InitializerBase
     /// <param name="inventory">The inventory.</param>
     protected void AddPets(ItemStorage inventory)
     {
-        inventory.Items.Add(this.CreatePet(62, 0)); // Guardian Angel
-        inventory.Items.Add(this.CreatePet(67, 1)); // Imp
+        inventory.Items.Add(this.CreatePet(12, 0)); // Guardian Angel
+        inventory.Items.Add(this.CreatePet(62, 1)); // Imp
         inventory.Items.Add(this.CreatePet(70, 2)); // Uniria
     }
 

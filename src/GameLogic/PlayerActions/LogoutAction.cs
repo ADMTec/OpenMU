@@ -16,25 +16,34 @@ public class LogoutAction
     /// </summary>
     /// <param name="player">The player.</param>
     /// <param name="logoutType">Type of the logout.</param>
-    public void Logout(Player player, LogoutType logoutType)
+    public async ValueTask LogoutAsync(Player player, LogoutType logoutType)
     {
-        player.CurrentMap?.Remove(player);
-        player.Party?.KickMySelf(player);
-        player.SelectedCharacter = null;
-        player.MagicEffectList.ClearAllEffects();
-        player.PersistenceContext.SaveChanges();
+        player.CurrentMap?.RemoveAsync(player);
+        player.Party?.KickMySelfAsync(player);
+        await player.SetSelectedCharacterAsync(null).ConfigureAwait(false);
+        await player.MagicEffectList.ClearAllEffectsAsync().ConfigureAwait(false);
+
+        try
+        {
+            await player.PersistenceContext.SaveChangesAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            player.Logger.LogError($"Couldn't Save at Disconnect. Player: {player}", ex);
+        }
+
         if (logoutType == LogoutType.CloseGame)
         {
-            player.Disconnect();
+            await player.DisconnectAsync().ConfigureAwait(false);
         }
         else
         {
             if (logoutType == LogoutType.BackToCharacterSelection)
             {
-                player.PlayerState.TryAdvanceTo(PlayerState.Authenticated);
+                await player.PlayerState.TryAdvanceToAsync(PlayerState.Authenticated).ConfigureAwait(false);
             }
 
-            player.ViewPlugIns.GetPlugIn<ILogoutPlugIn>()?.Logout(logoutType);
+            await player.InvokeViewPlugInAsync<ILogoutPlugIn>(p => p.LogoutAsync(logoutType)).ConfigureAwait(false);
         }
     }
 }

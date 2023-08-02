@@ -15,7 +15,7 @@ using MUnique.OpenMU.PlugIns;
 /// </summary>
 [Guid("042EC5C6-27C8-4E00-A48B-C5458EDEA0BC")]
 [PlugIn("Add Stat chat command", "Handles the chat command '/add (ene|agi|vit|str|cmd) (amount)'. Adds the specified amount of stat points to the specified attribute of the character.")]
-[ChatCommandHelp(Command, typeof(Arguments), MinimumStatus)]
+[ChatCommandHelp(Command, "Adds the specified amount of stat points to the specified attribute of the character.", typeof(Arguments), MinimumStatus)]
 public class AddStatChatCommandPlugIn : IChatCommandPlugIn
 {
     private const string Command = "/add";
@@ -31,7 +31,7 @@ public class AddStatChatCommandPlugIn : IChatCommandPlugIn
     public CharacterStatus MinCharacterStatusRequirement => MinimumStatus;
 
     /// <inheritdoc />
-    public void HandleCommand(Player player, string command)
+    public async ValueTask HandleCommandAsync(Player player, string command)
     {
         try
         {
@@ -42,20 +42,21 @@ public class AddStatChatCommandPlugIn : IChatCommandPlugIn
 
             var arguments = command.ParseArguments<Arguments>();
             var attribute = this.GetAttribute(player, arguments.StatType);
+            var selectedCharacter = player.SelectedCharacter;
             for (var i = 0; i < arguments.Amount; i++)
             {
-                if (player.SelectedCharacter?.LevelUpPoints <= 0)
+                if (!selectedCharacter.CanIncreaseStats())
                 {
-                    player.ShowMessage("Cancelled adding points. No more points available.");
+                    await player.ShowMessageAsync("Cancelled adding points. No more points available.").ConfigureAwait(false);
                     break;
                 }
 
-                this._action.IncreaseStats(player, attribute);
+                await this._action.IncreaseStatsAsync(player, attribute).ConfigureAwait(false);
             }
         }
         catch (ArgumentException e)
         {
-            player.ShowMessage(e.Message);
+            await player.ShowMessageAsync(e.Message).ConfigureAwait(false);
         }
     }
 

@@ -23,7 +23,7 @@ internal class MyNpgsqlMigrationsSqlGenerator : NpgsqlMigrationsSqlGenerator
     {
         nameof(Item),
         nameof(ItemOptionLink),
-        nameof(ItemItemSetGroup),
+        nameof(ItemItemOfItemSet),
         nameof(ItemStorage),
     };
 
@@ -60,9 +60,13 @@ internal class MyNpgsqlMigrationsSqlGenerator : NpgsqlMigrationsSqlGenerator
     /// <param name="dependencies">The dependencies of the generator.</param>
     /// <param name="npgsqlOptions">The options.</param>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "EF1001:Internal EF Core API usage.", Justification = "We are extending internals of the NpgsqlMigrationsSqlGenerator.")]
-    public MyNpgsqlMigrationsSqlGenerator(MigrationsSqlGeneratorDependencies dependencies, INpgsqlOptions npgsqlOptions)
+    public MyNpgsqlMigrationsSqlGenerator(MigrationsSqlGeneratorDependencies dependencies, INpgsqlSingletonOptions npgsqlOptions)
         : base(dependencies, npgsqlOptions)
     {
+        if (!ConnectionConfigurator.IsInitialized)
+        {
+            ConnectionConfigurator.Initialize(new ConfigFileDatabaseConnectionStringProvider());
+        }
     }
 
     /// <summary>
@@ -87,9 +91,18 @@ internal class MyNpgsqlMigrationsSqlGenerator : NpgsqlMigrationsSqlGenerator
             var roleName = ConnectionConfigurator.GetRoleName(databaseRole);
 
             builder
-                .AppendLine($"DROP ROLE IF EXISTS {roleName};")
-                .EndCommand()
-                .AppendLine($"CREATE ROLE {roleName} WITH LOGIN PASSWORD '{ConnectionConfigurator.GetRolePassword(databaseRole)}';")
+                .AppendLine($"""
+                    DO
+                    $do$
+                    BEGIN
+                       IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{roleName}') THEN 
+                          RAISE NOTICE 'Role "{roleName}" already exists. Skipping.';
+                       ELSE
+                          CREATE ROLE {roleName} WITH LOGIN PASSWORD '{ConnectionConfigurator.GetRolePassword(databaseRole)}';
+                       END IF;
+                    END
+                    $do$;
+                """)
                 .EndCommand()
                 .AppendLine($"GRANT SELECT, UPDATE, INSERT, DELETE ON ALL TABLES IN SCHEMA {schemaName} TO GROUP {roleName};")
                 .EndCommand()

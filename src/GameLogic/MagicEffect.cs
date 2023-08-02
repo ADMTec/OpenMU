@@ -8,11 +8,12 @@ using System.Diagnostics;
 using System.Threading;
 using MUnique.OpenMU.AttributeSystem;
 using MUnique.OpenMU.Persistence;
+using MUnique.OpenMU.PlugIns;
 
 /// <summary>
 /// A magic effect, usually given by an applied skill or consumed item.
 /// </summary>
-public class MagicEffect : Disposable
+public class MagicEffect : AsyncDisposable
 {
     private readonly Timer _finishTimer;
 
@@ -23,7 +24,12 @@ public class MagicEffect : Disposable
     /// <param name="definition">The definition.</param>
     /// <param name="duration">The duration.</param>
     public MagicEffect(IElement powerUp, MagicEffectDefinition definition, TimeSpan duration)
-        : this(duration, definition, new ElementWithTarget(powerUp, definition.PowerUpDefinition?.TargetAttribute ?? throw new InvalidOperationException($"MagicEffectDefinition {definition.GetId()} has no target attribute.")))
+        : this(
+            duration,
+            definition,
+            definition.PowerUpDefinitions
+                .Select(def => new ElementWithTarget(powerUp, def.TargetAttribute ?? throw new InvalidOperationException($"MagicEffectDefinition {definition.GetId()} has no target attribute.")))
+                .ToArray())
     {
     }
 
@@ -38,13 +44,13 @@ public class MagicEffect : Disposable
         this.PowerUpElements = powerUps;
         this.Definition = definition;
         this.Duration = duration;
-        this._finishTimer = new Timer(o => this.OnEffectTimeOut(), null, (int)this.Duration.TotalMilliseconds, Timeout.Infinite);
+        this._finishTimer = new Timer(this.OnTimerTimeout, null, (int)this.Duration.TotalMilliseconds, Timeout.Infinite);
     }
 
     /// <summary>
     /// Occurs when the effect has been timed out.
     /// </summary>
-    public event EventHandler? EffectTimeOut;
+    public event AsyncEventHandler<MagicEffect>? EffectTimeOut;
 
     /// <summary>
     /// Gets the identifier of the effect.
@@ -96,22 +102,40 @@ public class MagicEffect : Disposable
     }
 
     /// <inheritdoc/>
-    protected override void Dispose(bool disposing)
+    protected override async ValueTask DisposeAsyncCore()
     {
-        base.Dispose(disposing);
-        this._finishTimer.Dispose();
-        this.OnEffectTimeOut();
+        await this._finishTimer.DisposeAsync().ConfigureAwait(false);
+        await this.OnEffectTimeOutAsync().ConfigureAwait(false);
         this.EffectTimeOut = null;
+
+        await base.DisposeAsyncCore().ConfigureAwait(false);
     }
 
-    private void OnEffectTimeOut()
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD100:Avoid async void methods", Justification = "Catching all Exceptions.")]
+    private async void OnTimerTimeout(object? state)
     {
         try
         {
-            this.EffectTimeOut?.Invoke(this, EventArgs.Empty);
+            await this.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Debug.Fail(ex.Message, ex.StackTrace);
+        }
+    }
+
+    private async ValueTask OnEffectTimeOutAsync()
+    {
+        try
+        {
+            if (this.EffectTimeOut is { } eventHandler)
+            {
+                await eventHandler(this).ConfigureAwait(false);
+            }
+
             if (!this.IsDisposed && !this.IsDisposing)
             {
-                this.Dispose();
+                await this.DisposeAsync().ConfigureAwait(false);
             }
         }
         catch (Exception ex)

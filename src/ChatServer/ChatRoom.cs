@@ -7,6 +7,7 @@ namespace MUnique.OpenMU.ChatServer;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using MUnique.OpenMU.Interfaces;
+using Nito.AsyncEx.Synchronous;
 
 /// <summary>
 /// This class represents a Chat Room.
@@ -39,7 +40,7 @@ internal sealed class ChatRoom : IDisposable
     public ChatRoom(ushort roomId, ILogger<ChatRoom> logger)
     {
         this._logger = logger;
-        this._logger.LogDebug($"Creating room {roomId}");
+        this._logger.LogDebug("Creating room {RoomId}", roomId);
         this._connectedClients = new List<IChatClient>(2);
         this._registeredClients = new List<ChatServerAuthenticationInfo>(2);
         this.RoomId = roomId;
@@ -121,16 +122,18 @@ internal sealed class ChatRoom : IDisposable
 
         this._isClosing = true;
         this._lockSlim = null;
-        this._logger.LogDebug($"Disposing room {this.RoomId}...");
+        this._logger.LogDebug("Disposing room {RoomId}...", this.RoomId);
         this._registeredClients.Clear();
         localLockSlim.EnterWriteLock();
         try
         {
-            foreach (var client in this._connectedClients)
+            Task.Run(async () =>
             {
-                client.LogOff();
-            }
-
+                foreach (var connectedClient in this._connectedClients)
+                {
+                    await connectedClient.LogOffAsync().ConfigureAwait(false);
+                }
+            }).WaitAndUnwrapException();
             this._connectedClients.Clear();
             this.RoomClosed?.Invoke(this, new ChatRoomClosedEventArgs(this));
             this.RoomClosed = null;
@@ -141,7 +144,7 @@ internal sealed class ChatRoom : IDisposable
         }
 
         localLockSlim.Dispose();
-        this._logger.LogDebug($"Room {this.RoomId} disposed.");
+        this._logger.LogDebug("Room {RoomId} disposed.", this.RoomId);
     }
 
     /// <summary>
@@ -149,7 +152,7 @@ internal sealed class ChatRoom : IDisposable
     /// </summary>
     /// <param name="chatClient">The chat client.</param>
     /// <returns>True, if the <paramref name="chatClient"/> provides the correct registered id with it's token.</returns>
-    internal bool TryJoin(IChatClient chatClient)
+    internal async ValueTask<bool> TryJoinAsync(IChatClient chatClient)
     {
         if (chatClient is null)
         {
@@ -161,7 +164,9 @@ internal sealed class ChatRoom : IDisposable
             throw new ObjectDisposedException("Chat room is already disposed.");
         }
 
-        this._logger.LogDebug($"Client {chatClient.Index} is trying to join the room {this.RoomId} with token '{chatClient.AuthenticationToken}'");
+        this._logger.LogDebug(
+            "Client {ChatClientIndex} is trying to join the room {RoomId} with token '{AuthenticationToken}'",
+            chatClient.Index, this.RoomId, chatClient.AuthenticationToken);
 
         this._lockSlim?.EnterWriteLock();
         try
@@ -171,22 +176,26 @@ internal sealed class ChatRoom : IDisposable
             {
                 if (authenticationInformation.AuthenticationRequiredUntil < DateTime.Now)
                 {
-                    this._logger.LogInformation($"Client {chatClient.Index} has tried to join the room {this.RoomId} with token '{chatClient.AuthenticationToken}', but was too late. It was valid until {authenticationInformation.AuthenticationRequiredUntil}.");
+                    this._logger.LogInformation(
+                        "Client {ChatClientIndex} has tried to join the room {RoomId} with token '{AuthenticationToken}', but was too late. It was valid until {AuthenticationRequiredUntil}.",
+                        chatClient.Index, this.RoomId, chatClient.AuthenticationToken, authenticationInformation.AuthenticationRequiredUntil);
                 }
                 else
                 {
                     chatClient.Nickname = authenticationInformation.ClientName;
                     chatClient.Index = authenticationInformation.Index;
                     this._registeredClients.Remove(authenticationInformation);
-                    this.SendChatRoomClientUpdate(chatClient, ChatRoomClientUpdateType.Joined);
+                    await this.SendChatRoomClientUpdateAsync(chatClient, ChatRoomClientUpdateType.Joined).ConfigureAwait(false);
                     this._connectedClients.Add(chatClient);
-                    chatClient.SendChatRoomClientList(this._connectedClients);
+                    await chatClient.SendChatRoomClientListAsync(this._connectedClients).ConfigureAwait(false);
                     return true;
                 }
             }
             else
             {
-                this._logger.LogInformation($"Client {chatClient.Index} has tried to join the room {this.RoomId} with token '{chatClient.AuthenticationToken}', but was not registered.");
+                this._logger.LogInformation(
+                    "Client {ChatClientIndex} has tried to join the room {RoomId} with token '{AuthenticationToken}', but was not registered.",
+                    chatClient.Index, this.RoomId, chatClient.AuthenticationToken);
             }
         }
         finally
@@ -202,7 +211,7 @@ internal sealed class ChatRoom : IDisposable
     /// If the chatroom is empty then, it will be removed from the manager.
     /// </summary>
     /// <param name="chatClient">The chat client.</param>
-    internal void Leave(IChatClient chatClient)
+    internal async ValueTask LeaveAsync(IChatClient chatClient)
     {
         if (this._isClosing)
         {
@@ -227,7 +236,7 @@ internal sealed class ChatRoom : IDisposable
             roomIsEmpty = this._connectedClients.Count < 1;
             if (!roomIsEmpty)
             {
-                this.SendChatRoomClientUpdate(chatClient, ChatRoomClientUpdateType.Left);
+                await this.SendChatRoomClientUpdateAsync(chatClient, ChatRoomClientUpdateType.Left).ConfigureAwait(false);
             }
         }
         finally
@@ -246,7 +255,7 @@ internal sealed class ChatRoom : IDisposable
     /// </summary>
     /// <param name="senderId">The sender identifier.</param>
     /// <param name="message">The message.</param>
-    internal void SendMessage(byte senderId, string message)
+    internal async ValueTask SendMessageAsync(byte senderId, string message)
     {
         if (this._isClosing)
         {
@@ -256,7 +265,10 @@ internal sealed class ChatRoom : IDisposable
         this._lockSlim?.EnterReadLock();
         try
         {
-            this._connectedClients.ForEach(c => c.SendMessage(senderId, message));
+            foreach (var connectedClient in this._connectedClients)
+            {
+                await connectedClient.SendMessageAsync(senderId, message).ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -264,11 +276,11 @@ internal sealed class ChatRoom : IDisposable
         }
     }
 
-    private void SendChatRoomClientUpdate(IChatClient updatedClient, ChatRoomClientUpdateType updateType)
+    private async ValueTask SendChatRoomClientUpdateAsync(IChatClient updatedClient, ChatRoomClientUpdateType updateType)
     {
         foreach (var client in this._connectedClients)
         {
-            client.SendChatRoomClientUpdate(updatedClient.Index, updatedClient.Nickname ?? string.Empty, updateType);
+            await client.SendChatRoomClientUpdateAsync(updatedClient.Index, updatedClient.Nickname ?? string.Empty, updateType).ConfigureAwait(false);
         }
     }
 }

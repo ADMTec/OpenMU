@@ -6,6 +6,7 @@ namespace MUnique.OpenMU.GameServer.MessageHandler;
 
 using MUnique.OpenMU.GameLogic;
 using MUnique.OpenMU.GameLogic.PlayerActions;
+using MUnique.OpenMU.GameLogic.PlayerActions.Chat;
 using MUnique.OpenMU.Network.Packets.ClientToServer;
 
 /// <summary>
@@ -27,9 +28,9 @@ internal abstract class ChatMessageBaseHandlerPlugIn : IPacketHandlerPlugIn
     protected abstract bool IsWhisper { get; }
 
     /// <inheritdoc/>
-    public void HandlePacket(Player player, Span<byte> packet)
+    public async ValueTask HandlePacketAsync(Player player, Memory<byte> packet)
     {
         WhisperMessage message = packet;
-        this._messageAction.ChatMessage(player, message.ReceiverName, message.Message, this.IsWhisper);
+        await this._messageAction.ChatMessageAsync(player, message.ReceiverName, message.Message, this.IsWhisper).ConfigureAwait(false);
     }
 }

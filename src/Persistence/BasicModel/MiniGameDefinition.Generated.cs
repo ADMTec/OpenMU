@@ -28,12 +28,10 @@ public partial class MiniGameDefinition : MUnique.OpenMU.DataModel.Configuration
     /// <summary>
     /// Gets the raw collection of <see cref="Rewards" />.
     /// </summary>
-    [Newtonsoft.Json.JsonProperty("rewards")]
     [System.Text.Json.Serialization.JsonPropertyName("rewards")]
     public ICollection<MiniGameReward> RawRewards { get; } = new List<MiniGameReward>();
     
     /// <inheritdoc/>
-    [Newtonsoft.Json.JsonIgnore]
     [System.Text.Json.Serialization.JsonIgnore]
     public override ICollection<MUnique.OpenMU.DataModel.Configuration.MiniGameReward> Rewards
     {
@@ -51,12 +49,10 @@ public partial class MiniGameDefinition : MUnique.OpenMU.DataModel.Configuration
     /// <summary>
     /// Gets the raw collection of <see cref="SpawnWaves" />.
     /// </summary>
-    [Newtonsoft.Json.JsonProperty("spawnWaves")]
     [System.Text.Json.Serialization.JsonPropertyName("spawnWaves")]
     public ICollection<MiniGameSpawnWave> RawSpawnWaves { get; } = new List<MiniGameSpawnWave>();
     
     /// <inheritdoc/>
-    [Newtonsoft.Json.JsonIgnore]
     [System.Text.Json.Serialization.JsonIgnore]
     public override ICollection<MUnique.OpenMU.DataModel.Configuration.MiniGameSpawnWave> SpawnWaves
     {
@@ -72,9 +68,29 @@ public partial class MiniGameDefinition : MUnique.OpenMU.DataModel.Configuration
     }
 
     /// <summary>
+    /// Gets the raw collection of <see cref="ChangeEvents" />.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("changeEvents")]
+    public ICollection<MiniGameChangeEvent> RawChangeEvents { get; } = new List<MiniGameChangeEvent>();
+    
+    /// <inheritdoc/>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public override ICollection<MUnique.OpenMU.DataModel.Configuration.MiniGameChangeEvent> ChangeEvents
+    {
+        get => base.ChangeEvents ??= new CollectionAdapter<MUnique.OpenMU.DataModel.Configuration.MiniGameChangeEvent, MiniGameChangeEvent>(this.RawChangeEvents);
+        protected set
+        {
+            this.ChangeEvents.Clear();
+            foreach (var item in value)
+            {
+                this.ChangeEvents.Add(item);
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets the raw object of <see cref="Entrance" />.
     /// </summary>
-    [Newtonsoft.Json.JsonProperty("entrance")]
     [System.Text.Json.Serialization.JsonPropertyName("entrance")]
     public ExitGate RawEntrance
     {
@@ -83,7 +99,6 @@ public partial class MiniGameDefinition : MUnique.OpenMU.DataModel.Configuration
     }
 
     /// <inheritdoc/>
-    [Newtonsoft.Json.JsonIgnore]
     [System.Text.Json.Serialization.JsonIgnore]
     public override MUnique.OpenMU.DataModel.Configuration.ExitGate Entrance
     {
@@ -94,7 +109,6 @@ public partial class MiniGameDefinition : MUnique.OpenMU.DataModel.Configuration
     /// <summary>
     /// Gets the raw object of <see cref="TicketItem" />.
     /// </summary>
-    [Newtonsoft.Json.JsonProperty("ticketItem")]
     [System.Text.Json.Serialization.JsonPropertyName("ticketItem")]
     public ItemDefinition RawTicketItem
     {
@@ -103,7 +117,6 @@ public partial class MiniGameDefinition : MUnique.OpenMU.DataModel.Configuration
     }
 
     /// <inheritdoc/>
-    [Newtonsoft.Json.JsonIgnore]
     [System.Text.Json.Serialization.JsonIgnore]
     public override MUnique.OpenMU.DataModel.Configuration.Items.ItemDefinition TicketItem
     {

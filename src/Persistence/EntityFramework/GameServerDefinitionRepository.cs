@@ -18,30 +18,30 @@ internal class GameServerDefinitionRepository : CachingGenericRepository<GameSer
     /// <summary>
     /// Initializes a new instance of the <see cref="GameServerDefinitionRepository" /> class.
     /// </summary>
-    /// <param name="repositoryManager">The repository manager.</param>
-    /// <param name="logger">The logger.</param>
-    public GameServerDefinitionRepository(RepositoryManager repositoryManager, ILogger<GameServerDefinitionRepository> logger)
-        : base(repositoryManager, logger)
+    /// <param name="repositoryProvider">The repository provider.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    public GameServerDefinitionRepository(IContextAwareRepositoryProvider repositoryProvider, ILoggerFactory loggerFactory)
+        : base(repositoryProvider, loggerFactory)
     {
     }
 
     /// <inheritdoc />
-    protected override void LoadDependentData(object obj, DbContext currentContext)
+    protected override async ValueTask LoadDependentDataAsync(object obj, DbContext currentContext)
     {
         if (obj is GameServerDefinition definition)
         {
             var entityEntry = currentContext.Entry(obj);
             foreach (var collection in entityEntry.Collections.Where(c => !c.IsLoaded && c.Metadata is INavigation))
             {
-                this.LoadCollection(entityEntry, (INavigation)collection.Metadata, currentContext);
+                await this.LoadCollectionAsync(entityEntry, (INavigation)collection.Metadata, currentContext).ConfigureAwait(false);
                 collection.IsLoaded = true;
             }
 
             if (definition.GameConfigurationId.HasValue)
             {
                 definition.RawGameConfiguration =
-                    this.RepositoryManager.GetRepository<GameConfiguration>()
-                        .GetById(definition.GameConfigurationId.Value);
+                    await this.RepositoryProvider.GetRepository<GameConfiguration>()!
+                        .GetByIdAsync(definition.GameConfigurationId.Value).ConfigureAwait(false);
 
                 if (currentContext is EntityDataContext context)
                 {
@@ -51,8 +51,8 @@ internal class GameServerDefinitionRepository : CachingGenericRepository<GameSer
 
             if (definition.ServerConfigurationId.HasValue)
             {
-                definition.ServerConfiguration = this.RepositoryManager.GetRepository<GameServerConfiguration>()
-                    .GetById(definition.ServerConfigurationId.Value);
+                definition.ServerConfiguration = await this.RepositoryProvider.GetRepository<GameServerConfiguration>()!
+                    .GetByIdAsync(definition.ServerConfigurationId.Value).ConfigureAwait(false);
             }
         }
     }

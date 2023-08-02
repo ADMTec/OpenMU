@@ -4,6 +4,8 @@
 
 namespace MUnique.OpenMU.Persistence.InMemory;
 
+using System.Collections;
+
 /// <summary>
 /// A repository which lives on memory only.
 /// </summary>
@@ -11,6 +13,7 @@ namespace MUnique.OpenMU.Persistence.InMemory;
 public class MemoryRepository<TValue> : IRepository<TValue>, IMemoryRepository
     where TValue : class
 {
+    private readonly List<Guid> _createdObjects = new();
     private readonly IDictionary<Guid, TValue> _values = new Dictionary<Guid, TValue>();
 
     /// <summary>
@@ -21,6 +24,7 @@ public class MemoryRepository<TValue> : IRepository<TValue>, IMemoryRepository
     public void Add(Guid key, TValue obj)
     {
         this._values.Add(key, obj);
+        this._createdObjects.Add(key);
     }
 
     /// <inheritdoc />
@@ -28,7 +32,7 @@ public class MemoryRepository<TValue> : IRepository<TValue>, IMemoryRepository
     {
         if (obj is TValue value)
         {
-            this._values[key] = value;
+            this.Add(key, value);
         }
         else
         {
@@ -37,40 +41,66 @@ public class MemoryRepository<TValue> : IRepository<TValue>, IMemoryRepository
     }
 
     /// <inheritdoc />
-    public void Remove(Guid key)
+    public async ValueTask RemoveAsync(Guid key)
     {
-        this.Delete(key);
+        await this.DeleteAsync(key).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public TValue? GetById(Guid id)
+    public ValueTask<TValue?> GetByIdAsync(Guid id)
     {
         this._values.TryGetValue(id, out var obj);
-        return obj;
+        return ValueTask.FromResult(obj);
     }
 
     /// <inheritdoc/>
-    object? IRepository.GetById(Guid id)
+    public void OnSaveChanges()
     {
-        return this.GetById(id);
+        foreach (var oldObjId in this._createdObjects)
+        {
+            if (this._values.TryGetValue(oldObjId, out var obj)
+                && obj.GetId() is var currentId
+                && currentId != oldObjId)
+            {
+                this._values.Remove(oldObjId);
+                if (!this._values.TryAdd(currentId, obj))
+                {
+                    throw new InvalidOperationException($"Duplicate ID {currentId}. Existing: {this._values[currentId]}, Wanted to add: {obj}");
+                }
+            }
+        }
+
+        this._createdObjects.Clear();
     }
 
     /// <inheritdoc/>
-    public bool Delete(object obj)
+    async ValueTask<object?> IRepository.GetByIdAsync(Guid id)
+    {
+        return await this.GetByIdAsync(id).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> DeleteAsync(object obj)
     {
         var key = this._values.Where(kvp => kvp.Value.Equals(obj)).Select(kvp => kvp.Key).FirstOrDefault();
-        return this._values.Remove(key);
+        return ValueTask.FromResult(this._values.Remove(key));
     }
 
     /// <inheritdoc/>
-    public bool Delete(Guid id)
+    public ValueTask<bool> DeleteAsync(Guid id)
     {
-        return this._values.Remove(id);
+        return ValueTask.FromResult(this._values.Remove(id));
     }
 
     /// <inheritdoc/>
-    public IEnumerable<TValue> GetAll()
+    public ValueTask<IEnumerable<TValue>> GetAllAsync()
     {
-        return this._values.Values;
+        return ValueTask.FromResult(this._values.Values.Cast<TValue>());
+    }
+
+    /// <inheritdoc/>
+    ValueTask<IEnumerable> IRepository.GetAllAsync()
+    {
+        return ValueTask.FromResult<IEnumerable>(this._values.Values);
     }
 }

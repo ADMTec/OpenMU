@@ -19,24 +19,26 @@ public class WarpAction
     /// </summary>
     /// <param name="player">The player.</param>
     /// <param name="warpInfo">The warp information.</param>
-    public void WarpTo(Player player, WarpInfo warpInfo)
+    public async ValueTask WarpToAsync(Player player, WarpInfo warpInfo)
     {
         if (this.CheckRequirements(player, warpInfo, out var errorMessage))
         {
-            player.WarpTo(warpInfo.Gate!);
+            await player.WarpToAsync(warpInfo.Gate!).ConfigureAwait(false);
         }
         else
         {
-            player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage(errorMessage, MessageType.BlueNormal);
+            await player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync(errorMessage, MessageType.BlueNormal)).ConfigureAwait(false);
         }
     }
 
     private bool CheckRequirements(Player player, WarpInfo warpInfo, [MaybeNullWhen(true)] out string errorMessage)
     {
         errorMessage = null;
-        if (!this.CheckLevelRequirement(player, warpInfo))
+
+        var requirement = player.SelectedCharacter?.GetEffectiveMoveLevelRequirement(warpInfo.LevelRequirement);
+        if (requirement > player.Attributes?[Stats.Level])
         {
-            errorMessage = $"You need to be level {warpInfo.LevelRequirement} in order to warp";
+            errorMessage = $"You need to be level {requirement} in order to warp";
             return false;
         }
 
@@ -65,16 +67,6 @@ public class WarpAction
     private bool CheckMoneyRequirement(Player player, WarpInfo warpInfo)
     {
         if (player.TryRemoveMoney(warpInfo.Costs))
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    private bool CheckLevelRequirement(Player player, WarpInfo warpInfo)
-    {
-        if (warpInfo.LevelRequirement <= player.Attributes?[Stats.Level])
         {
             return true;
         }

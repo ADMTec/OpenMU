@@ -13,8 +13,8 @@ using MUnique.OpenMU.PlugIns;
 /// A chat command plugin which handles pk clear commands.
 /// </summary>
 [Guid("EB97A8F6-F6BD-460A-BCBE-253BF679361A")]
-[PlugIn("PK clear chat command", "Handles the chat command '/pkclear <char>'. Clears a character murders.")]
-[ChatCommandHelp(Command, typeof(PkClearChatCommandArgs), CharacterStatus.GameMaster)]
+[PlugIn("PK clear chat command", "Handles the chat command '/pkclear <char>'. Clears the player kill count.")]
+[ChatCommandHelp(Command, "Clears the player kill count.", typeof(PkClearChatCommandArgs), CharacterStatus.GameMaster)]
 public class PkClearChatCommandPlugIn : ChatCommandPlugInBase<PkClearChatCommandArgs>
 {
     private const string Command = "/pkclear";
@@ -26,20 +26,20 @@ public class PkClearChatCommandPlugIn : ChatCommandPlugInBase<PkClearChatCommand
     public override CharacterStatus MinCharacterStatusRequirement => CharacterStatus.GameMaster;
 
     /// <inheritdoc />
-    protected override void DoHandleCommand(Player gameMaster, PkClearChatCommandArgs arguments)
+    protected override async ValueTask DoHandleCommandAsync(Player gameMaster, PkClearChatCommandArgs arguments)
     {
         var targetPlayer = this.GetPlayerByCharacterName(gameMaster, arguments.CharacterName ?? string.Empty);
 
         targetPlayer.SelectedCharacter!.State = HeroState.Normal;
         targetPlayer.SelectedCharacter!.StateRemainingSeconds = 0;
         targetPlayer.SelectedCharacter!.PlayerKillCount = 0;
-        targetPlayer.ForEachWorldObserver(o => o.ViewPlugIns.GetPlugIn<IUpdateCharacterHeroStatePlugIn>()?.UpdateCharacterHeroState(targetPlayer), true);
+        await targetPlayer.ForEachWorldObserverAsync<IUpdateCharacterHeroStatePlugIn>(p => p.UpdateCharacterHeroStateAsync(targetPlayer), true).ConfigureAwait(false);
 
         if (!targetPlayer.Name.Equals(gameMaster.Name))
         {
-            this.ShowMessageTo(targetPlayer, $"Your murders have been cleaned by the game master.");
+            await this.ShowMessageToAsync(targetPlayer, $"Your player kills have been cleaned by the game master.").ConfigureAwait(false);
         }
 
-        this.ShowMessageTo(gameMaster, $"[{this.Key}] {targetPlayer.Name} murders have been cleaned.");
+        await this.ShowMessageToAsync(gameMaster, $"[{this.Key}] {targetPlayer.Name} kills have been cleaned.").ConfigureAwait(false);
     }
 }

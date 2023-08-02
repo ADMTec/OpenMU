@@ -7,6 +7,7 @@ namespace MUnique.OpenMU.Tests;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using MUnique.OpenMU.DataModel.Entities;
+using MUnique.OpenMU.GuildServer;
 using MUnique.OpenMU.Interfaces;
 using MUnique.OpenMU.Persistence;
 using MUnique.OpenMU.Persistence.InMemory;
@@ -16,6 +17,8 @@ using MUnique.OpenMU.Persistence.InMemory;
 /// </summary>
 public class GuildTestBase
 {
+    protected const string GuildName = "Foobar";
+
     /// <summary>
     /// Gets or sets the first game server.
     /// </summary>
@@ -27,7 +30,7 @@ public class GuildTestBase
     protected Mock<IGameServer> GameServer1 { get; set; } = null!;
 
     /// <summary>
-    /// Gets or sets the repository manager.
+    /// Gets or sets the repository provider.
     /// </summary>
     protected IPersistenceContextProvider PersistenceContextProvider { get; set; } = null!;
 
@@ -50,17 +53,31 @@ public class GuildTestBase
     /// Setups the test objects.
     /// </summary>
     [SetUp]
-    public virtual void Setup()
+    public virtual async ValueTask SetupAsync()
     {
         this.GameServer0 = new Mock<IGameServer>();
         this.GameServer1 = new Mock<IGameServer>();
         this.PersistenceContextProvider = new InMemoryPersistenceContextProvider();
 
         this.GuildMaster = this.GetGuildMaster();
+
+        this.SetupGameServer(this.GameServer0);
+        this.SetupGameServer(this.GameServer1);
+
         this.GameServers = new Dictionary<int, IGameServer> { { 0, this.GameServer0.Object }, { 1, this.GameServer1.Object } };
-        this.GuildServer = new OpenMU.GuildServer.GuildServer(this.GameServers, this.PersistenceContextProvider, new NullLogger<GuildServer.GuildServer>());
-        var guildStatus = this.GuildServer.CreateGuild("Foobar", this.GuildMaster.Name, this.GuildMaster.Id, new byte[16], 0);
-        this.GuildServer.GuildMemberLeftGame(guildStatus!.GuildId, this.GuildMaster.Id, 0);
+        this.GuildServer = new OpenMU.GuildServer.GuildServer(new GuildChangeToGameServerPublisher(this.GameServers), this.PersistenceContextProvider, new NullLogger<GuildServer>());
+        await this.GuildServer.CreateGuildAsync(GuildName, this.GuildMaster.Name, this.GuildMaster.Id, new byte[16], 0).ConfigureAwait(false);
+        var guildId = await this.GuildServer.GetGuildIdByNameAsync(GuildName).ConfigureAwait(false);
+        await this.GuildServer.GuildMemberLeftGameAsync(guildId, this.GuildMaster.Id, 0).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sets up the game server.
+    /// </summary>
+    /// <param name="gameServer">The game server.</param>
+    protected virtual void SetupGameServer(Mock<IGameServer> gameServer)
+    {
+        // can be overwritten.
     }
 
     private Character GetGuildMaster()

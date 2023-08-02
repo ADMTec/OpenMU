@@ -11,8 +11,8 @@ using MUnique.OpenMU.PlugIns;
 /// The help command which shows the usage of a command.
 /// </summary>
 [Guid("EFE9399A-9A14-4B94-BBC1-20718584C4C2")]
-[PlugIn("Help command", "List all the commands.")]
-[ChatCommandHelp(Command, typeof(Arguments))]
+[PlugIn("Help command", "Handles the /help <command> chat command. Shows information about the requested command.")]
+[ChatCommandHelp(Command, "Shows information about the requested command.", typeof(Arguments))]
 public class HelpCommand : IChatCommandPlugIn
 {
     private const string Command = "/help";
@@ -24,7 +24,7 @@ public class HelpCommand : IChatCommandPlugIn
     public CharacterStatus MinCharacterStatusRequirement => CharacterStatus.Normal;
 
     /// <inheritdoc />
-    public void HandleCommand(Player player, string command)
+    public async ValueTask HandleCommandAsync(Player player, string command)
     {
         try
         {
@@ -34,15 +34,15 @@ public class HelpCommand : IChatCommandPlugIn
                 .FirstOrDefault(x => x.Command.Equals("/" + commandName, StringComparison.InvariantCultureIgnoreCase));
             if (commandPluginAttribute is null)
             {
-                player.ShowMessage($"The command '{commandName}' does not exists.");
+                await player.ShowMessageAsync($"The command '{commandName}' does not exists.").ConfigureAwait(false);
                 return;
             }
 
-            player.ShowMessage(commandPluginAttribute.Usage);
+            await player.ShowMessageAsync(commandPluginAttribute.Usage).ConfigureAwait(false);
         }
         catch (ArgumentException e)
         {
-            player.ShowMessage(e.Message);
+            await player.ShowMessageAsync(e.Message).ConfigureAwait(false);
         }
     }
 

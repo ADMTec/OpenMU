@@ -17,31 +17,33 @@ using MUnique.OpenMU.Persistence.EntityFramework.Model;
 internal class CachingGameConfigurationRepository : CachingGenericRepository<GameConfiguration>
 {
     private readonly JsonObjectLoader _objectLoader;
+    private const long MinLevel = 0;
+    private const long MaxLevel = 256;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CachingGameConfigurationRepository" /> class.
     /// </summary>
-    /// <param name="repositoryManager">The repository manager.</param>
-    /// <param name="logger">The logger for this class.</param>
-    public CachingGameConfigurationRepository(RepositoryManager repositoryManager, ILogger<CachingGameConfigurationRepository> logger)
-        : base(repositoryManager, logger)
+    /// <param name="repositoryProvider">The repository provider.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    public CachingGameConfigurationRepository(IContextAwareRepositoryProvider repositoryProvider, ILoggerFactory loggerFactory)
+        : base(repositoryProvider, loggerFactory)
     {
         this._objectLoader = new GameConfigurationJsonObjectLoader();
     }
 
     /// <inheritdoc />
-    public override GameConfiguration? GetById(Guid id)
+    public override async ValueTask<GameConfiguration?> GetByIdAsync(Guid id)
     {
-        if (this.RepositoryManager.ContextStack.GetCurrentContext() is not EntityFrameworkContextBase currentContext)
+        if (this.RepositoryProvider.ContextStack.GetCurrentContext() is not EntityFrameworkContextBase currentContext)
         {
             throw new InvalidOperationException("There is no current context set.");
         }
 
         var database = currentContext.Context.Database;
-        database.OpenConnection();
+        await database.OpenConnectionAsync().ConfigureAwait(false);
         try
         {
-            if (this._objectLoader.LoadObject<GameConfiguration>(id, currentContext.Context) is { } config)
+            if (await this._objectLoader.LoadObjectAsync<GameConfiguration>(id, currentContext.Context).ConfigureAwait(false) is { } config)
             {
                 this.SetExperienceTables(config);
                 return config;
@@ -51,29 +53,29 @@ internal class CachingGameConfigurationRepository : CachingGenericRepository<Gam
         }
         finally
         {
-            database.CloseConnection();
+            await database.CloseConnectionAsync().ConfigureAwait(false);
         }
     }
 
     /// <inheritdoc />
-    public override IEnumerable<GameConfiguration> GetAll()
+    public override async ValueTask<IEnumerable<GameConfiguration>> GetAllAsync()
     {
-        if (this.RepositoryManager.ContextStack.GetCurrentContext() is not EntityFrameworkContextBase currentContext)
+        if (this.RepositoryProvider.ContextStack.GetCurrentContext() is not EntityFrameworkContextBase currentContext)
         {
             throw new InvalidOperationException("There is no current context set.");
         }
 
         var database = currentContext.Context.Database;
-        database.OpenConnection();
+        await database.OpenConnectionAsync().ConfigureAwait(false);
         try
         {
-            var configs = this._objectLoader.LoadAllObjects<GameConfiguration>(currentContext.Context).ToList();
+            var configs = (await this._objectLoader.LoadAllObjectsAsync<GameConfiguration>(currentContext.Context).ConfigureAwait(false)).ToList();
             configs.ForEach(this.SetExperienceTables);
             return configs;
         }
         finally
         {
-            database.CloseConnection();
+            await database.CloseConnectionAsync().ConfigureAwait(false);
         }
     }
 
@@ -87,24 +89,29 @@ internal class CachingGameConfigurationRepository : CachingGenericRepository<Gam
             Enumerable.Range(0, 201).Select(level => this.CalcNeededMasterExp(level)).ToArray();
     }
 
+    /// <summary>
+    /// The equation
+    ///  f(x) = 505 * x^3 + 35278500 * x + 228045 * x^2
+    /// </summary>
+    /// <param name="lvl"></param>
+    /// <returns> long. </returns>
     private long CalcNeededMasterExp(long lvl)
     {
-        // f(x) = 505 * x^3 + 35278500 * x + 228045 * x^2
         return (505 * lvl * lvl * lvl) + (35278500 * lvl) + (228045 * lvl * lvl);
     }
 
+    /// <summary>
+    /// The equation for calculate needed experience.
+    /// </summary>
+    /// <param name="level"></param>
+    /// <returns> long. </returns>
     private long CalculateNeededExperience(long level)
     {
-        if (level == 0)
+        return level switch
         {
-            return 0;
-        }
-
-        if (level < 256)
-        {
-            return 10 * (level + 8) * (level - 1) * (level - 1);
-        }
-
-        return (10 * (level + 8) * (level - 1) * (level - 1)) + (1000 * (level - 247) * (level - 256) * (level - 256));
+            MinLevel => 0,
+            < MaxLevel => 10 * (level + 8) * (level - 1) * (level - 1),
+            _ => (10 * (level + 8) * (level - 1) * (level - 1)) + (1000 * (level - 247) * (level - 256) * (level - 256)),
+        };
     }
 }

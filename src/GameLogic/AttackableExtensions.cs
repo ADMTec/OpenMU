@@ -5,9 +5,12 @@
 namespace MUnique.OpenMU.GameLogic;
 
 using MUnique.OpenMU.AttributeSystem;
+using MUnique.OpenMU.DataModel.Attributes;
 using MUnique.OpenMU.DataModel.Configuration.Items;
 using MUnique.OpenMU.GameLogic.Attributes;
 using MUnique.OpenMU.GameLogic.NPC;
+using MUnique.OpenMU.GameLogic.Views.Character;
+using MUnique.OpenMU.GameLogic.Views.World;
 using MUnique.OpenMU.Pathfinding;
 
 /// <summary>
@@ -29,7 +32,7 @@ public static class AttackableExtensions
     /// <param name="defender">The object which is defending.</param>
     /// <param name="skill">The skill which is used.</param>
     /// <returns>The hit information.</returns>
-    public static HitInfo CalculateDamage(this IAttacker attacker, IAttackable defender, SkillEntry? skill)
+    public static async ValueTask<HitInfo> CalculateDamageAsync(this IAttacker attacker, IAttackable defender, SkillEntry? skill, bool isCombo)
     {
         if (!attacker.IsAttackSuccessfulTo(defender))
         {
@@ -65,11 +68,6 @@ public static class AttackableExtensions
         {
             var defenseAttribute = defender.GetDefenseAttribute(attacker);
             var defense = (int)defender.Attributes[defenseAttribute];
-            if (defender.Attributes[Stats.IsShieldEquipped] > 0)
-            {
-                defense += (int)(defense * defender.Attributes[Stats.DefenseIncreaseWithEquippedShield]);
-            }
-
             dmg -= defense;
         }
         else
@@ -96,6 +94,12 @@ public static class AttackableExtensions
         if (attacker is Player && defender is Player)
         {
             dmg += (int)attacker.Attributes[Stats.FinalDamageIncreasePvp];
+        }
+
+        if (isCombo)
+        {
+            dmg += (int)attacker.Attributes[Stats.ComboBonus];
+            attributes |= DamageAttributes.Combo;
         }
 
         bool isDoubleDamage = Rand.NextRandomBool(attacker.Attributes[Stats.DoubleDamageChance]);
@@ -139,18 +143,14 @@ public static class AttackableExtensions
     /// <param name="target">The target.</param>
     /// <param name="player">The player.</param>
     /// <param name="skillEntry">The skill entry.</param>
-    public static void ApplyMagicEffect(this IAttackable target, Player player, SkillEntry skillEntry)
+    public static async ValueTask ApplyMagicEffectAsync(this IAttackable target, Player player, SkillEntry skillEntry)
     {
-        if (skillEntry.BuffPowerUp is null)
+        if (skillEntry.PowerUps is null)
         {
             player.CreateMagicEffectPowerUp(skillEntry);
         }
 
-        var magicEffect = skillEntry.Skill!.MagicEffectDef?.PowerUpDefinition!.TargetAttribute == Stats.IsPoisoned
-            ? new PoisonMagicEffect(skillEntry.BuffPowerUp!, skillEntry.Skill!.MagicEffectDef!, TimeSpan.FromSeconds(skillEntry.PowerUpDuration!.Value), player, target)
-            : new MagicEffect(skillEntry.BuffPowerUp!, skillEntry.Skill!.MagicEffectDef!, TimeSpan.FromSeconds(skillEntry.PowerUpDuration!.Value));
-
-        target.MagicEffectList.AddEffect(magicEffect);
+        await target.ApplyMagicEffectAsync(player, skillEntry.Skill!.MagicEffectDef!, skillEntry.PowerUpDuration!, skillEntry.PowerUps!).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -159,7 +159,7 @@ public static class AttackableExtensions
     /// <param name="target">The target.</param>
     /// <param name="player">The player.</param>
     /// <param name="skillEntry">The skill entry.</param>
-    public static void ApplyRegeneration(this IAttackable target, Player player, SkillEntry skillEntry)
+    public static async ValueTask ApplyRegenerationAsync(this IAttackable target, Player player, SkillEntry skillEntry)
     {
         if (player.Attributes is null)
         {
@@ -168,21 +168,40 @@ public static class AttackableExtensions
 
         skillEntry.ThrowNotInitializedProperty(skillEntry.Skill is null, nameof(skillEntry.Skill));
 
+        var isHealthUpdated = false;
+        var isManaUpdated = false;
         var skill = skillEntry.Skill;
-        var regeneration = Stats.IntervalRegenerationAttributes.FirstOrDefault(r => r.CurrentAttribute == skill.MagicEffectDef?.PowerUpDefinition?.TargetAttribute);
-        if (regeneration != null)
+        foreach (var powerUpDefinition in skill.MagicEffectDef?.PowerUpDefinitions ?? Enumerable.Empty<PowerUpDefinition>())
         {
-            var powerUpDefinition = skill.MagicEffectDef!.PowerUpDefinition!;
-            var regenerationValue = player.Attributes.CreateElement(powerUpDefinition.Boost ?? throw Error.NotInitializedProperty(powerUpDefinition, nameof(powerUpDefinition.Boost)));
-            var value = skillEntry.Level == 0 ? regenerationValue.Value : regenerationValue.Value + skillEntry.CalculateValue();
-            target.Attributes[regeneration.CurrentAttribute] = Math.Min(
-                target.Attributes[regeneration.CurrentAttribute] + value,
-                target.Attributes[regeneration.MaximumAttribute]);
+            var regeneration = Stats.IntervalRegenerationAttributes.FirstOrDefault(r => r.CurrentAttribute == powerUpDefinition.TargetAttribute);
+            if (regeneration != null)
+            {
+                var regenerationValue = player.Attributes.CreateElement(powerUpDefinition.Boost ?? throw Error.NotInitializedProperty(powerUpDefinition, nameof(powerUpDefinition.Boost)));
+                var value = skillEntry.Level == 0 ? regenerationValue.Value : regenerationValue.Value + skillEntry.CalculateValue();
+                target.Attributes[regeneration.CurrentAttribute] = Math.Min(
+                    target.Attributes[regeneration.CurrentAttribute] + value,
+                    target.Attributes[regeneration.MaximumAttribute]);
+                isHealthUpdated |= regeneration.CurrentAttribute == Stats.CurrentHealth || regeneration.CurrentAttribute == Stats.CurrentShield;
+                isManaUpdated |= regeneration.CurrentAttribute == Stats.CurrentMana || regeneration.CurrentAttribute == Stats.CurrentAbility;
+            }
+            else
+            {
+                player.Logger.LogWarning(
+                    $"Regeneration skill {skill.Name} is configured to regenerate a non-regeneration-able target attribute {powerUpDefinition.TargetAttribute}.");
+            }
         }
-        else
+
+        if (target is IWorldObserver observer)
         {
-            player.Logger.LogWarning(
-                $"Regeneration skill {skill.Name} is configured to regenerate a non-regeneration-able target attribute {skill.MagicEffectDef?.PowerUpDefinition?.TargetAttribute}.");
+            if (isHealthUpdated)
+            {
+                await observer.InvokeViewPlugInAsync<IUpdateCurrentHealthPlugIn>(p => p.UpdateCurrentHealthAsync()).ConfigureAwait(false);
+            }
+
+            if (isManaUpdated)
+            {
+                await observer.InvokeViewPlugInAsync<IUpdateCurrentManaPlugIn>(p => p.UpdateCurrentManaAsync()).ConfigureAwait(false);
+            }
         }
     }
 
@@ -193,7 +212,7 @@ public static class AttackableExtensions
     /// <param name="player">The player.</param>
     /// <param name="skillEntry">The skill entry.</param>
     /// <returns>The success of the appliance.</returns>
-    public static bool TryApplyElementalEffects(this IAttackable target, Player player, SkillEntry skillEntry)
+    public static async ValueTask<bool> TryApplyElementalEffectsAsync(this IAttackable target, Player player, SkillEntry skillEntry)
     {
         skillEntry.ThrowNotInitializedProperty(skillEntry.Skill is null, nameof(skillEntry.Skill));
         var modifier = skillEntry.Skill.ElementalModifierTarget;
@@ -214,13 +233,61 @@ public static class AttackableExtensions
             && !target.MagicEffectList.ActiveEffects.ContainsKey(effectDefinition.Number))
         {
             // power-up is the wrong term here... it's more like a power-down ;-)
-            target.ApplyMagicEffect(player, skillEntry);
+            await target.ApplyMagicEffectAsync(player, skillEntry).ConfigureAwait(false);
             applied = true;
         }
 
         if (modifier == Stats.LightningResistance)
         {
-            target.MoveRandomly();
+            await target.MoveRandomlyAsync().ConfigureAwait(false);
+            applied = true;
+        }
+
+        return applied;
+    }
+
+    /// <summary>
+    /// Applies the elemental effects of a players skill to the target.
+    /// </summary>
+    /// <param name="target">The target.</param>
+    /// <param name="attacker">The attacker.</param>
+    /// <param name="skill">The skill.</param>
+    /// <param name="powerUp">The power up.</param>
+    /// <param name="duration">The duration.</param>
+    /// <param name="targetAttribute">The target attribute.</param>
+    /// <returns>
+    /// The success of the appliance.
+    /// </returns>
+    public static async ValueTask<bool> TryApplyElementalEffectsAsync(this IAttackable target, IAttacker attacker, Skill skill, IElement? powerUp, IElement? duration, AttributeDefinition? targetAttribute)
+    {
+        var modifier = skill.ElementalModifierTarget;
+        if (modifier is null)
+        {
+            return false;
+        }
+
+        var resistance = target.Attributes[modifier];
+        if (resistance >= 1.0f || !Rand.NextRandomBool(1.0f - resistance))
+        {
+            return false;
+        }
+
+        var applied = false;
+
+        if (skill.MagicEffectDef is { } effectDefinition
+            && !target.MagicEffectList.ActiveEffects.ContainsKey(effectDefinition.Number)
+            && powerUp is not null
+            && duration is not null
+            && targetAttribute is not null)
+        {
+            // power-up is the wrong term here... it's more like a power-down ;-)
+            await target.ApplyMagicEffectAsync(attacker, effectDefinition, duration, (targetAttribute, powerUp)).ConfigureAwait(false);
+            applied = true;
+        }
+
+        if (modifier == Stats.LightningResistance)
+        {
+            await target.MoveRandomlyAsync().ConfigureAwait(false);
             applied = true;
         }
 
@@ -281,7 +348,7 @@ public static class AttackableExtensions
 
     /// <summary>Moves the target randomly.</summary>
     /// <param name="target">The target.</param>
-    public static void MoveRandomly(this IAttackable target)
+    public static async ValueTask MoveRandomlyAsync(this IAttackable target)
     {
         if (target is IMovable movable && target.CurrentMap is { } map)
         {
@@ -292,7 +359,7 @@ public static class AttackableExtensions
             var isNewYAllowed = newY is >= byte.MinValue and <= byte.MaxValue;
             if (isNewXAllowed && isNewYAllowed && terrain.AIgrid[newX, newY] == 1)
             {
-                movable.Move(new Point((byte)newX, (byte)newY));
+                await movable.MoveAsync(new Point((byte)newX, (byte)newY)).ConfigureAwait(false);
             }
         }
     }
@@ -414,18 +481,26 @@ public static class AttackableExtensions
             var skillDamage = skill.GetDamage();
             minimumBaseDamage += skillDamage;
             maximumBaseDamage += skillDamage;
+
+            if (skill.Skill.SkillType == SkillType.Nova)
+            {
+                var novaDamage = (int)(attackerStats[Stats.NovaBonusDamage] + attackerStats[Stats.NovaStageDamage]);
+
+                minimumBaseDamage += novaDamage;
+                maximumBaseDamage += novaDamage;
+            }
         }
 
         switch (damageType)
         {
             case DamageType.Wizardry:
-                minimumBaseDamage += (int)(attackerStats[Stats.MinimumWizBaseDmg] * attackerStats[Stats.WizardryAttackDamageIncrease]);
-                maximumBaseDamage += (int)(attackerStats[Stats.MaximumWizBaseDmg] * attackerStats[Stats.WizardryAttackDamageIncrease]);
+                minimumBaseDamage = (int)((minimumBaseDamage + attackerStats[Stats.MinimumWizBaseDmg]) * attackerStats[Stats.WizardryAttackDamageIncrease]);
+                maximumBaseDamage = (int)((maximumBaseDamage + attackerStats[Stats.MaximumWizBaseDmg]) * attackerStats[Stats.WizardryAttackDamageIncrease]);
 
                 break;
             case DamageType.Curse:
-                minimumBaseDamage += (int)(attackerStats[Stats.MinimumCurseBaseDmg] * attackerStats[Stats.CurseAttackDamageIncrease]);
-                maximumBaseDamage += (int)(attackerStats[Stats.MaximumCurseBaseDmg] * attackerStats[Stats.CurseAttackDamageIncrease]);
+                minimumBaseDamage += (int)((minimumBaseDamage + attackerStats[Stats.MinimumCurseBaseDmg]) * attackerStats[Stats.CurseAttackDamageIncrease]);
+                maximumBaseDamage += (int)((maximumBaseDamage + attackerStats[Stats.MaximumCurseBaseDmg]) * attackerStats[Stats.CurseAttackDamageIncrease]);
 
                 break;
             case DamageType.Physical:
@@ -451,6 +526,37 @@ public static class AttackableExtensions
             default:
                 // the skill has some other damage type defined which is not applicable to this calculation
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Applies the magic effect of the attackers skill to the target.
+    /// </summary>
+    /// <param name="target">The target.</param>
+    /// <param name="attacker">The attacker.</param>
+    /// <param name="magicEffectDefinition">The magic effect definition.</param>
+    /// <param name="duration">The duration.</param>
+    /// <param name="powerUps">The power ups of the effect.</param>
+    private static async ValueTask ApplyMagicEffectAsync(this IAttackable target, IAttacker attacker, MagicEffectDefinition magicEffectDefinition, IElement duration, params (AttributeDefinition Target, IElement Boost)[] powerUps)
+    {
+        var isPoisonEffect = magicEffectDefinition.PowerUpDefinitions.Any(e => e.TargetAttribute == Stats.IsPoisoned);
+        var magicEffect = isPoisonEffect
+            ? new PoisonMagicEffect(powerUps[0].Boost, magicEffectDefinition, TimeSpan.FromSeconds(duration.Value), attacker, target)
+            : new MagicEffect(TimeSpan.FromSeconds(duration.Value), magicEffectDefinition, powerUps.Select(p => new MagicEffect.ElementWithTarget(p.Boost, p.Target)).ToArray());
+
+        await target.MagicEffectList.AddEffectAsync(magicEffect).ConfigureAwait(false);
+        if (target is ISupportWalk walkSupporter
+            && walkSupporter.IsWalking
+            && magicEffectDefinition.PowerUpDefinitions.Any(e => e.TargetAttribute == Stats.IsFrozen || e.TargetAttribute == Stats.IsStunned))
+        {
+            await walkSupporter.StopWalkingAsync().ConfigureAwait(false);
+
+            // Since the actual coordinates could be out of sync with the client
+            // coordinates, we simply update the position on the client side.
+            if (walkSupporter is IObservable observable)
+            {
+                await observable.ForEachWorldObserverAsync<IObjectMovedPlugIn> (p => p.ObjectMovedAsync(walkSupporter, MoveType.Instant), true).ConfigureAwait(false);
+            }
         }
     }
 }

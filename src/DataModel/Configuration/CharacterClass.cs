@@ -91,4 +91,21 @@ public class CharacterClass
     /// Gets or sets the home map.
     /// </summary>
     public virtual GameMapDefinition? HomeMap { get; set; }
+
+    /// <summary>
+    /// Gets or sets the combo definition for this class and all
+    /// following <see cref="NextGenerationClass"/>es without an explicit combo definition.
+    /// </summary>
+    [MemberOfAggregate]
+    public virtual SkillComboDefinition? ComboDefinition { get; set; }
+
+    /// <summary>
+    /// Gets StatAttributeDefinition corresponding to AttributeDefinition.
+    /// </summary>
+    /// <param name="attributeDefinition">The attribute.</param>
+    /// <returns>The corresponding StatAttributeDefinition.</returns>
+    public StatAttributeDefinition? GetStatAttribute(AttributeDefinition attributeDefinition)
+    {
+        return this.StatAttributes.FirstOrDefault(a => a.Attribute == attributeDefinition);
+    }
 }

@@ -49,7 +49,7 @@ public class Storage : IStorage
             {
                 if (!this.AddItemInternal((byte)(item.ItemSlot - slotOffset), item))
                 {
-                    throw new ArgumentException("item did not fit into the storage");
+                    throw new ArgumentException($"'{item}' did not fit into the storage at slot {item.ItemSlot}.");
                 }
             });
     }
@@ -71,13 +71,14 @@ public class Storage : IStorage
     {
         get
         {
-            for (int x = 0; x < InventoryConstants.RowSize; x++)
+            for (int row = 0; row < this._rows; row++)
             {
-                for (int y = 0; y < this._rows; y++)
+                for (int column = 0; column < InventoryConstants.RowSize; column++)
                 {
-                    if (!this._usedSlots[x, y])
+
+                    if (!this._usedSlots[row, column])
                     {
-                        yield return this.GetSlot(x, y);
+                        yield return this.GetSlot(column, row);
                     }
                 }
             }
@@ -93,7 +94,7 @@ public class Storage : IStorage
     protected Item?[] ItemArray { get; }
 
     /// <inheritdoc/>
-    public virtual bool AddItem(byte slot, Item item)
+    public virtual async ValueTask<bool> AddItemAsync(byte slot, Item item)
     {
         var result = this.AddItemInternal((byte)(slot - this._slotOffset), item);
         if (result)
@@ -106,7 +107,7 @@ public class Storage : IStorage
     }
 
     /// <inheritdoc/>
-    public bool AddItem(Item item)
+    public async ValueTask<bool> AddItemAsync(Item item)
     {
         var freeSlot = this.CheckInvSpace(item);
         if (freeSlot is null)
@@ -114,7 +115,7 @@ public class Storage : IStorage
             return false;
         }
 
-        return this.AddItem((byte)freeSlot, item);
+        return await this.AddItemAsync((byte)freeSlot, item).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -163,18 +164,35 @@ public class Storage : IStorage
     }
 
     /// <inheritdoc/>
-    public bool TryTakeAll(IStorage anotherStorage)
+    public async ValueTask<bool> TryTakeAllAsync(IStorage anotherStorage)
     {
-        // TODO: this should be a all-or-nothing action...
-        foreach (var item in anotherStorage.Items)
+        var result = true;
+
+        var itemsWithSlots = anotherStorage.Items.Select(item => (item.ItemSlot, Item: item)).ToList();
+        try
         {
-            if (!this.AddItem(item))
+            foreach (var item in itemsWithSlots)
             {
-                return false;
+                await anotherStorage.RemoveItemAsync(item.Item).ConfigureAwait(false);
+                if (!await this.AddItemAsync(item.Item).ConfigureAwait(false))
+                {
+                    result = false;
+                }
+            }
+        }
+        finally
+        {
+            if (!result)
+            {
+                foreach (var item in itemsWithSlots)
+                {
+                    await this.RemoveItemAsync(item.Item).ConfigureAwait(false);
+                    await anotherStorage.AddItemAsync(item.ItemSlot, item.Item).ConfigureAwait(false);
+                }
             }
         }
 
-        return true;
+        return result;
     }
 
     /// <inheritdoc/>
@@ -190,7 +208,7 @@ public class Storage : IStorage
     }
 
     /// <inheritdoc/>
-    public virtual void RemoveItem(Item item)
+    public virtual async ValueTask RemoveItemAsync(Item item)
     {
         var slot = item.ItemSlot - this._slotOffset;
         this.ItemArray[slot] = null;

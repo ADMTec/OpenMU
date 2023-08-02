@@ -16,11 +16,13 @@ public class PartyListRequestAction
     /// Requests the party list.
     /// </summary>
     /// <param name="player">The player who is requesting the list.</param>
-    public void RequestPartyList(Player player)
+    public async ValueTask RequestPartyListAsync(Player player)
     {
-        if (player.Party != null)
+        if (player.Party is null)
         {
-            player.ViewPlugIns.GetPlugIn<IUpdatePartyListPlugIn>()?.UpdatePartyList();
+            return;
         }
+
+        await player.InvokeViewPlugInAsync<IUpdatePartyListPlugIn>(p => p.UpdatePartyListAsync()).ConfigureAwait(false);
     }
 }

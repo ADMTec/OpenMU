@@ -15,7 +15,9 @@ using MUnique.OpenMU.GameLogic.Attributes;
 /// </summary>
 internal class Jewelery : InitializerBase
 {
+    private static readonly float[] ResistanceIncreaseByLevel = { 0, 0.1f, 0.2f, 0.3f, 0.4f };
     private ItemOptionDefinition? _healthRecoverOptionDefinition;
+    private ItemLevelBonusTable? _resistancesBonusTable;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Jewelery"/> class.
@@ -30,8 +32,8 @@ internal class Jewelery : InitializerBase
     /// <inheritdoc/>
     public sealed override void Initialize()
     {
-        this._healthRecoverOptionDefinition = this.CreateOption("Health recover for jewelery", Stats.HealthRecoveryMultiplier, 0.01f);
-
+        this._healthRecoverOptionDefinition = this.CreateOption("Health recover for jewelery", Stats.HealthRecoveryMultiplier, 0.01f, ItemOptionDefinitionNumbers.JeweleryHealth);
+        this._resistancesBonusTable = this.CreateItemBonusTable(ResistanceIncreaseByLevel, "Elemental resistances (Jewelery)", "Defines the elemental resistances for jewelery. It's 10 % per item level.");
         this.CreateItems();
     }
 
@@ -86,21 +88,14 @@ internal class Jewelery : InitializerBase
         ring.BasePowerUpAttributes.Add(powerUp);
         powerUp.BaseValue = 0;
         powerUp.TargetAttribute = Stats.TransformationSkin.GetPersistent(this.GameConfiguration);
-
-        for (int level = 0; level < transformationSkins.Length; level++)
-        {
-            var transformationSkin = transformationSkins[level];
-            var levelBonus = this.Context.CreateNew<LevelBonus>();
-            levelBonus.Level = level;
-            levelBonus.AdditionalValue = (int)transformationSkin;
-            powerUp.BonusPerLevel.Add(levelBonus);
-        }
+        powerUp.BonusPerLevelTable = this.CreateItemBonusTable(transformationSkins.Select(v => (float)v).ToArray(), $"Transformation Ring Skins ({name})", $"Contains the skin numbers for the different levels of the transformation ring ({name}).");
 
         foreach (var characterClass in this.GameConfiguration.CharacterClasses)
         {
             ring.QualifiedCharacters.Add(characterClass);
         }
 
+        ring.SetGuid(ring.Group, ring.Number);
         return ring;
     }
 
@@ -110,32 +105,21 @@ internal class Jewelery : InitializerBase
     /// <param name="name">The name.</param>
     /// <param name="targetAttribute">The target attribute.</param>
     /// <param name="boostPerLevel">The boost per level.</param>
+    /// <param name="optionNumber">The option number.</param>
     /// <param name="aggregateType">Type of the aggregate.</param>
-    /// <returns>The created option.</returns>
-    protected ItemOptionDefinition CreateOption(string name, AttributeDefinition targetAttribute, float boostPerLevel, AggregateType aggregateType = AggregateType.AddRaw)
+    /// <returns>
+    /// The created option.
+    /// </returns>
+    protected ItemOptionDefinition CreateOption(string name, AttributeDefinition targetAttribute, float boostPerLevel, short optionNumber, AggregateType aggregateType = AggregateType.AddRaw)
     {
         var optionDefinition = this.Context.CreateNew<ItemOptionDefinition>();
+        optionDefinition.SetGuid(optionNumber, targetAttribute.Id.ExtractFirstTwoBytes());
         optionDefinition.AddsRandomly = true;
         optionDefinition.Name = name;
         optionDefinition.AddChance = 0.25f;
         optionDefinition.MaximumOptionsPerItem = 1;
 
-        var option = this.Context.CreateNew<IncreasableItemOption>();
-        option.OptionType = ItemOptionTypes.Option;
-        option.PowerUpDefinition = this.Context.CreateNew<PowerUpDefinition>();
-        option.PowerUpDefinition.TargetAttribute = targetAttribute.GetPersistent(this.GameConfiguration);
-        for (int i = 1; i <= 4; i++)
-        {
-            var optionOfLevel = this.Context.CreateNew<ItemOptionOfLevel>();
-            optionOfLevel.Level = i;
-            optionOfLevel.PowerUpDefinition = this.Context.CreateNew<PowerUpDefinition>();
-            optionOfLevel.PowerUpDefinition.Boost = this.Context.CreateNew<PowerUpDefinitionValue>();
-            optionOfLevel.PowerUpDefinition.Boost.ConstantValue.Value = boostPerLevel * i;
-            optionOfLevel.PowerUpDefinition.Boost.ConstantValue.AggregateType = aggregateType;
-            optionOfLevel.PowerUpDefinition.TargetAttribute = option.PowerUpDefinition.TargetAttribute;
-            option.LevelDependentOptions.Add(optionOfLevel);
-        }
-
+        var option = this.CreateItemOption(0, targetAttribute, 0, aggregateType, boostPerLevel, optionNumber);
         optionDefinition.PossibleOptions.Add(option);
         this.GameConfiguration.ItemOptions.Add(optionDefinition);
         return optionDefinition;
@@ -178,17 +162,8 @@ internal class Jewelery : InitializerBase
 
         if (resistanceAttribute != null)
         {
-            var powerUp = this.Context.CreateNew<ItemBasePowerUpDefinition>();
-            item.BasePowerUpAttributes.Add(powerUp);
-            powerUp.BaseValue = 0.1f;
-            powerUp.TargetAttribute = resistanceAttribute.GetPersistent(this.GameConfiguration);
-            for (int lvl = 1; lvl <= 4; lvl++)
-            {
-                var levelBonus = this.Context.CreateNew<LevelBonus>();
-                levelBonus.Level = lvl;
-                levelBonus.AdditionalValue = lvl * 0.1f;
-                powerUp.BonusPerLevel.Add(levelBonus);
-            }
+            var powerUp = this.CreateItemBasePowerUpDefinition(resistanceAttribute, 0.1f);
+            powerUp.BonusPerLevelTable = this._resistancesBonusTable;
         }
 
         foreach (var characterClass in this.GameConfiguration.CharacterClasses)
@@ -196,6 +171,7 @@ internal class Jewelery : InitializerBase
             item.QualifiedCharacters.Add(characterClass);
         }
 
+        item.SetGuid(item.Group, item.Number);
         return item;
     }
 

@@ -16,7 +16,7 @@ using MUnique.OpenMU.PlugIns;
 /// </summary>
 [PlugIn(nameof(ConsumeItemHandlerPlugIn), "Handler for item consume packets.")]
 [Guid("53992288-0d11-49df-98a3-2912b7616558")]
-[MinimumClient(6, 0, ClientLanguage.Invariant)]
+[MinimumClient(5, 0, ClientLanguage.Invariant)]
 internal class ConsumeItemHandlerPlugIn : IPacketHandlerPlugIn
 {
     private readonly ItemConsumeAction _consumeAction = new ();
@@ -28,10 +28,10 @@ internal class ConsumeItemHandlerPlugIn : IPacketHandlerPlugIn
     public byte Key => ConsumeItemRequest.Code;
 
     /// <inheritdoc/>
-    public void HandlePacket(Player player, Span<byte> packet)
+    public async ValueTask HandlePacketAsync(Player player, Memory<byte> packet)
     {
         ConsumeItemRequest message = packet;
-        this._consumeAction.HandleConsumeRequest(player, message.ItemSlot, message.TargetSlot, Convert(message.FruitConsumption));
+        await this._consumeAction.HandleConsumeRequestAsync(player, message.ItemSlot, message.TargetSlot, Convert(message.FruitConsumption)).ConfigureAwait(false);
     }
 
     private static FruitUsage Convert(ConsumeItemRequest.FruitUsage fruitConsumption)

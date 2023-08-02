@@ -17,25 +17,38 @@ public class IncreaseStatsAction
     /// </summary>
     /// <param name="player">The player.</param>
     /// <param name="statAttributeDefinition">The stat attribute definition.</param>
-    public void IncreaseStats(Player player, AttributeDefinition statAttributeDefinition)
+    public async ValueTask IncreaseStatsAsync(Player player, AttributeDefinition statAttributeDefinition)
     {
         if (player.SelectedCharacter is null)
         {
             throw new InvalidOperationException("No character selected");
         }
 
-        if (player.SelectedCharacter.LevelUpPoints > 0)
+        var selectedCharacter = player.SelectedCharacter;
+        if (!selectedCharacter.CanIncreaseStats())
         {
-            var attributeDef = player.SelectedCharacter.CharacterClass?.StatAttributes.FirstOrDefault(a => a.Attribute == statAttributeDefinition);
-            if (attributeDef is { IncreasableByPlayer: true })
-            {
-                player.Attributes![attributeDef.Attribute]++;
-                player.SelectedCharacter.LevelUpPoints--;
-                player.ViewPlugIns.GetPlugIn<IStatIncreaseResultPlugIn>()?.StatIncreaseResult(statAttributeDefinition, true);
-                return;
-            }
+            await this.PublishIncreaseResultAsync(player, statAttributeDefinition, false).ConfigureAwait(false);
+            return;
         }
 
-        player.ViewPlugIns.GetPlugIn<IStatIncreaseResultPlugIn>()?.StatIncreaseResult(statAttributeDefinition, false);
+        var attributeDef = selectedCharacter.CharacterClass?.GetStatAttribute(statAttributeDefinition);
+        if (attributeDef is { IncreasableByPlayer: true })
+        {
+            player.Attributes![attributeDef.Attribute]++;
+            if (selectedCharacter.LevelUpPoints > 0)
+            {
+                selectedCharacter.LevelUpPoints--;
+            }
+
+            await this.PublishIncreaseResultAsync(player, statAttributeDefinition, true).ConfigureAwait(false);
+            return;
+        }
+
+        await this.PublishIncreaseResultAsync(player, statAttributeDefinition, false).ConfigureAwait(false);
+    }
+
+    private ValueTask PublishIncreaseResultAsync(Player player, AttributeDefinition statAttributeDefinition, bool success)
+    {
+        return player.InvokeViewPlugInAsync<IStatIncreaseResultPlugIn>(p => p.StatIncreaseResultAsync(statAttributeDefinition, success));
     }
 }

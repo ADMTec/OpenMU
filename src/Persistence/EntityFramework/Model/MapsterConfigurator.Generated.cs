@@ -89,6 +89,12 @@ public static class MapsterConfigurator
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.ChatServerEndpoint, MUnique.OpenMU.DataModel.Configuration.ChatServerEndpoint>()
             .Include<ChatServerEndpoint, BasicModel.ChatServerEndpoint>();
 
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.ConfigurationUpdate, MUnique.OpenMU.DataModel.Configuration.ConfigurationUpdate>()
+            .Include<ConfigurationUpdate, BasicModel.ConfigurationUpdate>();
+
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.ConfigurationUpdateState, MUnique.OpenMU.DataModel.Configuration.ConfigurationUpdateState>()
+            .Include<ConfigurationUpdateState, BasicModel.ConfigurationUpdateState>();
+
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.ConnectServerDefinition, MUnique.OpenMU.DataModel.Configuration.ConnectServerDefinition>()
             .Include<ConnectServerDefinition, BasicModel.ConnectServerDefinition>();
 
@@ -140,6 +146,9 @@ public static class MapsterConfigurator
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.MasterSkillRoot, MUnique.OpenMU.DataModel.Configuration.MasterSkillRoot>()
             .Include<MasterSkillRoot, BasicModel.MasterSkillRoot>();
 
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.MiniGameChangeEvent, MUnique.OpenMU.DataModel.Configuration.MiniGameChangeEvent>()
+            .Include<MiniGameChangeEvent, BasicModel.MiniGameChangeEvent>();
+
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.MiniGameDefinition, MUnique.OpenMU.DataModel.Configuration.MiniGameDefinition>()
             .Include<MiniGameDefinition, BasicModel.MiniGameDefinition>();
 
@@ -148,6 +157,9 @@ public static class MapsterConfigurator
 
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.MiniGameSpawnWave, MUnique.OpenMU.DataModel.Configuration.MiniGameSpawnWave>()
             .Include<MiniGameSpawnWave, BasicModel.MiniGameSpawnWave>();
+
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.MiniGameTerrainChange, MUnique.OpenMU.DataModel.Configuration.MiniGameTerrainChange>()
+            .Include<MiniGameTerrainChange, BasicModel.MiniGameTerrainChange>();
 
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.MonsterAttribute, MUnique.OpenMU.DataModel.Configuration.MonsterAttribute>()
             .Include<MonsterAttribute, BasicModel.MonsterAttribute>();
@@ -164,8 +176,17 @@ public static class MapsterConfigurator
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.Skill, MUnique.OpenMU.DataModel.Configuration.Skill>()
             .Include<Skill, BasicModel.Skill>();
 
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.SkillComboDefinition, MUnique.OpenMU.DataModel.Configuration.SkillComboDefinition>()
+            .Include<SkillComboDefinition, BasicModel.SkillComboDefinition>();
+
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.SkillComboStep, MUnique.OpenMU.DataModel.Configuration.SkillComboStep>()
+            .Include<SkillComboStep, BasicModel.SkillComboStep>();
+
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.StatAttributeDefinition, MUnique.OpenMU.DataModel.Configuration.StatAttributeDefinition>()
             .Include<StatAttributeDefinition, BasicModel.StatAttributeDefinition>();
+
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.SystemConfiguration, MUnique.OpenMU.DataModel.Configuration.SystemConfiguration>()
+            .Include<SystemConfiguration, BasicModel.SystemConfiguration>();
 
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.WarpInfo, MUnique.OpenMU.DataModel.Configuration.WarpInfo>()
             .Include<WarpInfo, BasicModel.WarpInfo>();
@@ -196,6 +217,9 @@ public static class MapsterConfigurator
 
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.Items.ItemDefinition, MUnique.OpenMU.DataModel.Configuration.Items.ItemDefinition>()
             .Include<ItemDefinition, BasicModel.ItemDefinition>();
+
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.Items.ItemLevelBonusTable, MUnique.OpenMU.DataModel.Configuration.Items.ItemLevelBonusTable>()
+            .Include<ItemLevelBonusTable, BasicModel.ItemLevelBonusTable>();
 
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.Items.ItemOfItemSet, MUnique.OpenMU.DataModel.Configuration.Items.ItemOfItemSet>()
             .Include<ItemOfItemSet, BasicModel.ItemOfItemSet>();
@@ -241,9 +265,6 @@ public static class MapsterConfigurator
 
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Attributes.PowerUpDefinitionValue, MUnique.OpenMU.DataModel.Attributes.PowerUpDefinitionValue>()
             .Include<PowerUpDefinitionValue, BasicModel.PowerUpDefinitionValue>();
-
-        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Attributes.PowerUpDefinitionWithDuration, MUnique.OpenMU.DataModel.Attributes.PowerUpDefinitionWithDuration>()
-            .Include<PowerUpDefinitionWithDuration, BasicModel.PowerUpDefinitionWithDuration>();
 
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.AttributeSystem.AttributeDefinition, MUnique.OpenMU.AttributeSystem.AttributeDefinition>()
             .Include<AttributeDefinition, BasicModel.AttributeDefinition>();

@@ -4,9 +4,10 @@
 
 namespace MUnique.OpenMU.Persistence.EntityFramework.Json;
 
+using System.Data;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Newtonsoft.Json.Serialization;
 
 /// <summary>
 /// A class which allows to load objects from the database by using a query provided by the <see cref="JsonQueryBuilder"/>
@@ -16,19 +17,19 @@ public class JsonObjectLoader
 {
     private readonly JsonQueryBuilder _queryBuilder;
     private readonly JsonObjectDeserializer _deserializer;
-    private readonly IReferenceResolver _referenceResolver;
+    private readonly ReferenceHandler _referenceHandler;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="JsonObjectLoader"/> class.
+    /// Initializes a new instance of the <see cref="JsonObjectLoader" /> class.
     /// </summary>
     /// <param name="queryBuilder">The query builder.</param>
     /// <param name="deserializer">The deserializer.</param>
-    /// <param name="referenceResolver">The reference resolver.</param>
-    public JsonObjectLoader(JsonQueryBuilder queryBuilder, JsonObjectDeserializer deserializer, IReferenceResolver referenceResolver)
+    /// <param name="referenceHandler">The reference handler.</param>
+    public JsonObjectLoader(JsonQueryBuilder queryBuilder, JsonObjectDeserializer deserializer, ReferenceHandler referenceHandler)
     {
         this._queryBuilder = queryBuilder;
         this._deserializer = deserializer;
-        this._referenceResolver = referenceResolver;
+        this._referenceHandler = referenceHandler;
     }
 
     /// <summary>
@@ -38,20 +39,21 @@ public class JsonObjectLoader
     /// <typeparam name="T">The type of the <see cref="IIdentifiable"/> object.</typeparam>
     /// <param name="context">The context.</param>
     /// <returns>All objects of <typeparamref name="T"/>.</returns>
-    public IEnumerable<T> LoadAllObjects<T>(DbContext context)
+    public async ValueTask<IEnumerable<T>> LoadAllObjectsAsync<T>(DbContext context)
         where T : class, IIdentifiable
     {
         var result = new List<T>();
         var type = context.Model.FindEntityType(typeof(T)) ?? throw new ArgumentException($"{typeof(T)} is not included in the model of the context.");
         var queryString = this._queryBuilder.BuildJsonQueryForEntity(type);
-        using var command = context.Database.GetDbConnection().CreateCommand();
+        await using var command = context.Database.GetDbConnection().CreateCommand();
         command.CommandText = queryString;
-        using var reader = command.ExecuteReader();
+        await using var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess).ConfigureAwait(false);
         if (reader.HasRows)
         {
-            while (reader.Read())
+            while (await reader.ReadAsync().ConfigureAwait(false))
             {
-                if (this._deserializer.Deserialize<T>(reader.GetTextReader(2), this._referenceResolver) is { } item)
+                await using var textReader = reader.GetStream(2);
+                if (this._deserializer.Deserialize<T>(textReader, this._referenceHandler) is { } item)
                 {
                     result.Add(item);
                 }
@@ -69,28 +71,29 @@ public class JsonObjectLoader
     /// <param name="id">The identifier of the object which should be loaded.</param>
     /// <param name="context">The context.</param>
     /// <returns>The loaded object, if available; Otherwise, null.</returns>
-    public T? LoadObject<T>(Guid id, DbContext context)
+    public async ValueTask<T?> LoadObjectAsync<T>(Guid id, DbContext context)
         where T : class, IIdentifiable
     {
         IEntityType type;
-        using (var completeContext = new EntityDataContext())
+        await using (var completeContext = new EntityDataContext())
         {
             type = completeContext.Model.FindEntityType(typeof(T)) ?? throw new ArgumentException($"{typeof(T)} is not included in the model of the context.");
         }
 
         var queryString = this._queryBuilder.BuildJsonQueryForEntity(type);
         queryString += " where result.\"Id\" = @id;";
-        using var command = context.Database.GetDbConnection().CreateCommand();
+        await using var command = context.Database.GetDbConnection().CreateCommand();
         command.CommandText = queryString;
         var idParameter = command.CreateParameter();
         idParameter.ParameterName = "id";
         idParameter.Value = id;
 
         command.Parameters.Add(idParameter);
-        using var reader = command.ExecuteReader();
-        if (reader.HasRows && reader.Read())
+        await using var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.SingleResult).ConfigureAwait(false);
+        if (reader.HasRows && await reader.ReadAsync().ConfigureAwait(false))
         {
-            return this._deserializer.Deserialize<T>(reader.GetTextReader(2), this._referenceResolver);
+            await using var textReader = reader.GetStream(2);
+            return this._deserializer.Deserialize<T>(textReader, this._referenceHandler);
         }
 
         return default;

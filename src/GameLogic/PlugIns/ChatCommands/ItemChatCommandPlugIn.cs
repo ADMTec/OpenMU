@@ -15,7 +15,7 @@ using MUnique.OpenMU.PlugIns;
 /// <seealso cref="MUnique.OpenMU.GameLogic.PlugIns.ChatCommands.IChatCommandPlugIn" />
 [Guid("ABFE2440-E765-4F17-A588-BD9AE3799887")]
 [PlugIn("Item chat command", "Handles the chat command '/item <group> <number> <lvl?> <exc?> <sk?> <lu?> <opt?> <anc?> <ancBonuslvl?>'. Drops a specific item next to the character.")]
-[ChatCommandHelp(Command, typeof(ItemChatCommandArgs), CharacterStatus.GameMaster)]
+[ChatCommandHelp(Command, "Drops a specific item next to the character.", typeof(ItemChatCommandArgs), CharacterStatus.GameMaster)]
 public class ItemChatCommandPlugIn : ChatCommandPlugInBase<ItemChatCommandArgs>
 {
     private const string Command = "/item";
@@ -27,15 +27,15 @@ public class ItemChatCommandPlugIn : ChatCommandPlugInBase<ItemChatCommandArgs>
     public override CharacterStatus MinCharacterStatusRequirement => CharacterStatus.GameMaster;
 
     /// <inheritdoc />
-    protected override void DoHandleCommand(Player gameMaster, ItemChatCommandArgs arguments)
+    protected override async ValueTask DoHandleCommandAsync(Player gameMaster, ItemChatCommandArgs arguments)
     {
         if (gameMaster.CurrentMap != null)
         {
             var item = CreateItem(gameMaster, arguments);
             var dropCoordinates = gameMaster.CurrentMap.Terrain.GetRandomCoordinate(gameMaster.Position, 1);
             var droppedItem = new DroppedItem(item, dropCoordinates, gameMaster.CurrentMap, gameMaster);
-            gameMaster.CurrentMap.Add(droppedItem);
-            this.ShowMessageTo(gameMaster, $"[{this.Key}] {item} created");
+            await gameMaster.CurrentMap.AddAsync(droppedItem).ConfigureAwait(false);
+            await this.ShowMessageToAsync(gameMaster, $"[{this.Key}] {item} created").ConfigureAwait(false);
         }
     }
 
@@ -128,12 +128,12 @@ public class ItemChatCommandPlugIn : ChatCommandPlugInBase<ItemChatCommandArgs>
     private static void AddAncientBonusOption(TemporaryItem item, ItemChatCommandArgs arguments)
     {
         if (item.Definition != null && arguments.Ancient > default(byte)
-                                    && item.Definition.PossibleItemSetGroups.FirstOrDefault(set => set.AncientSetDiscriminator == arguments.Ancient) is { } ancientSet
+                                    && item.Definition.PossibleItemSetGroups.FirstOrDefault(g => g.Items.Any(i => i.ItemDefinition == item.Definition && i.AncientSetDiscriminator == arguments.Ancient)) is { } ancientSet
                                     && ancientSet.Items.FirstOrDefault(i => i.ItemDefinition == item.Definition) is { } itemOfItemSet)
         {
             var optionLink = new ItemOptionLink { ItemOption = itemOfItemSet.BonusOption, Level = arguments.AncientBonusLevel };
             item.ItemOptions.Add(optionLink);
-            item.ItemSetGroups.Add(ancientSet);
+            item.ItemSetGroups.Add(itemOfItemSet);
         }
     }
 }

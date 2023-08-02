@@ -4,9 +4,9 @@
 
 namespace MUnique.OpenMU.Persistence.Initialization.VersionSeasonSix.TestAccounts;
 
+using MUnique.OpenMU.DataModel;
 using MUnique.OpenMU.DataModel.Configuration;
 using MUnique.OpenMU.DataModel.Entities;
-using MUnique.OpenMU.GameLogic;
 using MUnique.OpenMU.GameLogic.Attributes;
 using MUnique.OpenMU.Persistence.Initialization.CharacterClasses;
 
@@ -45,11 +45,11 @@ internal class LowLevel : AccountInitializerBase
     {
         var character = this.CreateCharacter(this.AccountName + "Dk", CharacterClassNumber.DarkKnight, this.Level, 0);
         character.Inventory!.Items.Add(this.CreateSmallAxe(0));
-        character.Inventory.Items.Add(this.CreateArmorItem(52, 5, 8)); // Leather Armor
-        character.Inventory.Items.Add(this.CreateArmorItem(47, 5, 7)); // Leather Helm
-        character.Inventory.Items.Add(this.CreateArmorItem(49, 5, 9)); // Leather Pants
-        character.Inventory.Items.Add(this.CreateArmorItem(63, 5, 10, Stats.DamageReflection)); // Leather Gloves
-        character.Inventory.Items.Add(this.CreateArmorItem(65, 5, 11, Stats.DamageReflection)); // Leather Boots
+        character.Inventory.Items.Add(this.CreateArmorItem(InventoryConstants.ArmorSlot, 5, 8)); // Leather Armor
+        character.Inventory.Items.Add(this.CreateArmorItem(InventoryConstants.HelmSlot, 5, 7)); // Leather Helm
+        character.Inventory.Items.Add(this.CreateArmorItem(InventoryConstants.PantsSlot, 5, 9)); // Leather Pants
+        character.Inventory.Items.Add(this.CreateArmorItem(InventoryConstants.GlovesSlot, 5, 10, Stats.DamageReflection)); // Leather Gloves
+        character.Inventory.Items.Add(this.CreateArmorItem(InventoryConstants.BootsSlot, 5, 11, Stats.DamageReflection)); // Leather Boots
         this.AddTestJewelsAndPotions(character.Inventory);
         this.AddPets(character.Inventory);
         return character;

@@ -36,6 +36,9 @@ public class DataInitialization : DataInitializationBase
     /// <inheritdoc />
     public override string Key => Id;
 
+    /// <inheritdoc />
+    public override string Caption => "1.04d - Season 6 Episode 3";
+
     /// <inheritdoc/>
     protected override IInitializer TestAccountsInitializer => new TestAccountsInitialization(this.Context, this.GameConfiguration);
 
@@ -48,7 +51,8 @@ public class DataInitialization : DataInitializationBase
     /// <inheritdoc />
     protected override void CreateGameClientDefinition()
     {
-        var clientDefinition = this.Context!.CreateNew<GameClientDefinition>();
+        var clientDefinition = this.Context.CreateNew<GameClientDefinition>();
+        clientDefinition.SetGuid(0x104D);
         clientDefinition.Season = 6;
         clientDefinition.Episode = 3;
         clientDefinition.Language = ClientLanguage.English;

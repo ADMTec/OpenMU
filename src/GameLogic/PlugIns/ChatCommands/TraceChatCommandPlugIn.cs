@@ -13,7 +13,7 @@ using MUnique.OpenMU.PlugIns;
 /// </summary>
 [Guid("F22C989B-A2A1-4991-B6C2-658337CC19CE")]
 [PlugIn("Trace chat command", "Handles the chat command '/trace <char>'. Moves the game master to the character's location.")]
-[ChatCommandHelp(Command, typeof(TraceChatCommandArgs), CharacterStatus.GameMaster)]
+[ChatCommandHelp(Command, "Moves the game master to the character's location.", typeof(TraceChatCommandArgs), CharacterStatus.GameMaster)]
 public class TraceChatCommandPlugIn : ChatCommandPlugInBase<TraceChatCommandArgs>
 {
     private const string Command = "/trace";
@@ -25,7 +25,7 @@ public class TraceChatCommandPlugIn : ChatCommandPlugInBase<TraceChatCommandArgs
     public override CharacterStatus MinCharacterStatusRequirement => CharacterStatus.GameMaster;
 
     /// <inheritdoc/>
-    protected override void DoHandleCommand(Player gameMaster, TraceChatCommandArgs arguments)
+    protected override async ValueTask DoHandleCommandAsync(Player gameMaster, TraceChatCommandArgs arguments)
     {
         var player = this.GetPlayerByCharacterName(gameMaster, arguments.CharacterName ?? string.Empty);
         var character = player.SelectedCharacter;
@@ -41,7 +41,7 @@ public class TraceChatCommandPlugIn : ChatCommandPlugInBase<TraceChatCommandArgs
                 Y2 = (byte)(character.PositionY + 2),
             };
 
-            gameMaster.WarpTo(characterLocation);
+            await gameMaster.WarpToAsync(characterLocation).ConfigureAwait(false);
         }
     }
 }

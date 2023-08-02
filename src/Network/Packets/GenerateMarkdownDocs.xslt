@@ -5,10 +5,9 @@
 
   <xsl:output method="text" />
   <xsl:variable name="newline">
-    <xsl:text xml:space="preserve">
-</xsl:text>
+    <xsl:text>&#xD;&#xA;</xsl:text>
   </xsl:variable>
-
+  
   <xsl:template match="d:PacketDefinitions">
     <xsl:variable name="xmlFileName" select="tokenize((tokenize(document-uri(/), '/')[position() = last()]), '[.]')[1]" />
     <xsl:text expand-text="yes"># {$xmlFileName}</xsl:text>
@@ -301,6 +300,7 @@
   <xsl:template match="d:Type[. = 'IntegerLittleEndian' or . = 'IntegerBigEndian']" mode="length">4</xsl:template>
   <xsl:template match="d:Type[. = 'LongLittleEndian' or . = 'LongBigEndian']" mode="length">8</xsl:template>
   <xsl:template match="d:Type[. = 'Float']" mode="length">4</xsl:template>
+  <xsl:template match="d:Type[. = 'Double']" mode="length">8</xsl:template>
   <xsl:template match="d:Type[. = 'String']" mode="length">
     <xsl:value-of select="../d:Length"/>
   </xsl:template>

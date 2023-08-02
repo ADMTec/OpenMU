@@ -35,8 +35,8 @@ public class RemotePlayer : Player, IClientVersionProvider
         this._clientVersion = clientVersion;
         this.MainPacketHandler = new MainPacketHandlerPlugInContainer(this, gameContext.PlugInManager, gameContext.LoggerFactory);
         this.MainPacketHandler.Initialize();
-        this.Connection!.PacketReceived += (_, packet) => this.PacketReceived(packet);
-        this.Connection!.Disconnected += (_, _) => this.Disconnect();
+        this.Connection!.PacketReceived += this.PacketReceivedAsync;
+        this.Connection!.Disconnected += this.DisconnectAsync;
     }
 
     /// <inheritdoc />
@@ -94,12 +94,12 @@ public class RemotePlayer : Player, IClientVersionProvider
     }
 
     /// <inheritdoc/>
-    protected override void InternalDisconnect()
+    protected override async ValueTask InternalDisconnectAsync()
     {
-        base.InternalDisconnect();
+        await base.InternalDisconnectAsync().ConfigureAwait(false);
         if (this.Connection is { Connected: true })
         {
-            this.Connection.Disconnect();
+            await this.Connection.DisconnectAsync().ConfigureAwait(false);
             this.Connection.Dispose();
             this.Connection = null;
         }
@@ -109,7 +109,7 @@ public class RemotePlayer : Player, IClientVersionProvider
     /// Is getting called when a packet got received from the connection of the player.
     /// </summary>
     /// <param name="sequence">The packet.</param>
-    private void PacketReceived(ReadOnlySequence<byte> sequence)
+    private async ValueTask PacketReceivedAsync(ReadOnlySequence<byte> sequence)
     {
         using var loggingScope = this.Logger.BeginScope(
             ("GameServer", this.GameServerContext.Id),
@@ -117,20 +117,20 @@ public class RemotePlayer : Player, IClientVersionProvider
             ("Account", this.GetAccountName()),
             ("Character", this.GetSelectedCharacterName()));
 
+        Memory<byte> buffer = Memory<byte>.Empty;
         try
         {
-            Span<byte> buffer;
             IMemoryOwner<byte>? owner = null;
             if (sequence.Length <= this._packetBuffer.Length)
             {
                 sequence.CopyTo(this._packetBuffer);
-                buffer = this._packetBuffer.AsSpan(0, this._packetBuffer.GetPacketSize());
+                buffer = this._packetBuffer.AsMemory(0, this._packetBuffer.GetPacketSize());
             }
             else
             {
                 owner = MemoryPool<byte>.Shared.Rent((int)sequence.Length);
-                buffer = owner.Memory[..(int)sequence.Length].Span;
-                sequence.CopyTo(buffer);
+                buffer = owner.Memory[..(int)sequence.Length];
+                sequence.CopyTo(buffer.Span);
             }
 
             try
@@ -140,7 +140,7 @@ public class RemotePlayer : Player, IClientVersionProvider
                     this.Logger.LogDebug("[C->S] {0}", buffer.ToArray().AsString());
                 }
 
-                this.MainPacketHandler.HandlePacket(this, buffer);
+                await this.MainPacketHandler.HandlePacketAsync(this, buffer).ConfigureAwait(false);
             }
             finally
             {
@@ -149,7 +149,7 @@ public class RemotePlayer : Player, IClientVersionProvider
         }
         catch (Exception ex)
         {
-            this.Logger.LogError(ex, "Error while processing a message");
+            this.Logger.LogError(ex, $"Error while processing the message: {buffer.ToArray().AsString()}");
         }
     }
 

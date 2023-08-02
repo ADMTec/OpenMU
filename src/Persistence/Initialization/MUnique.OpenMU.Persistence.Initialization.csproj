@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <WarningsAsErrors>nullable</WarningsAsErrors>
+    <WarningsAsErrors>nullable;CS4014;VSTHRD110;VSTHRD100</WarningsAsErrors>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
@@ -84,28 +84,15 @@
     <None Remove="Resources\Terrain71.att" />
     <None Remove="Resources\Terrain72.att" />
     <None Remove="Resources\Terrain73.att" />
-    <None Remove="Resources\terrain74.att" />
-    <None Remove="Resources\terrain75.att" />
+    <None Remove="Resources\Terrain74.att" />
+    <None Remove="Resources\Terrain75.att" />
     <None Remove="Resources\Terrain78.att" />
     <None Remove="Resources\Terrain79.att" />
     <None Remove="Resources\Terrain8.att" />
-    <None Remove="Resources\terrain80.att" />
+    <None Remove="Resources\Terrain80.att" />
     <None Remove="Resources\Terrain81.att" />
     <None Remove="Resources\Terrain82.att" />
     <None Remove="Resources\Terrain9.att" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Include="..\..\SharedAssemblyInfo.cs" Link="Properties\SharedAssemblyInfo.cs" />
-    <Compile Include="..\..\SharedGlobalUsings.cs" Link="SharedGlobalUsings.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <AdditionalFiles Include="..\..\stylecop.json" Link="stylecop.json" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="..\..\.editorconfig" Link=".editorconfig" />
   </ItemGroup>
 
   <ItemGroup>
@@ -176,23 +163,19 @@
     <EmbeddedResource Include="Resources\Terrain71.att" />
     <EmbeddedResource Include="Resources\Terrain72.att" />
     <EmbeddedResource Include="Resources\Terrain73.att" />
-    <EmbeddedResource Include="Resources\terrain74.att" />
-    <EmbeddedResource Include="Resources\terrain75.att" />
+    <EmbeddedResource Include="Resources\Terrain74.att" />
+    <EmbeddedResource Include="Resources\Terrain75.att" />
     <EmbeddedResource Include="Resources\Terrain78.att" />
     <EmbeddedResource Include="Resources\Terrain79.att" />
     <EmbeddedResource Include="Resources\Terrain8.att" />
-    <EmbeddedResource Include="Resources\terrain80.att" />
+    <EmbeddedResource Include="Resources\Terrain80.att" />
     <EmbeddedResource Include="Resources\Terrain81.att" />
     <EmbeddedResource Include="Resources\Terrain82.att" />
     <EmbeddedResource Include="Resources\Terrain9.att" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="BCrypt.Net-Next" Version="4.0.2" />
-    <PackageReference Include="StyleCop.Analyzers" Version="1.1.118">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
   </ItemGroup>
 
   <ItemGroup>

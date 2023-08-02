@@ -44,20 +44,23 @@ public class StrategyPlugInProvider<TKey, TPlugIn> : PlugInContainerBase<TPlugIn
     {
         get
         {
-            this.LockSlim.EnterReadLock();
-            try
+            using var l = this.Lock.ReaderLock();
+            if (this.TryGetPlugIn(key, out var plugIn))
             {
-                if (this.TryGetPlugIn(key, out var plugIn))
-                {
-                    return plugIn;
-                }
-            }
-            finally
-            {
-                this.LockSlim.ExitReadLock();
+                return plugIn;
             }
 
             return default;
+        }
+    }
+
+    /// <inheritdoc />
+    public IEnumerable<TPlugIn> AvailableStrategies
+    {
+        get
+        {
+            using var l = this.Lock.ReaderLock();
+            return this._effectiveStrategies.Values.ToList();
         }
     }
 

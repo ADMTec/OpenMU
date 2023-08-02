@@ -5,17 +5,18 @@
 namespace MUnique.OpenMU.GameLogic;
 
 using System.Collections;
-using System.Diagnostics.CodeAnalysis;
+using Nito.AsyncEx;
 using MUnique.OpenMU.GameLogic.Views.World;
 
 /// <summary>
 /// The list of magic effects of a player instance. Automatically applies the power-ups of the effects to the player.
 /// </summary>
-public class MagicEffectsList : Disposable
+public class MagicEffectsList : AsyncDisposable
 {
+    private const byte InvisibleEffectStartIndex = 200;
     private readonly BitArray _contains = new (0x100);
     private readonly IAttackable _owner;
-    private readonly object _addLock = new ();
+    private readonly AsyncLock _addLock = new ();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MagicEffectsList"/> class.
@@ -41,10 +42,10 @@ public class MagicEffectsList : Disposable
     /// Adds the effect and applies the power ups.
     /// </summary>
     /// <param name="effect">The effect.</param>
-    public void AddEffect(MagicEffect effect)
+    public async ValueTask AddEffectAsync(MagicEffect effect)
     {
         bool added = false;
-        lock (this._addLock)
+        using (await this._addLock.LockAsync())
         {
             if (this._contains[effect.Id])
             {
@@ -64,11 +65,15 @@ public class MagicEffectsList : Disposable
 
         if (added)
         {
-            effect.EffectTimeOut += this.OnEffectTimeOut;
-            (this._owner as Player)?.ViewPlugIns.GetPlugIn<IActivateMagicEffectPlugIn>()?.ActivateMagicEffect(effect, this._owner);
-            if (effect.Definition.InformObservers)
+            effect.EffectTimeOut += this.OnEffectTimeOutAsync;
+            if (effect.Id < InvisibleEffectStartIndex && this._owner is IWorldObserver observer)
             {
-                (this._owner as IObservable)?.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IActivateMagicEffectPlugIn>()?.ActivateMagicEffect(effect, this._owner), false);
+                await observer.InvokeViewPlugInAsync<IActivateMagicEffectPlugIn>(p => p.ActivateMagicEffectAsync(effect, this._owner)).ConfigureAwait(false);
+            }
+
+            if (effect.Id < InvisibleEffectStartIndex && effect.Definition.InformObservers && this._owner is IObservable observable)
+            {
+                await observable.ForEachWorldObserverAsync<IActivateMagicEffectPlugIn>(p => p.ActivateMagicEffectAsync(effect, this._owner), false).ConfigureAwait(false);
             }
         }
         else
@@ -80,11 +85,23 @@ public class MagicEffectsList : Disposable
     /// <summary>
     /// Clears all active effects.
     /// </summary>
-    public void ClearAllEffects()
+    public async ValueTask ClearAllEffectsAsync()
     {
         while (this.ActiveEffects.Any())
         {
-            this.ActiveEffects.Values.First().Dispose();
+            await this.ActiveEffects.Values.First().DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Clears the effects after death of the player.
+    /// </summary>
+    public async ValueTask ClearEffectsAfterDeathAsync()
+    {
+        var effectsToRemove = this.ActiveEffects.Values.Where(effect => effect.Definition.StopByDeath).ToList();
+        foreach (var effect in effectsToRemove)
+        {
+            await effect.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -92,33 +109,23 @@ public class MagicEffectsList : Disposable
     /// Tries to get the currently active effect of the specified <see cref="MagicEffectDefinition.SubType"/>.
     /// </summary>
     /// <param name="subType">The <see cref="MagicEffectDefinition.SubType"/>.</param>
-    /// <param name="effect">The effect, if found.</param>
-    /// <returns><see langword="true"/>, if found.</returns>
-    public bool TryGetActiveEffectOfSubType(byte subType, [MaybeNullWhen(false)] out MagicEffect effect)
+    /// <returns>The effect, if found.</returns>
+    public async ValueTask<MagicEffect?> TryGetActiveEffectOfSubTypeAsync(byte subType)
     {
-        lock (this._addLock)
-        {
-            effect = this.ActiveEffects.Values.FirstOrDefault(e => e.Definition.SubType == subType);
-            return effect is not null;
-        }
+        using var l = await this._addLock.LockAsync();
+        return this.ActiveEffects.Values.FirstOrDefault(e => e.Definition.SubType == subType);
     }
 
     /// <inheritdoc />
-    protected override void Dispose(bool disposing)
+    protected override async ValueTask DisposeAsyncCore()
     {
-        base.Dispose(disposing);
-        this.ClearAllEffects();
+        await this.ClearAllEffectsAsync().ConfigureAwait(false);
+        await base.DisposeAsyncCore().ConfigureAwait(false);
     }
 
-    private void OnEffectTimeOut(object? sender, EventArgs args)
+    private async ValueTask OnEffectTimeOutAsync(MagicEffect effect)
     {
-        var effect = sender as MagicEffect;
-        if (effect is null)
-        {
-            return;
-        }
-
-        lock (this._addLock)
+        using (await this._addLock.LockAsync())
         {
             this.ActiveEffects.Remove(effect.Id);
             this._contains[effect.Id] = false;
@@ -129,10 +136,15 @@ public class MagicEffectsList : Disposable
             this._owner.Attributes.RemoveElement(powerUp.Element, powerUp.Target);
         }
 
-        (this._owner as Player)?.ViewPlugIns.GetPlugIn<IDeactivateMagicEffectPlugIn>()?.DeactivateMagicEffect(effect, this._owner);
+        if (effect.Id >= InvisibleEffectStartIndex)
+        {
+            return;
+        }
+
+        (this._owner as IWorldObserver)?.InvokeViewPlugInAsync<IDeactivateMagicEffectPlugIn>(p => p.DeactivateMagicEffectAsync(effect, this._owner));
         if (effect.Definition.InformObservers && this._owner.IsAlive)
         {
-            (this._owner as IObservable)?.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IDeactivateMagicEffectPlugIn>()?.DeactivateMagicEffect(effect, this._owner), false);
+            (this._owner as IObservable)?.ForEachWorldObserverAsync<IDeactivateMagicEffectPlugIn>(p => p.DeactivateMagicEffectAsync(effect, this._owner), false);
         }
     }
 
@@ -149,7 +161,7 @@ public class MagicEffectsList : Disposable
             return;
         }
 
-        //// GMO behaviour would be: RemoveEffect(magicEffect.Id); AddEffect(effect);
+        //// GMO behaviour would be: RemoveEffect(magicEffect.Id); AddEffectAsync(effect);
         //// I change the existing Timer and Buff Value, without removing the effect itself.
         //// This doesn't only save traffic, it also looks better in game.
         magicEffect.Duration = effect.Duration;

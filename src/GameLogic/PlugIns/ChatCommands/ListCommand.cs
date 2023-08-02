@@ -12,7 +12,7 @@ using MUnique.OpenMU.PlugIns;
 /// </summary>
 [Guid("a5b0a3e5-bb2a-4287-821a-cd97714fe209")]
 [PlugIn("List command", "Lists all the commands.")]
-[ChatCommandHelp(Command, null)]
+[ChatCommandHelp(Command, "Lists all the commands.", null)]
 public class ListCommand : IChatCommandPlugIn
 {
     private const string Command = "/list";
@@ -24,13 +24,13 @@ public class ListCommand : IChatCommandPlugIn
     public CharacterStatus MinCharacterStatusRequirement => CharacterStatus.Normal;
 
     /// <inheritdoc />
-    public void HandleCommand(Player player, string command)
+    public async ValueTask HandleCommandAsync(Player player, string command)
     {
         var commands = player.GetAvailableChatCommands();
 
         foreach (var commandUsage in commands.Select(x => x.Usage))
         {
-            player.ShowMessage(commandUsage);
+            await player.ShowMessageAsync(commandUsage).ConfigureAwait(false);
         }
     }
 }

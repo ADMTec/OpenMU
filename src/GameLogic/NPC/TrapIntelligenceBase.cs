@@ -53,14 +53,9 @@ public abstract class TrapIntelligenceBase : INpcIntelligence, IDisposable
         get
         {
             List<IWorldObserver> tempObservers;
-            this.Trap.ObserverLock.EnterReadLock();
-            try
+            using (this.Trap.ObserverLock.ReaderLock()) // todo: async?
             {
                 tempObservers = new List<IWorldObserver>(this.Trap.Observers);
-            }
-            finally
-            {
-                this.Trap.ObserverLock.ExitReadLock();
             }
 
             return tempObservers.OfType<IAttackable>();
@@ -76,7 +71,15 @@ public abstract class TrapIntelligenceBase : INpcIntelligence, IDisposable
     /// <inheritdoc/>
     public void Start()
     {
-        this._aiTimer = new Timer(state => this.SafeTick(), null, this.Trap.Definition.AttackDelay, this.Trap.Definition.AttackDelay);
+        var startDelay = this.Npc.Definition.AttackDelay + TimeSpan.FromMilliseconds(Rand.NextInt(0, 1000));
+        this._aiTimer ??= new Timer(_ => this.SafeTick(), null, startDelay, this.Npc.Definition.AttackDelay);
+    }
+
+    /// <inheritdoc/>
+    public void Pause()
+    {
+        this._aiTimer?.Dispose();
+        this._aiTimer = null;
     }
 
     /// <inheritdoc/>
@@ -89,13 +92,14 @@ public abstract class TrapIntelligenceBase : INpcIntelligence, IDisposable
     /// <summary>
     /// Function which is executed in an interval.
     /// </summary>
-    protected abstract void Tick();
+    protected abstract ValueTask TickAsync();
 
-    private void SafeTick()
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD100:Avoid async void methods", Justification = "Catching all Exceptions.")]
+    private async void SafeTick()
     {
         try
         {
-            this.Tick();
+            await this.TickAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {

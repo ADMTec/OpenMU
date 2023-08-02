@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.GameLogic.PlugIns;
 
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using MUnique.OpenMU.GameLogic.Views.World;
@@ -16,16 +17,14 @@ using MUnique.OpenMU.PlugIns;
 [Guid("3E702A15-653A-48EF-899C-4CDB2239A90C")]
 public class WeatherUpdatePlugIn : IPeriodicTaskPlugIn, IObjectAddedToMapPlugIn
 {
-    private readonly Random _random = new ();
-
-    private readonly IDictionary<GameMap, (byte, byte)> _weatherStates = new Dictionary<GameMap, (byte, byte)>();
+    private readonly IDictionary<GameMap, (byte, byte)> _weatherStates = new ConcurrentDictionary<GameMap, (byte, byte)>();
 
     private DateTime _nextRunUtc = DateTime.UtcNow;
 
     private bool _isRunning;
 
     /// <inheritdoc />
-    public void ExecuteTask(GameContext gameContext)
+    public async ValueTask ExecuteTaskAsync(GameContext gameContext)
     {
         if (this._nextRunUtc > DateTime.UtcNow || this._isRunning)
         {
@@ -35,14 +34,14 @@ public class WeatherUpdatePlugIn : IPeriodicTaskPlugIn, IObjectAddedToMapPlugIn
         this._isRunning = true;
         try
         {
-            foreach (var map in gameContext.Maps)
+            foreach (var map in await gameContext.GetMapsAsync())
             {
-                var weather = (byte)this._random.Next(0, 3);
-                var variation = (byte)this._random.Next(0, 10);
+                var weather = (byte)Rand.NextInt(0, 3);
+                var variation = (byte)Rand.NextInt(0, 10);
                 this._weatherStates[map] = (weather, variation);
             }
 
-            gameContext.ForEachPlayer(this.TrySendPlayerUpdate);
+            await gameContext.ForEachPlayerAsync(this.TrySendPlayerUpdateAsync).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -51,20 +50,28 @@ public class WeatherUpdatePlugIn : IPeriodicTaskPlugIn, IObjectAddedToMapPlugIn
         finally
         {
             this._isRunning = false;
-            this._nextRunUtc = DateTime.UtcNow.AddSeconds(this._random.Next(10, 20));
+            this._nextRunUtc = DateTime.UtcNow.AddSeconds(Rand.NextInt(10, 20));
         }
     }
 
     /// <inheritdoc />
-    public void ObjectAddedToMap(GameMap map, ILocateable addedObject)
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD100:Avoid async void methods", Justification = "Catching all Exceptions.")]
+    public async void ObjectAddedToMap(GameMap map, ILocateable addedObject)
     {
-        if (addedObject is Player player)
+        try
         {
-            this.TrySendPlayerUpdate(player);
+            if (addedObject is Player player)
+            {
+                await this.TrySendPlayerUpdateAsync(player).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            // must be catched because it's an async void method.
         }
     }
 
-    private void TrySendPlayerUpdate(Player player)
+    private async Task TrySendPlayerUpdateAsync(Player player)
     {
         if (player.CurrentMap is { } map
             && player.PlayerState.CurrentState != PlayerState.Disconnected
@@ -73,7 +80,7 @@ public class WeatherUpdatePlugIn : IPeriodicTaskPlugIn, IObjectAddedToMapPlugIn
         {
             try
             {
-                player.ViewPlugIns.GetPlugIn<IWeatherStatusUpdatePlugIn>()?.ShowWeather(weather.Item1, weather.Item2);
+                await player.InvokeViewPlugInAsync<IWeatherStatusUpdatePlugIn>(p => p.ShowWeatherAsync(weather.Item1, weather.Item2)).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

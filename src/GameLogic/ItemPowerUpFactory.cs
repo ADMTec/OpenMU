@@ -55,6 +55,11 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
         {
             yield return powerUp;
         }
+
+        if (this.GetPetLevel(item, attributeHolder) is { } petLevel)
+        {
+            yield return petLevel;
+        }
     }
 
     /// <inheritdoc/>
@@ -67,7 +72,8 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
             .Where(i => i.Durability > 0)
             .ToList();
         var itemGroups = activeItems
-            .SelectMany(i => i.ItemSetGroups ?? Enumerable.Empty<ItemSetGroup>())
+            .SelectMany(i => i.ItemSetGroups)
+            .Select(i => i.ItemSetGroup!)
             .Distinct();
 
         var result = Enumerable.Empty<PowerUpDefinition>();
@@ -80,7 +86,7 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
                 continue;
             }
 
-            var itemsOfGroup = activeItems.Where(i => (i.ItemSetGroups?.Contains(group) ?? false)
+            var itemsOfGroup = activeItems.Where(i => i.ItemSetGroups.Any(ios => ios.ItemSetGroup == group)
                                                       && (group.SetLevel == 0 || i.Level >= group.SetLevel));
             var setMustBeComplete = group.MinimumItemCount == group.Items.Count;
             if (group.SetLevel > 0 && setMustBeComplete && itemsOfGroup.All(i => i.Level > group.SetLevel))
@@ -164,7 +170,7 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
 
         yield return new PowerUpWrapper(attribute.BaseValueElement, attribute.TargetAttribute, attributeHolder);
 
-        var levelBonus = (attribute.BonusPerLevel ?? Enumerable.Empty<LevelBonus>()).FirstOrDefault(bonus => bonus.Level == item.Level);
+        var levelBonus = (attribute.BonusPerLevelTable?.BonusPerLevel ?? Enumerable.Empty<LevelBonus>()).FirstOrDefault(bonus => bonus.Level == item.Level);
         if (levelBonus != null)
         {
             levelBonus.ThrowNotInitializedProperty(levelBonus.AdditionalValueElement is null, nameof(levelBonus.AdditionalValueElement));
@@ -183,19 +189,16 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
         foreach (var optionLink in options)
         {
             var option = optionLink.ItemOption ?? throw Error.NotInitializedProperty(optionLink, nameof(optionLink.ItemOption));
-            var powerUp = option.PowerUpDefinition ?? throw Error.NotInitializedProperty(option, nameof(option.PowerUpDefinition));
             var level = option.LevelType == LevelType.ItemLevel ? item.Level : optionLink.Level;
-            if (level > 0)
-            {
-                var optionOfLevel = option.LevelDependentOptions?.FirstOrDefault(l => l.Level == level);
-                if (optionOfLevel is null && level > 1)
-                {
-                    this._logger.LogWarning($"Item has {nameof(IncreasableItemOption)} with level > 1, but no definition in {nameof(IncreasableItemOption.LevelDependentOptions)}");
-                    continue;
-                }
 
-                powerUp = optionOfLevel?.PowerUpDefinition ?? powerUp;
+            var optionOfLevel = option.LevelDependentOptions?.FirstOrDefault(l => l.Level == level);
+            if (optionOfLevel is null && level > 1)
+            {
+                this._logger.LogWarning($"Item has {nameof(IncreasableItemOption)} with level > 1, but no definition in {nameof(IncreasableItemOption.LevelDependentOptions)}");
+                continue;
             }
+
+            var powerUp = optionOfLevel?.PowerUpDefinition ?? option.PowerUpDefinition;
 
             if (powerUp?.Boost is null)
             {
@@ -208,5 +211,101 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
                 yield return wrapper;
             }
         }
+
+        foreach (var powerUpWrapper in this.CreateExcellentAndAncientBasePowerUpWrappers(item, attributeHolder))
+        {
+            yield return powerUpWrapper;
+        }
+    }
+
+    // TODO: Make this more generic and configurable?
+    private IEnumerable<PowerUpWrapper> CreateExcellentAndAncientBasePowerUpWrappers(Item item, AttributeSystem attributeHolder)
+    {
+        var itemIsExcellent = item.IsExcellent();
+        var itemIsAncient = item.IsAncient();
+
+        if (!itemIsAncient && !itemIsExcellent)
+        {
+            yield break;
+        }
+
+        var baseDropLevel = item.Definition!.DropLevel;
+        var ancientDropLevel = item.Definition!.CalculateDropLevel(true, false, 0);
+
+        if (InventoryConstants.IsDefenseItemSlot(item.ItemSlot))
+        {
+            var baseDefense = (int)(item.Definition?.BasePowerUpAttributes.FirstOrDefault(a => a.TargetAttribute == Stats.DefenseBase)?.BaseValue ?? 0);
+            var additionalDefense = (baseDefense * 12 / baseDropLevel) + (baseDropLevel / 5) + 4;
+            yield return new PowerUpWrapper(new SimpleElement(additionalDefense, AggregateType.AddRaw), Stats.DefenseBase, attributeHolder);
+
+            if (itemIsAncient)
+            {
+                var ancientDefenseBonus = (baseDefense * 3 / ancientDropLevel) + (ancientDropLevel / 30) + 2;
+                yield return new PowerUpWrapper(new SimpleElement(ancientDefenseBonus, AggregateType.AddRaw), Stats.DefenseBase, attributeHolder);
+            }
+        }
+
+        if (item.IsShield())
+        {
+            var baseDefenseRate = (int)(item.Definition?.BasePowerUpAttributes.FirstOrDefault(a => a.TargetAttribute == Stats.DefenseRatePvm)?.BaseValue ?? 0);
+            var additionalRate = (baseDefenseRate * 25 / baseDropLevel) + 5;
+            yield return new PowerUpWrapper(new SimpleElement(additionalRate, AggregateType.AddRaw), Stats.DefenseRatePvm, attributeHolder);
+            if (itemIsAncient)
+            {
+                var baseDefense = (int)(item.Definition?.BasePowerUpAttributes.FirstOrDefault(a => a.TargetAttribute == Stats.DefenseBase)?.BaseValue ?? 0);
+                var ancientDefenseBonus = (baseDefense * 20 / ancientDropLevel) + 2;
+                yield return new PowerUpWrapper(new SimpleElement(ancientDefenseBonus, AggregateType.AddRaw), Stats.DefenseBase, attributeHolder);
+            }
+        }
+
+        if (item.IsPhysicalWeapon(out var minPhysDmg))
+        {
+            var additionalDmg = ((int)minPhysDmg * 25 / baseDropLevel) + 5;
+            yield return new PowerUpWrapper(new SimpleElement(additionalDmg, AggregateType.AddRaw), Stats.MinimumPhysBaseDmgByWeapon, attributeHolder);
+            yield return new PowerUpWrapper(new SimpleElement(additionalDmg, AggregateType.AddRaw), Stats.MaximumPhysBaseDmgByWeapon, attributeHolder);
+            if (itemIsAncient)
+            {
+                var ancientBonus = 5 + (ancientDropLevel / 40);
+                yield return new PowerUpWrapper(new SimpleElement(ancientBonus, AggregateType.AddRaw), Stats.MinimumPhysBaseDmgByWeapon, attributeHolder);
+                yield return new PowerUpWrapper(new SimpleElement(ancientBonus, AggregateType.AddRaw), Stats.MaximumPhysBaseDmgByWeapon, attributeHolder);
+            }
+        }
+
+        if (item.IsWizardryWeapon(out var staffRise))
+        {
+            var additionalRise = ((int)staffRise * 25 / baseDropLevel) + 5;
+            yield return new PowerUpWrapper(new SimpleElement(additionalRise, AggregateType.AddRaw), Stats.StaffRise, attributeHolder);
+            if (itemIsAncient)
+            {
+                var ancientRiseBonus = 5 + (ancientDropLevel / 60);
+                yield return new PowerUpWrapper(new SimpleElement(ancientRiseBonus, AggregateType.AddRaw), Stats.StaffRise, attributeHolder);
+            }
+        }
+
+        if (item.IsScepter(out var scepterRise))
+        {
+            var additionalRise = ((int)scepterRise * 25 / baseDropLevel) + 5;
+            yield return new PowerUpWrapper(new SimpleElement(additionalRise, AggregateType.AddRaw), Stats.ScepterRise, attributeHolder);
+            if (itemIsAncient)
+            {
+                var ancientRiseBonus = 5 + (ancientDropLevel / 60);
+                yield return new PowerUpWrapper(new SimpleElement(ancientRiseBonus, AggregateType.AddRaw), Stats.ScepterRise, attributeHolder);
+            }
+        }
+    }
+
+    private PowerUpWrapper? GetPetLevel(Item item, AttributeSystem attributeHolder)
+    {
+        const byte darkHorseNumber = 4;
+
+        if (!item.IsTrainablePet())
+        {
+            return null;
+        }
+
+        return new PowerUpWrapper(
+            new SimpleElement(item.Level, AggregateType.AddRaw),
+            item.Definition?.Number == darkHorseNumber ? Stats.HorseLevel : Stats.RavenLevel,
+            attributeHolder);
     }
 }

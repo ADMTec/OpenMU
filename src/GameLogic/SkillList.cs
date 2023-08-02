@@ -4,14 +4,16 @@
 
 namespace MUnique.OpenMU.GameLogic;
 
+using System.ComponentModel;
 using MUnique.OpenMU.AttributeSystem;
 using MUnique.OpenMU.GameLogic.Attributes;
 using MUnique.OpenMU.GameLogic.Views.Character;
+using Nito.AsyncEx.Synchronous;
 
 /// <summary>
 /// The implementation of the skill list, which automatically adds the passive skill power ups to the player.
 /// </summary>
-public class SkillList : ISkillList
+public sealed class SkillList : ISkillList, IDisposable
 {
     private readonly IDictionary<ushort, SkillEntry> _availableSkills;
 
@@ -20,6 +22,8 @@ public class SkillList : ISkillList
     private readonly ICollection<SkillEntry> _itemSkills;
 
     private readonly Player _player;
+
+    private List<IDisposable>? _passivePowerUps;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SkillList"/> class.
@@ -46,8 +50,8 @@ public class SkillList : ISkillList
         this._player.Inventory.EquippedItems
             .Where(item => item.HasSkill)
             .Where(item => (item.Definition ?? throw Error.NotInitializedProperty(item, nameof(item.Definition))).Skill != null)
-            .ForEach(item => this.AddItemSkill(item.Definition!.Skill!));
-        this._player.Inventory.EquippedItemsChanged += this.Inventory_WearingItemsChanged;
+            .ForEach(item => this.AddItemSkillAsync(item.Definition!.Skill!).AsTask().WaitAndUnwrapException());
+        this._player.Inventory.EquippedItemsChanged += this.Inventory_WearingItemsChangedAsync;
         foreach (var skill in this._learnedSkills.Where(s => s.Skill!.SkillType == SkillType.PassiveBoost))
         {
             this.CreatePowerUpForPassiveSkill(skill);
@@ -60,6 +64,15 @@ public class SkillList : ISkillList
     /// <inheritdoc/>
     public byte SkillCount => (byte)this._availableSkills.Count;
 
+    private List<IDisposable> PassivePowerUps => this._passivePowerUps ??= new ();
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        this._passivePowerUps?.ForEach(p => p.Dispose());
+        this._passivePowerUps = null;
+    }
+
     /// <inheritdoc/>
     public SkillEntry? GetSkill(ushort skillId)
     {
@@ -68,16 +81,16 @@ public class SkillList : ISkillList
     }
 
     /// <inheritdoc/>
-    public void AddLearnedSkill(Skill skill)
+    public async ValueTask AddLearnedSkillAsync(Skill skill)
     {
         var skillEntry = this._player.PersistenceContext.CreateNew<SkillEntry>();
         skillEntry.Skill = skill;
         skillEntry.Level = 0;
-        this.AddLearnedSkill(skillEntry);
+        await this.AddLearnedSkillAsync(skillEntry).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public bool RemoveItemSkill(ushort skillId)
+    public async ValueTask<bool> RemoveItemSkillAsync(ushort skillId)
     {
         this._availableSkills.TryGetValue(skillId, out var skillEntry);
         if (skillEntry is null)
@@ -89,7 +102,7 @@ public class SkillList : ISkillList
         var skillRemoved = this._itemSkills.Remove(skillEntry);
         if (skillRemoved && this._itemSkills.All(s => s.Skill!.Number != skillId))
         {
-            this._player.ViewPlugIns.GetPlugIn<ISkillListViewPlugIn>()?.RemoveSkill(skillEntry.Skill!);
+            await this._player.InvokeViewPlugInAsync<ISkillListViewPlugIn>(p => p.RemoveSkillAsync(skillEntry.Skill!)).ConfigureAwait(false);
             this._availableSkills.Remove(skillId);
         }
 
@@ -102,7 +115,7 @@ public class SkillList : ISkillList
         return this._availableSkills.ContainsKey(skillId);
     }
 
-    private void AddItemSkill(Skill skill)
+    private async ValueTask AddItemSkillAsync(Skill skill)
     {
         var skillEntry = new SkillEntry
         {
@@ -115,16 +128,16 @@ public class SkillList : ISkillList
         if (!this.ContainsSkill((ushort)skill.Number))
         {
             this._availableSkills.Add(skill.Number.ToUnsigned(), skillEntry);
-            this._player.ViewPlugIns.GetPlugIn<ISkillListViewPlugIn>()?.AddSkill(skill);
+            await this._player.InvokeViewPlugInAsync<ISkillListViewPlugIn>(p => p.AddSkillAsync(skill)).ConfigureAwait(false);
         }
     }
 
-    private void AddLearnedSkill(SkillEntry skill)
+    private async ValueTask AddLearnedSkillAsync(SkillEntry skill)
     {
         this._availableSkills.Add(skill.Skill!.Number.ToUnsigned(), skill);
         this._learnedSkills.Add(skill);
 
-        this._player.ViewPlugIns.GetPlugIn<ISkillListViewPlugIn>()?.AddSkill(skill.Skill);
+        await this._player.InvokeViewPlugInAsync<ISkillListViewPlugIn>(p => p.AddSkillAsync(skill.Skill)).ConfigureAwait(false);
         if (skill.Skill.SkillType == SkillType.PassiveBoost)
         {
             this.CreatePowerUpForPassiveSkill(skill);
@@ -150,11 +163,12 @@ public class SkillList : ISkillList
             return;
         }
 
-        // maybe to do: We don't need to hold it, as it's added to the player attributes.
-        _ = new PowerUpWrapper(new PassiveSkillBoostPowerUp(skillEntry), masterDefinition.TargetAttribute, this._player.Attributes!);
+        var passiveBoost = new PassiveSkillBoostPowerUp(skillEntry);
+        this.PassivePowerUps.Add(passiveBoost);
+        this.PassivePowerUps.Add(new PowerUpWrapper(passiveBoost, masterDefinition.TargetAttribute, this._player.Attributes!));
     }
 
-    private void Inventory_WearingItemsChanged(object? sender, ItemEventArgs eventArgs)
+    private async ValueTask Inventory_WearingItemsChangedAsync(ItemEventArgs eventArgs)
     {
         var item = eventArgs.Item;
         if (!item.HasSkill || item.Definition?.Skill is null)
@@ -165,28 +179,24 @@ public class SkillList : ISkillList
         var inventory = this._player.Inventory;
         if (inventory!.EquippedItems.Contains(item))
         {
-            this.AddItemSkill(item.Definition.Skill);
+            await this.AddItemSkillAsync(item.Definition.Skill).ConfigureAwait(false);
         }
         else
         {
-            this.RemoveItemSkill(item.Definition.Skill.Number.ToUnsigned());
+            await this.RemoveItemSkillAsync(item.Definition.Skill.Number.ToUnsigned()).ConfigureAwait(false);
         }
     }
 
-    private sealed class PassiveSkillBoostPowerUp : IElement
+    private sealed class PassiveSkillBoostPowerUp : IElement, IDisposable
     {
+        private readonly SkillEntry _skillEntry;
+
         public PassiveSkillBoostPowerUp(SkillEntry skillEntry)
         {
-            this.Value = skillEntry.CalculateValue();
-            this.AggregateType = skillEntry.Skill!.MasterDefinition!.Aggregation;
-            skillEntry.PropertyChanged += (sender, eventArgs) =>
-            {
-                if (eventArgs.PropertyName == nameof(SkillEntry.Level))
-                {
-                    this.Value = skillEntry.CalculateValue();
-                    this.ValueChanged?.Invoke(this, EventArgs.Empty);
-                }
-            };
+            this._skillEntry = skillEntry;
+            this.Value = this._skillEntry.CalculateValue();
+            this.AggregateType = this._skillEntry.Skill!.MasterDefinition!.Aggregation;
+            this._skillEntry.PropertyChanged += this.OnSkillEntryOnPropertyChanged;
         }
 
         public event EventHandler? ValueChanged;
@@ -194,5 +204,25 @@ public class SkillList : ISkillList
         public float Value { get; private set; }
 
         public AggregateType AggregateType { get; }
+
+        public void Dispose()
+        {
+            this._skillEntry.PropertyChanged -= this.OnSkillEntryOnPropertyChanged;
+        }
+
+        /// <inheritdoc/>
+        public override string ToString()
+        {
+            return $"{this.Value} ({this.AggregateType})";
+        }
+
+        private void OnSkillEntryOnPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
+        {
+            if (eventArgs.PropertyName == nameof(SkillEntry.Level))
+            {
+                this.Value = this._skillEntry.CalculateValue();
+                this.ValueChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
     }
 }

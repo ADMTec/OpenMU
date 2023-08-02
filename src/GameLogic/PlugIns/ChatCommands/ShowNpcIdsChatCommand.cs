@@ -14,7 +14,7 @@ using MUnique.OpenMU.PlugIns;
 /// </summary>
 [Guid("498D0205-388F-410A-A7C7-49069A64D3A9")]
 [PlugIn("Show NPC ids chat command", "Handles the chat command '/showids'.")]
-[ChatCommandHelp(Command, CharacterStatus.GameMaster)]
+[ChatCommandHelp(Command, "Shows the IDs of all NPCs in the view range of the game master.", CharacterStatus.GameMaster)]
 internal sealed class ShowNpcIdsChatCommand : IChatCommandPlugIn
 {
     private const string Command = "/showids";
@@ -26,12 +26,12 @@ internal sealed class ShowNpcIdsChatCommand : IChatCommandPlugIn
     public CharacterStatus MinCharacterStatusRequirement => CharacterStatus.GameMaster;
 
     /// <inheritdoc/>
-    public void HandleCommand(Player player, string command)
+    public async ValueTask HandleCommandAsync(Player player, string command)
     {
         var monsters = player.ObservingBuckets.SelectMany(b => b).OfType<NonPlayerCharacter>().ToList();
         foreach (var monster in monsters)
         {
-            player.ViewPlugIns.GetPlugIn<IShowMessageOfObjectPlugIn>()?.ShowMessageOfObject($"{monster.Id}", monster);
+            await player.InvokeViewPlugInAsync<IShowMessageOfObjectPlugIn>(p => p.ShowMessageOfObjectAsync($"{monster.Id}", monster)).ConfigureAwait(false);
         }
     }
 }

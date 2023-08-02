@@ -14,7 +14,7 @@ using MUnique.OpenMU.PlugIns;
 /// </summary>
 [Guid("12A6E159-0D5E-44DE-8CF8-012A7278D42C")]
 [PlugIn("Guild war chat command", "Handles the chat command '/war <guild>'. Sends a request to the guild master of the requested guild.")]
-[ChatCommandHelp(Command, typeof(GuildWarChatCommandArgs), CharacterStatus.Normal)]
+[ChatCommandHelp(Command, "Sends a guild war request to the master of the requested guild.", typeof(GuildWarChatCommandArgs), CharacterStatus.Normal)]
 public class GuildWarChatCommandPlugIn : ChatCommandPlugInBase<GuildWarChatCommandArgs>
 {
     private const string Command = "/war";
@@ -28,8 +28,8 @@ public class GuildWarChatCommandPlugIn : ChatCommandPlugInBase<GuildWarChatComma
     public override CharacterStatus MinCharacterStatusRequirement => CharacterStatus.Normal;
 
     /// <inheritdoc />
-    protected override void DoHandleCommand(Player guildMaster, GuildWarChatCommandArgs arguments)
+    protected override async ValueTask DoHandleCommandAsync(Player guildMaster, GuildWarChatCommandArgs arguments)
     {
-        this._action.RequestWar(guildMaster, arguments.GuildName);
+        await this._action.RequestWarAsync(guildMaster, arguments.GuildName).ConfigureAwait(false);
     }
 }

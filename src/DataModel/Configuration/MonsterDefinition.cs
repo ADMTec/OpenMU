@@ -204,6 +204,11 @@ public enum NpcObjectKind
     /// The npc is a soccer ball.
     /// </summary>
     SoccerBall,
+
+    /// <summary>
+    /// The npc is a destructible.
+    /// </summary>
+    Destructible,
 }
 
 /// <summary>
@@ -336,6 +341,6 @@ public class MonsterDefinition
     /// <inheritdoc/>
     public override string ToString()
     {
-        return $"{this.Number} - {this.Designation}";
+        return $"{this.Designation} ({this.Number})";
     }
 }

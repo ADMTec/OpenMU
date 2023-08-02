@@ -14,7 +14,7 @@ using MUnique.OpenMU.PlugIns;
 /// </summary>
 [Guid("B3DE58F3-B604-4F59-9122-E686AD90BE7B")]
 [PlugIn("Move remote monster chat command", "Handles the chat command '/movemonster <id> <x> <y>'. Moves a previously created monster which can be remote controlled by the GM.")]
-[ChatCommandHelp(Command, typeof(MoveMonsterCommandArgs), CharacterStatus.GameMaster)]
+[ChatCommandHelp(Command, "Moves a previously created monster which can be remote controlled by the game master.", typeof(MoveMonsterCommandArgs), CharacterStatus.GameMaster)]
 internal class MoveMonsterChatCommand : ChatCommandPlugInBase<MoveMonsterCommandArgs>
 {
     private const string Command = "/movemonster";
@@ -26,15 +26,15 @@ internal class MoveMonsterChatCommand : ChatCommandPlugInBase<MoveMonsterCommand
     public override CharacterStatus MinCharacterStatusRequirement => CharacterStatus.GameMaster;
 
     /// <inheritdoc />
-    protected override void DoHandleCommand(Player gameMaster, MoveMonsterCommandArgs arguments)
+    protected override async ValueTask DoHandleCommandAsync(Player gameMaster, MoveMonsterCommandArgs arguments)
     {
         var monster = gameMaster.ObservingBuckets.SelectMany(b => b).OfType<Monster>().FirstOrDefault(m => m.Id == arguments.Id);
         if (monster is null)
         {
-            this.ShowMessageTo(gameMaster, $"Monster with id {arguments.Id} not found.");
+            await this.ShowMessageToAsync(gameMaster, $"Monster with id {arguments.Id} not found.").ConfigureAwait(false);
             return;
         }
 
-        monster.Move(arguments.Coordinates);
+        await monster.MoveAsync(arguments.Coordinates).ConfigureAwait(false);
     }
 }

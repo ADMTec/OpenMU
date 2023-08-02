@@ -5,6 +5,8 @@
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Party;
 
 using MUnique.OpenMU.GameLogic;
+using MUnique.OpenMU.GameLogic.Views;
+using MUnique.OpenMU.Interfaces;
 
 /// <summary>
 /// The party response action.
@@ -16,7 +18,7 @@ public class PartyResponseAction
     /// </summary>
     /// <param name="player">The player.</param>
     /// <param name="accepted">if set to <c>true</c> the player accepted the party request of <see cref="IPartyMember.LastPartyRequester"/>.</param>
-    public void HandleResponse(Player player, bool accepted)
+    public async ValueTask HandleResponseAsync(Player player, bool accepted)
     {
         if (player.PlayerState.CurrentState != PlayerState.PartyRequest)
         {
@@ -29,7 +31,7 @@ public class PartyResponseAction
             return;
         }
 
-        player.PlayerState.TryAdvanceTo(PlayerState.EnteredWorld);
+        await player.PlayerState.TryAdvanceToAsync(PlayerState.EnteredWorld).ConfigureAwait(false);
 
         if (!accepted)
         {
@@ -43,15 +45,24 @@ public class PartyResponseAction
             return;
         }
 
+        if (player.CurrentMiniGame?.Definition.AllowParty is false)
+        {
+            await player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync("A party is not possible during this event.", MessageType.BlueNormal)).ConfigureAwait(false);
+            player.LastPartyRequester = null;
+            return;
+        }
+
         if (player.LastPartyRequester.Party != null)
         {
             // The Requester got a party already, so add him to his party
-            player.LastPartyRequester.Party.Add(player);
+            await player.LastPartyRequester.Party.AddAsync(player).ConfigureAwait(false);
         }
         else
         {
-            player.LastPartyRequester.Party = new Party(player.LastPartyRequester, player.GameContext.Configuration.MaximumPartySize, player.GameContext.LoggerFactory.CreateLogger<Party>());
-            player.LastPartyRequester.Party.Add(player);
+            var master = player.LastPartyRequester;
+            var party = new Party(player.GameContext.Configuration.MaximumPartySize, player.GameContext.LoggerFactory.CreateLogger<Party>());
+            await party.AddAsync(master).ConfigureAwait(false);
+            await party.AddAsync(player).ConfigureAwait(false);
         }
 
         player.LastPartyRequester = null;

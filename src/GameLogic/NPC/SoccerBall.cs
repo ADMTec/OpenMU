@@ -7,6 +7,8 @@ namespace MUnique.OpenMU.GameLogic.NPC;
 using MUnique.OpenMU.AttributeSystem;
 using MUnique.OpenMU.GameLogic.Views.World;
 using MUnique.OpenMU.Pathfinding;
+using MUnique.OpenMU.PlugIns;
+using Nito.AsyncEx;
 
 /// <summary>
 /// The implementation of a soccer ball.
@@ -14,7 +16,7 @@ using MUnique.OpenMU.Pathfinding;
 /// </summary>
 public sealed class SoccerBall : NonPlayerCharacter, IAttackable, IMovable
 {
-    private readonly object _moveLock = new ();
+    private readonly AsyncLock _moveLock = new ();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SoccerBall"/> class.
@@ -32,7 +34,10 @@ public sealed class SoccerBall : NonPlayerCharacter, IAttackable, IMovable
     /// <summary>
     /// Occurs when it has been moved.
     /// </summary>
-    public event EventHandler<(Point From, Point To)>? Moved;
+    public event AsyncEventHandler<(Point From, Point To)>? Moved;
+
+    /// <inheritdoc />
+    public event EventHandler<DeathInformation>? Died;
 
     /// <inheritdoc />
     public IAttributeSystem Attributes { get; }
@@ -50,33 +55,44 @@ public sealed class SoccerBall : NonPlayerCharacter, IAttackable, IMovable
     public DeathInformation? LastDeath => null;
 
     /// <inheritdoc />
-    public void AttackBy(IAttacker attacker, SkillEntry? skill)
+    public async ValueTask AttackByAsync(IAttacker attacker, SkillEntry? skill, bool isCombo)
     {
         var direction = attacker.GetDirectionTo(this);
-        this.MoveToDirection(direction, skill is { });
+        await this.MoveToDirectionAsync(direction, skill is { }).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public void ReflectDamage(IAttacker reflector, uint damage)
+    public ValueTask ReflectDamageAsync(IAttacker reflector, uint damage)
     {
         // A ball doesn't attack, so it doesn't reflect.
+        return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc />
-    public void ApplyPoisonDamage(IAttacker initialAttacker, uint damage)
+    public ValueTask ApplyPoisonDamageAsync(IAttacker initialAttacker, uint damage)
     {
         // A ball doesn't take any damage
+        return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc />
-    public void Move(Point target)
+    public ValueTask KillInstantlyAsync()
     {
-        var old = this.Position;
-        this.CurrentMap.Move(this, target, this._moveLock, MoveType.Instant);
-        this.Moved?.Invoke(this, (From: old, To: target));
+        throw new NotImplementedException();
     }
 
-    private void MoveToDirection(Direction direction, bool withSkill)
+    /// <inheritdoc />
+    public async ValueTask MoveAsync(Point target)
+    {
+        var old = this.Position;
+        await this.CurrentMap.MoveAsync(this, target, this._moveLock, MoveType.Instant).ConfigureAwait(false);
+        if (this.Moved is { } eventHandler)
+        {
+            await eventHandler((From: old, To: target)).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask MoveToDirectionAsync(Direction direction, bool withSkill)
     {
         var terrain = this.CurrentMap.Terrain;
         var range = withSkill ? 3 : 2;
@@ -96,7 +112,7 @@ public sealed class SoccerBall : NonPlayerCharacter, IAttackable, IMovable
 
         if (finalTarget != this.Position)
         {
-            this.Move(finalTarget);
+            await this.MoveAsync(finalTarget).ConfigureAwait(false);
         }
     }
 }

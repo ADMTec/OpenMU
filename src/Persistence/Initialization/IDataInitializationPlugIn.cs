@@ -15,9 +15,14 @@ using MUnique.OpenMU.PlugIns;
 public interface IDataInitializationPlugIn : IStrategyPlugIn<string>
 {
     /// <summary>
+    /// Gets the caption for this initialization plugin which will be visible on the setup page.
+    /// </summary>
+    string Caption { get; }
+
+    /// <summary>
     /// Creates the initial data for a server.
     /// </summary>
     /// <param name="numberOfGameServers">The number of game servers.</param>
     /// <param name="createTestAccounts">If set to <c>true</c>, test accounts should be created.</param>
-    void CreateInitialData(byte numberOfGameServers, bool createTestAccounts);
+    Task CreateInitialDataAsync(byte numberOfGameServers, bool createTestAccounts);
 }

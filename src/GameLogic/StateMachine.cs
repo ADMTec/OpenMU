@@ -5,7 +5,8 @@
 namespace MUnique.OpenMU.GameLogic;
 
 using System.ComponentModel;
-using System.Threading;
+using MUnique.OpenMU.PlugIns;
+using Nito.AsyncEx;
 
 /// <summary>
 /// A state machine.
@@ -15,12 +16,12 @@ public class StateMachine
     /// <summary>
     /// The lock object for state transitions.
     /// </summary>
-    private readonly object _lockObject = new ();
+    private readonly AsyncLock _asyncLock = new();
 
     /// <summary>
     /// A cancel event args object, which is getting reused.
     /// </summary>
-    private readonly StateChangeEventArgs _cachedCancelEventArgs = new ();
+    private readonly StateChangeEventArgs _cachedCancelEventArgs = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StateMachine"/> class.
@@ -32,26 +33,19 @@ public class StateMachine
     }
 
     /// <summary>
-    /// The state change cancel event handler.
-    /// </summary>
-    /// <param name="sender">The sender of the event.</param>
-    /// <param name="e">The event arguments.</param>
-    public delegate void StateChangeCancelEventHandler(object? sender, StateChangeEventArgs e);
-
-    /// <summary>
     /// Event that fires just before the state changes.
     /// </summary>
-    public event StateChangeCancelEventHandler? StateChanges;
+    public event AsyncEventHandler<StateChangeEventArgs>? StateChanges;
 
     /// <summary>
     /// Event that fires after the state have changed.
     /// </summary>
-    public event EventHandler? StateChanged;
+    public event AsyncEventHandler<StateChangedEventArgs>? StateChanged;
 
     /// <summary>
     /// Gets the current state.
     /// </summary>
-    public State? CurrentState { get; private set; }
+    public State CurrentState { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether the state machine is in a finished state, that means that no further state changes are possible.
@@ -63,21 +57,21 @@ public class StateMachine
     /// </summary>
     /// <param name="nextState">The state to advance to.</param>
     /// <returns>The success.</returns>
-    public bool TryAdvanceTo(State nextState)
+    public async ValueTask<bool> TryAdvanceToAsync(State nextState)
     {
         if (this.CurrentState?.PossibleTransitions is null)
         {
             return false;
         }
 
-        lock (this._lockObject)
+        using var l = await this._asyncLock.LockAsync();
+
+        if (this.CurrentState.PossibleTransitions.Contains(nextState) && await this.OnStateChangingAsync(nextState).ConfigureAwait(false))
         {
-            if (this.CurrentState.PossibleTransitions.Contains(nextState) && this.OnStateChanging(nextState))
-            {
-                this.CurrentState = nextState;
-                this.OnStateChanged();
-                return true;
-            }
+            var previousState = this.CurrentState;
+            this.CurrentState = nextState;
+            await this.OnStateChangedAsync(previousState, nextState).ConfigureAwait(false);
+            return true;
         }
 
         return false;
@@ -88,15 +82,17 @@ public class StateMachine
     /// </summary>
     /// <param name="nextState">The state to advance to.</param>
     /// <returns>The state change context. On disposal of this object, the state change is getting completed.</returns>
-    public StateChangeContext TryBeginAdvanceTo(State nextState)
+    public async ValueTask<StateChangeContext> TryBeginAdvanceToAsync(State nextState)
     {
-        var context = new StateChangeContext(this._lockObject, () =>
+        var lockRelease = await this._asyncLock.LockAsync().ConfigureAwait(false);
+        var context = new StateChangeContext(lockRelease, async () =>
         {
+            var previousState = this.CurrentState;
             this.CurrentState = nextState;
-            this.OnStateChanged();
+            await this.OnStateChangedAsync(previousState, nextState).ConfigureAwait(false);
         })
         {
-            Allowed = (this.CurrentState?.PossibleTransitions?.Contains(nextState) ?? false) && this.OnStateChanging(nextState),
+            Allowed = (this.CurrentState.PossibleTransitions?.Contains(nextState) ?? false) && await this.OnStateChangingAsync(nextState).ConfigureAwait(false),
         };
 
         return context;
@@ -105,9 +101,9 @@ public class StateMachine
     /// <summary>
     /// Calls the StateChanged-Event.
     /// </summary>
-    private void OnStateChanged()
+    private async ValueTask OnStateChangedAsync(State previousState, State currentState)
     {
-        this.StateChanged?.Invoke(this, EventArgs.Empty);
+        await this.StateChanged.SafeInvokeAsync(new StateChangedEventArgs(previousState, currentState)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -115,13 +111,13 @@ public class StateMachine
     /// </summary>
     /// <param name="nextState">The next state.</param>
     /// <returns><c>True</c>, if all event handlers did not set <see cref="CancelEventArgs"/> to <c>true</c>; Otherwise, <c>false</c>.</returns>
-    private bool OnStateChanging(State nextState)
+    private async ValueTask<bool> OnStateChangingAsync(State nextState)
     {
         if (this.StateChanges != null)
         {
             this._cachedCancelEventArgs.Cancel = false;
             this._cachedCancelEventArgs.NextState = nextState;
-            this.StateChanges(this, this._cachedCancelEventArgs);
+            await this.StateChanges.SafeInvokeAsync(this._cachedCancelEventArgs).ConfigureAwait(false);
             return !this._cachedCancelEventArgs.Cancel;
         }
 
@@ -132,27 +128,26 @@ public class StateMachine
     /// The state change context for more complex state changes.
     /// On disposal of this object, the state change is getting completed.
     /// </summary>
-    public sealed class StateChangeContext : IDisposable
+    public sealed class StateChangeContext : IAsyncDisposable
     {
         /// <summary>
-        /// The lock object of the state machine.
+        /// The lock release of the acquired lock of the state machine.
         /// </summary>
-        private readonly object _lockObject;
+        private readonly IDisposable _lockRelease;
 
         /// <summary>
         /// The action which gets executed when the state change is completed.
         /// </summary>
-        private readonly Action _finishAction;
+        private readonly Func<ValueTask> _finishAction;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="StateChangeContext"/> class.
         /// </summary>
-        /// <param name="lockObject">The lock object of the state machine.</param>
+        /// <param name="lockRelease">The lock object of the state machine, which is in the locked state.</param>
         /// <param name="finishAction">The action which should get executed when the state change is completed.</param>
-        public StateChangeContext(object lockObject, Action finishAction)
+        public StateChangeContext(IDisposable lockRelease, Func<ValueTask> finishAction)
         {
-            Monitor.Enter(lockObject);
-            this._lockObject = lockObject;
+            this._lockRelease = lockRelease;
             this._finishAction = finishAction;
         }
 
@@ -162,18 +157,18 @@ public class StateMachine
         public bool Allowed { get; internal set; }
 
         /// <inheritdoc/>
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             try
             {
                 if (this.Allowed)
                 {
-                    this._finishAction();
+                    await this._finishAction().ConfigureAwait(false);
                 }
             }
             finally
             {
-                Monitor.Exit(this._lockObject);
+                this._lockRelease.Dispose();
             }
         }
     }
@@ -187,5 +182,32 @@ public class StateMachine
         /// Gets or sets the next state.
         /// </summary>
         public State? NextState { get; set; }
+    }
+
+    /// <summary>
+    /// The event args for <see cref="StateMachine.StateChanged"/>.
+    /// </summary>
+    public class StateChangedEventArgs : EventArgs
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="StateChangedEventArgs"/> class.
+        /// </summary>
+        /// <param name="previousState">State of the previous.</param>
+        /// <param name="currentStateState">State of the current state.</param>
+        public StateChangedEventArgs(State previousState, State currentStateState)
+        {
+            this.PreviousState = previousState;
+            this.CurrentStateState = currentStateState;
+        }
+
+        /// <summary>
+        /// Gets the state of the previous state.
+        /// </summary>
+        public State PreviousState { get; }
+
+        /// <summary>
+        /// Gets the state of the current state.
+        /// </summary>
+        public State CurrentStateState { get; }
     }
 }

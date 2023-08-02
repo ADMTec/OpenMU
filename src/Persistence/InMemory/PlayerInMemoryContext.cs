@@ -14,33 +14,50 @@ public class PlayerInMemoryContext : InMemoryContext, IPlayerContext
     /// <summary>
     /// Initializes a new instance of the <see cref="PlayerInMemoryContext"/> class.
     /// </summary>
-    /// <param name="manager">The manager which holds the memory repositories.</param>
-    public PlayerInMemoryContext(InMemoryRepositoryManager manager)
-        : base(manager)
+    /// <param name="provider">The manager which holds the memory repositories.</param>
+    public PlayerInMemoryContext(InMemoryRepositoryProvider provider)
+        : base(provider)
     {
     }
 
     /// <inheritdoc/>
-    public MUnique.OpenMU.DataModel.Entities.LetterBody? GetLetterBodyByHeaderId(Guid headerId)
+    public async ValueTask<MUnique.OpenMU.DataModel.Entities.LetterBody?> GetLetterBodyByHeaderIdAsync(Guid headerId)
     {
-        return this.Manager.GetRepository<LetterBody>().GetAll().FirstOrDefault(body => body.Header.Id == headerId);
+        var allLetters = await this.Provider.GetRepository<LetterBody>().GetAllAsync().ConfigureAwait(false);
+        return allLetters.FirstOrDefault(body => body.Header.Id == headerId);
     }
 
     /// <inheritdoc/>
-    public MUnique.OpenMU.DataModel.Entities.Account? GetAccountByLoginName(string loginName, string password)
+    public async ValueTask<MUnique.OpenMU.DataModel.Entities.Account?> GetAccountByLoginNameAsync(string loginName, string password)
     {
-        return this.Manager.GetRepository<Account>().GetAll().FirstOrDefault(account => account.LoginName == loginName && BCrypt.Net.BCrypt.Verify(password, account.PasswordHash));
+        var allAccounts = await this.Provider.GetRepository<Account>().GetAllAsync().ConfigureAwait(false);
+        return allAccounts.FirstOrDefault(account => account.LoginName == loginName && BCrypt.Net.BCrypt.Verify(password, account.PasswordHash));
     }
 
     /// <inheritdoc/>
-    public IEnumerable<MUnique.OpenMU.DataModel.Entities.Account> GetAccountsOrderedByLoginName(int skip, int count)
+    public async ValueTask<MUnique.OpenMU.DataModel.Entities.Account?> GetAccountByLoginNameAsync(string loginName)
     {
-        return this.Manager.GetRepository<Account>().GetAll().OrderBy(a => a.LoginName).Skip(skip).Take(count);
+        var allAccounts = await this.Provider.GetRepository<Account>().GetAllAsync().ConfigureAwait(false);
+        return allAccounts.FirstOrDefault(account => account.LoginName == loginName);
     }
 
     /// <inheritdoc/>
-    public bool CanSaveLetter(Interfaces.LetterHeader letterHeader)
+    public async ValueTask<IEnumerable<MUnique.OpenMU.DataModel.Entities.Account>> GetAccountsOrderedByLoginNameAsync(int skip, int count)
+    {
+        var allAccounts = await this.Provider.GetRepository<Account>().GetAllAsync().ConfigureAwait(false);
+        return allAccounts.OrderBy(a => a.LoginName).Skip(skip).Take(count);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> CanSaveLetterAsync(Interfaces.LetterHeader letterHeader)
     {
         return true;
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<DataModel.Entities.Account?> GetAccountByCharacterNameAsync(string characterName)
+    {
+        var allAccounts = await this.Provider.GetRepository<Account>().GetAllAsync().ConfigureAwait(false);
+        return allAccounts.FirstOrDefault(account => account.Characters.Any(c => c.Name == characterName));
     }
 }

@@ -42,18 +42,18 @@ public sealed class DevilSquareContext : MiniGameContext
     }
 
     /// <inheritdoc />
-    protected override void OnGameStart(ICollection<Player> players)
+    protected override async ValueTask OnGameStartAsync(ICollection<Player> players)
     {
         foreach (var player in players)
         {
             this._gameStates.TryAdd(player.Name, new PlayerGameState(player));
         }
 
-        base.OnGameStart(players);
+        await base.OnGameStartAsync(players).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    protected override void GameEnded(ICollection<Player> finishers)
+    protected override async ValueTask GameEndedAsync(ICollection<Player> finishers)
     {
         var sortedFinishers = finishers
             .Select(f => this._gameStates[f.Name])
@@ -67,27 +67,28 @@ public sealed class DevilSquareContext : MiniGameContext
         {
             rank++;
             state.Rank = rank;
-            this.GiveRewards(state.Player, rank);
+            var (bonusScore, givenMoney) = await this.GiveRewardsAndGetBonusScoreAsync(state.Player, rank).ConfigureAwait(false);
+            state.AddScore(bonusScore);
             scoreList.Add((
                 state.Player.Name,
                 state.Score,
-                this.Definition.Rewards.FirstOrDefault(r => r.RewardType == MiniGameRewardType.Money && (r.Rank is null || r.Rank == rank))?.RewardAmount ?? 0,
+                givenMoney,
                 this.Definition.Rewards.FirstOrDefault(r => r.RewardType == MiniGameRewardType.Experience && (r.Rank is null || r.Rank == rank))?.RewardAmount ?? 0));
         }
 
         this._highScoreTable = scoreList.AsReadOnly();
 
-        this.SaveRanking(sortedFinishers.Select(state => (state.Rank, state.Player.SelectedCharacter!, state.Score)));
-        base.GameEnded(finishers);
+        await this.SaveRankingAsync(sortedFinishers.Select(state => (state.Rank, state.Player.SelectedCharacter!, state.Score))).ConfigureAwait(false);
+        await base.GameEndedAsync(finishers).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    protected override void ShowScore(Player player)
+    protected override async ValueTask ShowScoreAsync(Player player)
     {
         if (this._highScoreTable is { } table
             && this._gameStates.TryGetValue(player.Name, out var state))
         {
-            player.ViewPlugIns.GetPlugIn<IMiniGameScoreTableViewPlugin>()?.ShowScoreTable((byte)state.Rank, table);
+            await player.InvokeViewPlugInAsync<IMiniGameScoreTableViewPlugin>(p => p.ShowScoreTableAsync((byte)state.Rank, table)).ConfigureAwait(false);
         }
     }
 

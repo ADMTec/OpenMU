@@ -9,22 +9,20 @@ using System.Net;
 /// <summary>
 /// Resolves the own ip address by resolving the local host name to get the local <see cref="IPAddress"/> over DNS.
 /// </summary>
-public class LocalIpResolver : IIpAddressResolver
+public class LocalIpResolver : HostNameIpResolver
 {
-    /// <inheritdoc/>
-    public IPAddress ResolveIPv4()
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LocalIpResolver"/> class.
+    /// </summary>
+    public LocalIpResolver()
+        : base(Dns.GetHostName())
     {
-        if (System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
-        {
-            var localHostEntry = Dns.GetHostEntry(Dns.GetHostName());
-            var localAddress = localHostEntry.AddressList
-                .FirstOrDefault(address => address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-            if (localAddress != null)
-            {
-                return localAddress;
-            }
-        }
+    }
 
-        return IPAddress.Loopback;
+    /// <inheritdoc />
+    public override async ValueTask<IPAddress> ResolveIPv4Async()
+    {
+        return await this.ResolveAsync().ConfigureAwait(false)
+               ?? LoopbackIpResolver.LoopbackAddress;
     }
 }

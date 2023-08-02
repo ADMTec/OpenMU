@@ -2,6 +2,8 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
+using Nito.AsyncEx;
+
 namespace MUnique.OpenMU.GameServer;
 
 using System.ComponentModel;
@@ -23,7 +25,7 @@ using MUnique.OpenMU.PlugIns;
 /// <summary>
 /// The game server to which game clients can connect.
 /// </summary>
-public sealed class GameServer : IGameServer, IDisposable
+public sealed class GameServer : IGameServer, IDisposable, IGameServerContextProvider
 {
     private readonly ILogger<GameServer> _logger;
 
@@ -38,6 +40,7 @@ public sealed class GameServer : IGameServer, IDisposable
     /// </summary>
     /// <param name="gameServerDefinition">The game server definition.</param>
     /// <param name="guildServer">The guild server.</param>
+    /// <param name="eventPublisher">The message publisher.</param>
     /// <param name="loginServer">The login server.</param>
     /// <param name="persistenceContextProvider">The persistence context provider.</param>
     /// <param name="friendServer">The friend server.</param>
@@ -46,6 +49,7 @@ public sealed class GameServer : IGameServer, IDisposable
     public GameServer(
         GameServerDefinition gameServerDefinition,
         IGuildServer guildServer,
+        IEventPublisher eventPublisher,
         ILoginServer loginServer,
         IPersistenceContextProvider persistenceContextProvider,
         IFriendServer friendServer,
@@ -61,18 +65,17 @@ public sealed class GameServer : IGameServer, IDisposable
             var gameConfiguration = gameServerDefinition.GameConfiguration ?? throw Error.NotInitializedProperty(gameServerDefinition, nameof(gameServerDefinition.GameConfiguration));
             var dropGenerator = new DefaultDropGenerator(gameConfiguration, Rand.GetRandomizer());
             var mapInitializer = new GameServerMapInitializer(gameServerDefinition, loggerFactory.CreateLogger<GameServerMapInitializer>(), dropGenerator);
-            this._gameContext = new GameServerContext(gameServerDefinition, guildServer, loginServer, friendServer, persistenceContextProvider, mapInitializer, loggerFactory, plugInManager, dropGenerator);
+            this._gameContext = new GameServerContext(gameServerDefinition, guildServer, eventPublisher, loginServer, friendServer, persistenceContextProvider, mapInitializer, loggerFactory, plugInManager, dropGenerator);
             this._gameContext.GameMapCreated += (_, _) => this.OnPropertyChanged(nameof(this.Context));
             this._gameContext.GameMapRemoved += (_, _) => this.OnPropertyChanged(nameof(this.Context));
             mapInitializer.PlugInManager = this._gameContext.PlugInManager;
+            mapInitializer.PathFinderPool = this._gameContext.PathFinderPool;
         }
         catch (Exception ex)
         {
             this._logger.LogCritical(ex, "Error during map initialization");
             throw;
         }
-
-        this.ServerInfo = new GameServerInfoAdapter(this, gameServerDefinition.ServerConfiguration ?? throw new InvalidOperationException("GameServerDefinition requires a ServerConfiguration"));
     }
 
     /// <inheritdoc />
@@ -112,16 +115,13 @@ public sealed class GameServer : IGameServer, IDisposable
     public ServerType Type => ServerType.GameServer;
 
     /// <inheritdoc/>
-    public int MaximumConnections => this.ServerInfo.MaximumPlayers;
+    public int MaximumConnections => this.Context.ServerConfiguration.MaximumPlayers;
 
     /// <inheritdoc/>
-    public int CurrentConnections => this.ServerInfo.OnlinePlayerCount;
+    public int CurrentConnections => this.Context.PlayerCount;
 
     /// <inheritdoc/>
     int IManageableServer.Id => this.Id;
-
-    /// <inheritdoc/>
-    public IGameServerInfo ServerInfo { get; }
 
     /// <summary>
     /// Adds the listener.
@@ -130,25 +130,20 @@ public sealed class GameServer : IGameServer, IDisposable
     public void AddListener(IGameServerListener listener)
     {
         this._listeners.Add(listener);
-        listener.PlayerConnected += this.OnPlayerConnected;
+        listener.PlayerConnected += this.OnPlayerConnectedAsync;
     }
 
     /// <inheritdoc />
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        // this.Start();
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        this.Shutdown();
-        return Task.CompletedTask;
+        if (this.ServerState == ServerState.Stopped)
+        {
+            await this.StartAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc/>
-    public void Start()
+    public async ValueTask StartAsync()
     {
         using var logScope = this._logger.BeginScope(("GameServer", this.Id));
         this.ServerState = ServerState.Starting;
@@ -156,7 +151,7 @@ public sealed class GameServer : IGameServer, IDisposable
         {
             foreach (var listener in this._listeners)
             {
-                listener.Start();
+                await listener.StartAsync().ConfigureAwait(false);
             }
 
             this.ServerState = ServerState.Started;
@@ -173,8 +168,14 @@ public sealed class GameServer : IGameServer, IDisposable
         }
     }
 
+    /// <inheritdoc />
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await this.ShutdownAsync().ConfigureAwait(false);
+    }
+
     /// <inheritdoc/>
-    public void Shutdown()
+    public async ValueTask ShutdownAsync()
     {
         using var logScope = this._logger.BeginScope(("GameServer", this.Id));
         this.ServerState = ServerState.Stopping;
@@ -187,16 +188,15 @@ public sealed class GameServer : IGameServer, IDisposable
         this._logger.LogInformation("Saving all open sessions...");
 
         // Because disconnecting might directly change the internal player list, we first collect all players.
-        var playerList = new List<Player>();
-        this._gameContext.ForEachPlayer(player => playerList.Add(player));
-        playerList.ForEach(player => player.Disconnect());
+        var playerList = await this._gameContext.GetPlayersAsync().ConfigureAwait(false);
+        await playerList.Select(player => player.DisconnectAsync().AsTask()).WhenAll().ConfigureAwait(false);
 
         this.ServerState = ServerState.Stopped;
         this._logger.LogInformation("Server shutted down.");
     }
 
     /// <inheritdoc/>
-    public void GuildChatMessage(uint guildId, string sender, string message)
+    public async ValueTask GuildChatMessageAsync(uint guildId, string sender, string message)
     {
         string messageSend = message;
 
@@ -205,11 +205,11 @@ public sealed class GameServer : IGameServer, IDisposable
             messageSend = "@" + message;
         }
 
-        this._gameContext.ForEachGuildPlayer(guildId, player => player.ViewPlugIns.GetPlugIn<IChatViewPlugIn>()?.ChatMessage(messageSend, sender, ChatMessageType.Guild));
+        await this._gameContext.ForEachGuildPlayerAsync(guildId, player => player.InvokeViewPlugInAsync<IChatViewPlugIn>(p => p.ChatMessageAsync(messageSend, sender, ChatMessageType.Guild)).AsTask()).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public void AllianceChatMessage(uint guildId, string sender, string message)
+    public async ValueTask AllianceChatMessageAsync(uint guildId, string sender, string message)
     {
         string messageSend = message;
 
@@ -218,41 +218,58 @@ public sealed class GameServer : IGameServer, IDisposable
             messageSend = "@@" + message;
         }
 
-        this._gameContext.ForEachAlliancePlayer(guildId, player => player.ViewPlugIns.GetPlugIn<IChatViewPlugIn>()?.ChatMessage(messageSend, sender, ChatMessageType.Alliance));
+        await this._gameContext.ForEachAlliancePlayerAsync(guildId, player => player.InvokeViewPlugInAsync<IChatViewPlugIn>(p => p.ChatMessageAsync(messageSend, sender, ChatMessageType.Alliance)).AsTask()).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public void LetterReceived(LetterHeader letter)
+    public async ValueTask LetterReceivedAsync(LetterHeader letter)
     {
         if (letter.ReceiverName is null)
         {
             throw new InvalidOperationException("Letter ReceiverName must be provided.");
         }
 
-        var player = this._gameContext.GetPlayerByCharacterName(letter.ReceiverName);
-        if (player != null)
+        if (this._gameContext.GetPlayerByCharacterName(letter.ReceiverName) is not { } player)
         {
-            var newLetterIndex = player.SelectedCharacter!.Letters.Count;
-            player.PersistenceContext.Attach(letter);
-            player.SelectedCharacter.Letters.Add(letter);
-            player.ViewPlugIns.GetPlugIn<IAddToLetterListPlugIn>()?.AddToLetterList(letter, (ushort)newLetterIndex, true);
+            return;
         }
-    }
 
-    /// <inheritdoc/>
-    public bool IsPlayerOnline(string playerName)
-    {
-        return this._gameContext.GetPlayerByCharacterName(playerName) != null;
+        if (player.SelectedCharacter?.Letters.Contains(letter) ?? true)
+        {
+            // We already know this letter, so we do nothing.
+            // This usually never happens, but who knows...
+            return;
+        }
+
+        // The letter we get here might not be of the right type to be attached
+        // to the players context and letter collection.
+        // So, we simply load it from the database.
+        var loadedLetter = await player.PersistenceContext.GetByIdAsync<LetterHeader>(letter.Id).ConfigureAwait(false);
+        if (loadedLetter is null)
+        {
+            // something went wrong here, this should never happen.
+            this._logger.LogError("Couldn't find letter with id {0} on the database: {1}", letter.Id, letter);
+            return;
+        }
+
+        var letterIndex = player.SelectedCharacter.Letters.IndexOf(loadedLetter);
+        if (letterIndex < 0)
+        {
+            letterIndex = player.SelectedCharacter!.Letters.Count;
+            player.SelectedCharacter.Letters.Add(loadedLetter);
+        }
+
+        await player.InvokeViewPlugInAsync<IAddToLetterListPlugIn>(p => p.AddToLetterListAsync(letter, (ushort)letterIndex, true)).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public bool DisconnectPlayer(string playerName)
+    public async ValueTask<bool> DisconnectPlayerAsync(string playerName)
     {
         var player = this._gameContext.GetPlayerByCharacterName(playerName);
         if (player != null)
         {
-            player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("You got disconnected by a game master.", MessageType.BlueNormal);
-            player.Disconnect();
+            await player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync("You got disconnected by a game master.", MessageType.BlueNormal)).ConfigureAwait(false);
+            await player.DisconnectAsync().ConfigureAwait(false);
             return true;
         }
 
@@ -260,58 +277,87 @@ public sealed class GameServer : IGameServer, IDisposable
     }
 
     /// <inheritdoc />
-    public bool BanPlayer(string playerName)
+    public async ValueTask<bool> BanPlayerAsync(string playerName)
     {
         var player = this._gameContext.GetPlayerByCharacterName(playerName);
         if (player?.Account is not null)
         {
             player.Account.State = AccountState.TemporarilyBanned;
-            player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("Your account has been temporarily banned by a game master.", MessageType.BlueNormal);
-            player.Disconnect();
+            await player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync("Your account has been temporarily banned by a game master.", MessageType.BlueNormal)).ConfigureAwait(false);
+            await player.DisconnectAsync().ConfigureAwait(false);
             return true;
         }
 
         return false;
     }
 
-    /// <inheritdoc/>
-    public void SendGlobalMessage(string message, MessageType messageType)
+    /// <inheritdoc />
+    public async ValueTask AssignGuildToPlayerAsync(string characterName, GuildMemberStatus guildStatus)
     {
-        this._gameContext.SendGlobalMessage(message, messageType);
+        var player = this._gameContext.GetPlayerByCharacterName(characterName);
+        if (player is null)
+        {
+            return;
+        }
+
+        player.GuildStatus = guildStatus;
+        await player.ForEachWorldObserverAsync<IAssignPlayersToGuildPlugIn>(p => p.AssignPlayerToGuildAsync(player, true), true).ConfigureAwait(false);
+        await this.Context.RegisterGuildMemberAsync(player).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public void FriendRequest(string requester, string receiver)
+    public ValueTask SendGlobalMessageAsync(string message, MessageType messageType)
     {
-        var player = this._gameContext.GetPlayerByCharacterName(receiver);
-        player?.ViewPlugIns.GetPlugIn<IShowFriendRequestPlugIn>()?.ShowFriendRequest(requester);
+        return this._gameContext.SendGlobalMessageAsync(message, messageType);
     }
 
     /// <inheritdoc/>
-    public void FriendOnlineStateChanged(string player, string friend, int serverId)
+    public async ValueTask FriendRequestAsync(string requester, string receiver)
     {
-        var observerPlayer = this._gameContext.GetPlayerByCharacterName(player);
-        observerPlayer?.ViewPlugIns.GetPlugIn<IFriendStateUpdatePlugIn>()?.FriendStateUpdate(friend, serverId);
+        if (this._gameContext.GetPlayerByCharacterName(receiver) is { } player)
+        {
+            await player.InvokeViewPlugInAsync<IShowFriendRequestPlugIn>(p => p.ShowFriendRequestAsync(requester)).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc/>
-    public void ChatRoomCreated(ChatServerAuthenticationInfo authenticationInfo, string creatorName)
+    public async ValueTask FriendOnlineStateChangedAsync(string player, string friend, int serverId)
     {
-        var player = this._gameContext.GetPlayerByCharacterName(authenticationInfo.ClientName);
-        player?.ViewPlugIns.GetPlugIn<IChatRoomCreatedPlugIn>()?.ChatRoomCreated(authenticationInfo, creatorName, true);
+        if (this._gameContext.GetPlayerByCharacterName(player) is { } observerPlayer)
+        {
+            await observerPlayer.InvokeViewPlugInAsync<IFriendStateUpdatePlugIn>(p => p.FriendStateUpdateAsync(friend, serverId)).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc/>
-    public void GuildDeleted(uint guildId)
+    public async ValueTask InitializeMessengerAsync(MessengerInitializationData initializationData)
     {
-        this._gameContext.RemoveGuild(guildId);
-        this._gameContext.ForEachGuildPlayer(guildId, p => this.RemovePlayerFromGuild(p, false));
+        if (this._gameContext.GetPlayerByCharacterName(initializationData.PlayerName) is { } player)
+        {
+            await player.InvokeViewPlugInAsync<IInitializeMessengerPlugIn>(p => p.InitializeMessengerAsync(initializationData, this.Context.Configuration.MaximumLetters)).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask ChatRoomCreatedAsync(ChatServerAuthenticationInfo authenticationInfo, string creatorName)
+    {
+        if (this._gameContext.GetPlayerByCharacterName(authenticationInfo.ClientName) is { } player)
+        {
+            await player.InvokeViewPlugInAsync<IChatRoomCreatedPlugIn>(p => p.ChatRoomCreatedAsync(authenticationInfo, creatorName, true)).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask GuildDeletedAsync(uint guildId)
+    {
+        await this._gameContext.RemoveGuildAsync(guildId).ConfigureAwait(false);
+        await this._gameContext.ForEachGuildPlayerAsync(guildId, p => this.RemovePlayerFromGuildAsync(p, false).AsTask()).ConfigureAwait(false);
 
         //// todo: alliance things?
     }
 
     /// <inheritdoc/>
-    public void GuildPlayerKicked(string playerName)
+    public async ValueTask GuildPlayerKickedAsync(string playerName)
     {
         var player = this._gameContext.GetPlayerByCharacterName(playerName);
         if (player is null)
@@ -319,37 +365,14 @@ public sealed class GameServer : IGameServer, IDisposable
             return;
         }
 
-        this.RemovePlayerFromGuild(player);
+        await this.RemovePlayerFromGuildAsync(player).ConfigureAwait(false);
     }
 
-    /// <inheritdoc/>
-    public void RegisterMapObserver(ushort mapId, object worldObserver)
-    {
-        if (worldObserver is not ILocateable locateableObserver)
-        {
-            throw new ArgumentException("worldObserver needs to implement ILocateable", nameof(worldObserver));
-        }
-
-        var map = this._gameContext.GetMap(mapId);
-        if (map != null)
-        {
-            map.Add(locateableObserver);
-        }
-        else
-        {
-            var message = $"map with id {mapId} not found.";
-            throw new ArgumentException(message);
-        }
-    }
-
-    /// <inheritdoc/>
-    public void UnregisterMapObserver(ushort mapId, ushort worldObserverId)
-    {
-        if (this._gameContext.GetMap(mapId) is { } map && map.GetObject(worldObserverId) is { } observer)
-        {
-            map.Remove(observer);
-        }
-    }
+    /// <summary>
+    /// Creates an instance of <see cref="ServerInfo"/> with the data of this instance.
+    /// </summary>
+    /// <returns>The created <see cref="ServerInfo"/>.</returns>
+    public ServerInfo CreateServerInfo() => new (this.Id, this.Description, this.CurrentConnections, this.MaximumConnections);
 
     /// <inheritdoc/>
     public override string ToString()
@@ -366,44 +389,43 @@ public sealed class GameServer : IGameServer, IDisposable
         (this._gameContext as IDisposable)?.Dispose();
     }
 
-    private void RemovePlayerFromGuild(Player player, bool unregisterFromContext = true)
+    private async ValueTask RemovePlayerFromGuildAsync(Player player, bool unregisterFromContext = true)
     {
         if (unregisterFromContext && player.GuildStatus?.GuildId is { } guildId)
         {
-            this._gameContext.UnregisterGuildMember(player);
+            await this._gameContext.UnregisterGuildMemberAsync(player).ConfigureAwait(false);
         }
 
-        player.ForEachObservingPlayer(observer => observer.ViewPlugIns.GetPlugIn<IPlayerLeftGuildPlugIn>()?.PlayerLeftGuild(player), true);
+        await player.ForEachWorldObserverAsync<IPlayerLeftGuildPlugIn>(p => p.PlayerLeftGuildAsync(player), true).ConfigureAwait(false);
         player.GuildStatus = null;
-        player.ViewPlugIns.GetPlugIn<IGuildKickResultPlugIn>()?.GuildKickResult(GuildKickSuccess.KickSucceeded);
+        await player.InvokeViewPlugInAsync<IGuildKickResultPlugIn>(p => p.GuildKickResultAsync(GuildKickSuccess.KickSucceeded)).ConfigureAwait(false);
     }
 
-    private void OnPlayerConnected(object? sender, PlayerConnectedEventArgs e)
+    private async ValueTask OnPlayerConnectedAsync(PlayerConnectedEventArgs e)
     {
         var player = e.ConntectedPlayer;
-        this._gameContext.AddPlayer(player);
-        player.ViewPlugIns.GetPlugIn<IShowLoginWindowPlugIn>()?.ShowLoginWindow();
-        player.PlayerState.TryAdvanceTo(PlayerState.LoginScreen);
-        e.ConntectedPlayer.PlayerDisconnected += (s, args) => this.OnPlayerDisconnected(player);
+        await this._gameContext.AddPlayerAsync(player).ConfigureAwait(false);
+        await player.InvokeViewPlugInAsync<IShowLoginWindowPlugIn>(p => p.ShowLoginWindowAsync()).ConfigureAwait(false);
+        await player.PlayerState.TryAdvanceToAsync(PlayerState.LoginScreen).ConfigureAwait(false);
+        e.ConntectedPlayer.PlayerDisconnected += this.OnPlayerDisconnectedAsync;
         this.OnPropertyChanged(nameof(this.CurrentConnections));
     }
 
-    private void OnPlayerDisconnected(Player remotePlayer)
+    private async ValueTask OnPlayerDisconnectedAsync(Player remotePlayer)
     {
-        this.SetOfflineAtFriendServer(remotePlayer);
-        this.SaveSessionOfPlayer(remotePlayer);
-        this.SetOfflineAtLoginServer(remotePlayer);
+        await this.SaveSessionOfPlayerAsync(remotePlayer).ConfigureAwait(false);
+        await this.SetOfflineAtLoginServerAsync(remotePlayer).ConfigureAwait(false);
         remotePlayer.Dispose();
         this.OnPropertyChanged(nameof(this.CurrentConnections));
     }
 
-    private void SetOfflineAtLoginServer(Player player)
+    private async ValueTask SetOfflineAtLoginServerAsync(Player player)
     {
         try
         {
             if (player.Account?.LoginName is { } loginName)
             {
-                this.Context.LoginServer.LogOff(loginName, this.Id);
+                await this.Context.LoginServer.LogOffAsync(loginName, this.Id).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -412,26 +434,11 @@ public sealed class GameServer : IGameServer, IDisposable
         }
     }
 
-    private void SetOfflineAtFriendServer(Player player)
+    private async ValueTask SaveSessionOfPlayerAsync(Player player)
     {
         try
         {
-            if (player.SelectedCharacter != null)
-            {
-                this.Context.FriendServer.SetOnlineState(player.SelectedCharacter.Id, player.SelectedCharacter.Name, (byte)SpecialServerId.Offline);
-            }
-        }
-        catch (Exception ex)
-        {
-            this._logger.LogError($"Couldn't set offline state at friend server. Player: {this}", ex);
-        }
-    }
-
-    private void SaveSessionOfPlayer(Player player)
-    {
-        try
-        {
-            if (!player.PersistenceContext.SaveChanges())
+            if (!await player.PersistenceContext.SaveChangesAsync().ConfigureAwait(false))
             {
                 this._logger.LogWarning($"Could not save session of player {player}");
             }

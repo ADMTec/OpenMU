@@ -36,4 +36,35 @@ public class QuestReward
     /// Gets or sets the attribute reward. It's set when <see cref="RewardType"/> is <see cref="QuestRewardType.Attribute"/>.
     /// </summary>
     public virtual AttributeDefinition? AttributeReward { get; set; }
+
+    /// <summary>
+    /// Gets or sets the attribute reward. It's set when <see cref="RewardType"/> is <see cref="QuestRewardType.Skill"/>.
+    /// </summary>
+    public virtual Skill? SkillReward { get; set; }
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        if (this.RewardType == QuestRewardType.Item)
+        {
+            return $"{this.Value} x {this.ItemReward}";
+        }
+
+        if (this.RewardType == QuestRewardType.Skill)
+        {
+            return $"Skill: {this.SkillReward}";
+        }
+
+        if (this.RewardType == QuestRewardType.Attribute)
+        {
+            return $"Attribute: {this.Value} x {this.AttributeReward}";
+        }
+
+        if (this.RewardType is QuestRewardType.Experience or QuestRewardType.Money or QuestRewardType.LevelUpPoints or QuestRewardType.GensAttribution)
+        {
+            return $"{this.Value} x {this.RewardType}";
+        }
+
+        return $"{this.RewardType}";
+    }
 }

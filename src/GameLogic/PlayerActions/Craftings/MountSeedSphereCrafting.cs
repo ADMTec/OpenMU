@@ -34,7 +34,7 @@ public class MountSeedSphereCrafting : SimpleItemCraftingHandler
     public static byte SocketItemReference { get; } = 0x88;
 
     /// <inheritdoc />
-    protected override IEnumerable<Item> CreateOrModifyResultItems(IList<CraftingRequiredItemLink> requiredItems, Player player, byte socketSlot)
+    protected override async ValueTask<List<Item>> CreateOrModifyResultItemsAsync(IList<CraftingRequiredItemLink> requiredItems, Player player, byte socketSlot)
     {
         var seedSphere = requiredItems.Single(i => i.ItemRequirement.Reference == SeedSphereReference).Items.Single();
         var socketItem = requiredItems.Single(i => i.ItemRequirement.Reference == SocketItemReference).Items.Single();
@@ -56,7 +56,7 @@ public class MountSeedSphereCrafting : SimpleItemCraftingHandler
             .SelectMany(o => o.PossibleOptions)
             .Single(o => o.OptionType == ItemOptionTypes.SocketOption
                          && o.Number == seedSphere.Level);
-        sphereOption.Level = seedSphere.Definition.DropLevel;
+        sphereOption.Level = seedSphere.Level;
         sphereOption.Index = socketSlot;
         socketItem.ItemOptions.Add(sphereOption);
 
@@ -70,7 +70,7 @@ public class MountSeedSphereCrafting : SimpleItemCraftingHandler
             socketItem.ItemOptions.Add(bonusOptionLink);
         }
 
-        yield return socketItem;
+        return new List<Item> { socketItem };
     }
 
     /// <inheritdoc />

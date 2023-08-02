@@ -42,6 +42,23 @@ public enum SpawnTrigger
     /// For example, at devil square there is a wave of bosses, which spawn only once.
     /// </remarks>
     OnceAtWaveStart,
+
+    /// <summary>
+    /// The monster spawns manually controlled by the code of an event.
+    /// </summary>
+    /// <remarks>
+    /// For example chaos castle enemies, because their number is not known beforehand.
+    /// </remarks>
+    ManuallyForEvent,
+
+    /// <summary>
+    /// The object is wandering between maps. It spawns just at one spawn area
+    /// at the same time.
+    /// </summary>
+    /// <remarks>
+    /// Used for wandering merchants.
+    /// </remarks>
+    Wandering,
 }
 
 /// <summary>
@@ -99,10 +116,16 @@ public class MonsterSpawnArea
     /// </summary>
     public byte WaveNumber { get; set; }
 
+    /// <summary>
+    /// Gets or sets the maximum health (override) just for this spawn area.
+    /// If <c>null</c>, the default health of the <see cref="MonsterDefinition"/> applies.
+    /// </summary>
+    public int? MaximumHealthOverride { get; set; }
+
     /// <inheritdoc/>
     public override string ToString()
     {
-        var isPoint = this.X1 == this.X2 && this.Y1 == this.Y2;
+        var isPoint = this.IsPoint();
         var result = isPoint
             ? $"{this.MonsterDefinition?.Designation} - Quantity: {this.Quantity} - At: {this.X1}/{this.Y1}"
             : $"{this.MonsterDefinition?.Designation} - Quantity: {this.Quantity} - Area: {this.X1}/{this.Y1} to {this.X2}/{this.Y2}";
@@ -114,4 +137,12 @@ public class MonsterSpawnArea
 
         return result;
     }
+
+    /// <summary>
+    /// Determines whether this instance is a spawn point.
+    /// </summary>
+    /// <returns>
+    ///   <c>true</c> if this instance is point; otherwise, <c>false</c>.
+    /// </returns>
+    public bool IsPoint() => this.X1 == this.X2 && this.Y1 == this.Y2;
 }

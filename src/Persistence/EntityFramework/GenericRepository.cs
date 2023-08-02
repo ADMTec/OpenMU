@@ -4,7 +4,9 @@
 
 namespace MUnique.OpenMU.Persistence.EntityFramework;
 
+using System.Reflection;
 using Microsoft.Extensions.Logging;
+using MUnique.OpenMU.Interfaces;
 
 /// <summary>
 /// A generic repository which wraps the access to the DBSet of the <see cref="EntityDataContext"/>.
@@ -14,24 +16,29 @@ using Microsoft.Extensions.Logging;
 internal class GenericRepository<T> : GenericRepositoryBase<T>
     where T : class
 {
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly IConfigurationChangePublisher? _changePublisher;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GenericRepository{T}" /> class.
     /// </summary>
-    /// <param name="repositoryManager">The repository manager.</param>
-    /// <param name="logger">The logger.</param>
-    public GenericRepository(RepositoryManager repositoryManager, ILogger logger)
-        : base(repositoryManager, logger)
+    /// <param name="repositoryProvider">The repository provider.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    /// <param name="changePublisher">The change publisher.</param>
+    public GenericRepository(IContextAwareRepositoryProvider repositoryProvider, ILoggerFactory loggerFactory, IConfigurationChangePublisher? changePublisher)
+        : base(repositoryProvider, loggerFactory.CreateLogger(MethodBase.GetCurrentMethod()?.DeclaringType ?? typeof(GenericRepository<T>)))
     {
+        this._loggerFactory = loggerFactory;
+        this._changePublisher = changePublisher;
     }
 
     /// <summary>
-    /// Gets a context to work with. If no context is currently registered at the repository manager, a new one is getting created.
+    /// Gets a context to work with. If no context is currently registered at the repository provider, a new one is getting created.
     /// </summary>
     /// <returns>The context.</returns>
     protected override EntityFrameworkContextBase GetContext()
     {
-        var context = this.RepositoryManager.ContextStack.GetCurrentContext() as EntityFrameworkContext;
-
-        return new EntityFrameworkContext(context?.Context ?? new TypedContext<T>(), this.RepositoryManager, context is null);
+        var context = this.RepositoryProvider.ContextStack.GetCurrentContext() as EntityFrameworkContextBase;
+        return new EntityFrameworkContext(context?.Context ?? new TypedContext<T>(), this._loggerFactory, this.RepositoryProvider, context is null, this._changePublisher);
     }
 }

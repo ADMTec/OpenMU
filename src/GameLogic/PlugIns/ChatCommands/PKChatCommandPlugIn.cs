@@ -13,8 +13,8 @@ using MUnique.OpenMU.PlugIns;
 /// A chat command plugin which handles pk commands.
 /// </summary>
 [Guid("30B7EFF0-33EE-4136-BEB0-BE503B748DC6")]
-[PlugIn("PK chat command", "Handles the chat command '/pk <char> <pk_lvl> <pk_count>'. Sets PK Level and Count for a character.")]
-[ChatCommandHelp(Command, typeof(PkChatCommandArgs), CharacterStatus.GameMaster)]
+[PlugIn("PK chat command", "Handles the chat command '/pk <char> <pk_lvl> <pk_count>'. Sets player kill level and count of a character.")]
+[ChatCommandHelp(Command, "Sets player kill level and count of a character.", typeof(PkChatCommandArgs), CharacterStatus.GameMaster)]
 public class PkChatCommandPlugIn : ChatCommandPlugInBase<PkChatCommandArgs>
 {
     private const string Command = "/pk";
@@ -28,7 +28,7 @@ public class PkChatCommandPlugIn : ChatCommandPlugInBase<PkChatCommandArgs>
     public override CharacterStatus MinCharacterStatusRequirement => CharacterStatus.GameMaster;
 
     /// <inheritdoc />
-    protected override void DoHandleCommand(Player gameMaster, PkChatCommandArgs arguments)
+    protected override async ValueTask DoHandleCommandAsync(Player gameMaster, PkChatCommandArgs arguments)
     {
         if (arguments.Level < MinPkLevel || arguments.Level > MaxPkLevel)
         {
@@ -44,7 +44,7 @@ public class PkChatCommandPlugIn : ChatCommandPlugInBase<PkChatCommandArgs>
         targetPlayer.SelectedCharacter!.State = HeroState.Normal + arguments.Level;
         targetPlayer.SelectedCharacter!.StateRemainingSeconds = (int)TimeSpan.FromHours(arguments.Count).TotalSeconds;
         targetPlayer.SelectedCharacter!.PlayerKillCount = arguments.Count;
-        targetPlayer.ForEachWorldObserver(o => o.ViewPlugIns.GetPlugIn<IUpdateCharacterHeroStatePlugIn>()?.UpdateCharacterHeroState(targetPlayer), true);
+        await targetPlayer.ForEachWorldObserverAsync<IUpdateCharacterHeroStatePlugIn>(p => p.UpdateCharacterHeroStateAsync(targetPlayer), true).ConfigureAwait(false);
 
         var message = string.Format(
             "The state of {0} has been changed to {1} with {2} murders for {3} minutes",
@@ -53,6 +53,6 @@ public class PkChatCommandPlugIn : ChatCommandPlugInBase<PkChatCommandArgs>
             targetPlayer.SelectedCharacter!.PlayerKillCount,
             Math.Round(TimeSpan.FromSeconds(targetPlayer.SelectedCharacter!.StateRemainingSeconds).TotalMinutes));
 
-        this.ShowMessageTo(gameMaster, $"[{this.Key}] {message}");
+        await this.ShowMessageToAsync(gameMaster, $"[{this.Key}] {message}").ConfigureAwait(false);
     }
 }

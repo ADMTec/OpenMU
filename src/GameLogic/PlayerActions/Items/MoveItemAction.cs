@@ -10,7 +10,7 @@ using MUnique.OpenMU.GameLogic.Views;
 using MUnique.OpenMU.GameLogic.Views.Inventory;
 using MUnique.OpenMU.GameLogic.Views.Trade;
 using MUnique.OpenMU.Interfaces;
-using static OpenMU.GameLogic.InventoryConstants;
+using static MUnique.OpenMU.DataModel.InventoryConstants;
 
 /// <summary>
 /// Action to move an item between <see cref="Storages"/> or the same storage.
@@ -36,7 +36,7 @@ public class MoveItemAction
     /// <param name="fromStorage">From storage.</param>
     /// <param name="toSlot">To slot.</param>
     /// <param name="toStorage">To storage.</param>
-    public void MoveItem(Player player, byte fromSlot, Storages fromStorage, byte toSlot, Storages toStorage)
+    public async ValueTask MoveItemAsync(Player player, byte fromSlot, Storages fromStorage, byte toSlot, Storages toStorage)
     {
         var fromStorageInfo = this.GetStorageInfo(player, fromStorage);
         var fromItemStorage = fromStorageInfo?.Storage;
@@ -45,14 +45,14 @@ public class MoveItemAction
         if (item is null)
         {
             // Item not found
-            player.ViewPlugIns.GetPlugIn<IItemMoveFailedPlugIn>()?.ItemMoveFailed(null);
+            await player.InvokeViewPlugInAsync<IItemMoveFailedPlugIn>(p => p.ItemMoveFailedAsync(null)).ConfigureAwait(false);
             return;
         }
 
         var toStorageInfo = this.GetStorageInfo(player, toStorage);
         var toItemStorage = toStorageInfo?.Storage;
 
-        var movement = this.CanMove(player, item, toSlot, fromSlot, toStorageInfo, fromStorageInfo);
+        var movement = await this.CanMoveAsync(player, item, toSlot, fromSlot, toStorageInfo, fromStorageInfo).ConfigureAwait(false);
         if (movement != Movement.None)
         {
             var cancelEventArgs = new CancelEventArgs();
@@ -66,55 +66,56 @@ public class MoveItemAction
         switch (movement)
         {
             case Movement.Normal:
-                this.MoveNormal(player, fromSlot, toSlot, toStorage, fromItemStorage!, item, toItemStorage!);
+                await this.MoveNormalAsync(player, fromSlot, toSlot, toStorage, fromItemStorage!, item, toItemStorage!).ConfigureAwait(false);
                 break;
             case Movement.PartiallyStack when toItemStorage?.GetItem(toSlot) is { } targetItem:
-                this.PartiallyStack(player, item, targetItem);
+                await this.PartiallyStackAsync(player, item, targetItem).ConfigureAwait(false);
                 break;
             case Movement.CompleteStack when toItemStorage?.GetItem(toSlot) is { } targetItem:
-                this.FullStack(player, item, targetItem);
+                await this.FullStackAsync(player, item, targetItem).ConfigureAwait(false);
                 break;
             default:
-                player.ViewPlugIns.GetPlugIn<IItemMoveFailedPlugIn>()?.ItemMoveFailed(item);
+                await player.InvokeViewPlugInAsync<IItemMoveFailedPlugIn>(p => p.ItemMoveFailedAsync(item)).ConfigureAwait(false);
                 break;
         }
 
-        if (movement != Movement.None)
+        if (movement != Movement.None
+            && player.GameContext.PlugInManager.GetPlugInPoint<PlugIns.IItemMovedPlugIn>() is { } itemMovedPlugIn)
         {
-            player.GameContext.PlugInManager.GetPlugInPoint<PlugIns.IItemMovedPlugIn>()?.ItemMoved(player, item);
+            await itemMovedPlugIn.ItemMovedAsync(player, item).ConfigureAwait(false);
         }
     }
 
-    private void FullStack(Player player, Item sourceItem, Item targetItem)
+    private async ValueTask FullStackAsync(Player player, Item sourceItem, Item targetItem)
     {
         targetItem.Durability += sourceItem.Durability;
-        player.ViewPlugIns.GetPlugIn<IItemMoveFailedPlugIn>()?.ItemMoveFailed(sourceItem);
-        player.ViewPlugIns.GetPlugIn<Views.Inventory.IItemRemovedPlugIn>()?.RemoveItem(sourceItem.ItemSlot);
-        player.ViewPlugIns.GetPlugIn<IItemDurabilityChangedPlugIn>()?.ItemDurabilityChanged(targetItem, false);
+        await player.InvokeViewPlugInAsync<IItemMoveFailedPlugIn>(p => p.ItemMoveFailedAsync(sourceItem)).ConfigureAwait(false);
+        await player.InvokeViewPlugInAsync<Views.Inventory.IItemRemovedPlugIn>(p => p.RemoveItemAsync(sourceItem.ItemSlot)).ConfigureAwait(false);
+        await player.InvokeViewPlugInAsync<IItemDurabilityChangedPlugIn>(p => p.ItemDurabilityChangedAsync(targetItem, false)).ConfigureAwait(false);
     }
 
-    private void PartiallyStack(Player player, Item sourceItem, Item targetItem)
+    private async ValueTask PartiallyStackAsync(Player player, Item sourceItem, Item targetItem)
     {
         var partialAmount = (byte)Math.Min(targetItem.Definition!.Durability - targetItem.Durability, sourceItem.Durability);
         targetItem.Durability += partialAmount;
         sourceItem.Durability -= partialAmount;
-        player.ViewPlugIns.GetPlugIn<IItemMoveFailedPlugIn>()?.ItemMoveFailed(sourceItem);
-        player.ViewPlugIns.GetPlugIn<IItemDurabilityChangedPlugIn>()?.ItemDurabilityChanged(sourceItem, false);
-        player.ViewPlugIns.GetPlugIn<IItemDurabilityChangedPlugIn>()?.ItemDurabilityChanged(targetItem, false);
+        await player.InvokeViewPlugInAsync<IItemMoveFailedPlugIn>(p => p.ItemMoveFailedAsync(sourceItem)).ConfigureAwait(false);
+        await player.InvokeViewPlugInAsync<IItemDurabilityChangedPlugIn>(p => p.ItemDurabilityChangedAsync(sourceItem, false)).ConfigureAwait(false);
+        await player.InvokeViewPlugInAsync<IItemDurabilityChangedPlugIn>(p => p.ItemDurabilityChangedAsync(targetItem, false)).ConfigureAwait(false);
     }
 
-    private void MoveNormal(Player player, byte fromSlot, byte toSlot, Storages toStorage, IStorage fromItemStorage, Item item, IStorage toItemStorage)
+    private async ValueTask MoveNormalAsync(Player player, byte fromSlot, byte toSlot, Storages toStorage, IStorage fromItemStorage, Item item, IStorage toItemStorage)
     {
-        fromItemStorage.RemoveItem(item);
-        if (!toItemStorage.AddItem(toSlot, item))
+        await fromItemStorage.RemoveItemAsync(item).ConfigureAwait(false);
+        if (!await toItemStorage.AddItemAsync(toSlot, item).ConfigureAwait(false))
         {
-            fromItemStorage.AddItem(item);
+            await fromItemStorage.AddItemAsync(item).ConfigureAwait(false);
 
-            player.ViewPlugIns.GetPlugIn<IItemMoveFailedPlugIn>()?.ItemMoveFailed(item);
+            await player.InvokeViewPlugInAsync<IItemMoveFailedPlugIn>(p => p.ItemMoveFailedAsync(item)).ConfigureAwait(false);
             return;
         }
 
-        player.ViewPlugIns.GetPlugIn<Views.Inventory.IItemMovedPlugIn>()?.ItemMoved(item, toSlot, toStorage);
+        await player.InvokeViewPlugInAsync<Views.Inventory.IItemMovedPlugIn>(p => p.ItemMovedAsync(item, toSlot, toStorage)).ConfigureAwait(false);
         var isTradeOngoing = player.PlayerState.CurrentState == PlayerState.TradeOpened
                              || player.PlayerState.CurrentState == PlayerState.TradeButtonPressed;
         var isItemMovedToOrFromTrade = toItemStorage == player.TemporaryStorage || fromItemStorage == player.TemporaryStorage;
@@ -123,16 +124,27 @@ public class MoveItemAction
             // When Trading, send update to Trading-Partner
             if (fromItemStorage == player.TemporaryStorage)
             {
-                tradingPartner.ViewPlugIns.GetPlugIn<ITradeItemDisappearPlugIn>()?.TradeItemDisappear(fromSlot, item);
+                await tradingPartner.InvokeViewPlugInAsync<ITradeItemDisappearPlugIn>(p => p.TradeItemDisappearAsync(fromSlot, item)).ConfigureAwait(false);
             }
 
             if (toItemStorage == player.TemporaryStorage)
             {
-                tradingPartner.ViewPlugIns.GetPlugIn<ITradeItemAppearPlugIn>()?.TradeItemAppear(toSlot, item);
+                await tradingPartner.InvokeViewPlugInAsync<ITradeItemAppearPlugIn>(p => p.TradeItemAppearAsync(toSlot, item)).ConfigureAwait(false);
             }
         }
     }
 
+    /// <summary>
+    /// Gets the storage information.
+    /// </summary>
+    /// <param name="player">The player.</param>
+    /// <param name="storageType">Type of the storage.</param>
+    /// <returns>The information about the requested storage for the specified player.</returns>
+    /// <remarks>
+    /// For extended inventories and vaults, this is simplified!
+    /// The client would prevent storing an item across boundaries, the
+    /// server wouldn't.
+    /// </remarks>
     private StorageInfo? GetStorageInfo(Player player, Storages storageType)
     {
         StorageInfo? result;
@@ -141,9 +153,9 @@ public class MoveItemAction
             case Storages.Inventory when player.Inventory is not null:
                 result = new StorageInfo(
                     player.Inventory,
-                    InventoryRows,
+                    (byte)(InventoryRows + (player.SelectedCharacter!.InventoryExtensions * RowsOfOneExtension)),
                     EquippableSlotsCount,
-                    (byte)(EquippableSlotsCount + GetInventorySize(player)));
+                    (byte)(EquippableSlotsCount + player.GetInventorySize()));
                 break;
             case Storages.PersonalStore when player.ShopStorage is not null:
                 result = new StorageInfo(
@@ -153,7 +165,9 @@ public class MoveItemAction
                     (byte)(FirstStoreItemSlotIndex + StoreSize));
                 break;
             case Storages.Vault when player.Vault is not null:
-                result = new StorageInfo(player.Vault, WarehouseRows, 0, WarehouseSize);
+                var warehouseSize = player.Account!.IsVaultExtended ? WarehouseSize * 2 : WarehouseSize;
+                var warehouseRows = (byte)(WarehouseRows * 2);
+                result = new StorageInfo(player.Vault, warehouseRows, 0, (byte)warehouseSize);
                 break;
             case Storages.Trade:
             case Storages.ChaosMachine:
@@ -186,7 +200,7 @@ public class MoveItemAction
         return result;
     }
 
-    private Movement CanMove(Player player, Item item, byte toSlot, byte fromSlot, StorageInfo? toStorage, StorageInfo? fromStorage)
+    private async ValueTask<Movement> CanMoveAsync(Player player, Item item, byte toSlot, byte fromSlot, StorageInfo? toStorage, StorageInfo? fromStorage)
     {
         if (toStorage is null || fromStorage is null)
         {
@@ -197,7 +211,7 @@ public class MoveItemAction
             && toStorage.Storage == player.Inventory
             && player.IsVaultLocked)
         {
-            player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("The vault is locked.", MessageType.BlueNormal);
+            await player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync("The vault is locked.", MessageType.BlueNormal)).ConfigureAwait(false);
             return Movement.None;
         }
 
@@ -207,6 +221,13 @@ public class MoveItemAction
             var itemDefinition = item.Definition;
             if (storage.GetItem(toSlot) != null || itemDefinition?.ItemSlot is null)
             {
+                return Movement.None;
+            }
+
+            if (player.CurrentMiniGame is { } miniGame
+                && !miniGame.IsItemAllowedToEquip(item))
+            {
+                await player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync("You can't equip this item during the event.", MessageType.BlueNormal)).ConfigureAwait(false);
                 return Movement.None;
             }
 
@@ -224,13 +245,13 @@ public class MoveItemAction
                 return Movement.Normal;
             }
 
-            player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("You can't wear this Item.", MessageType.BlueNormal);
+            await player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync("You can't wear this item.", MessageType.BlueNormal)).ConfigureAwait(false);
             return Movement.None;
         }
 
         if (item.Definition!.IsBoundToCharacter && toStorage != fromStorage)
         {
-            player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage("This item is bound to the inventory of this character.", MessageType.BlueNormal);
+            await player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync("This item is bound to the inventory of this character.", MessageType.BlueNormal)).ConfigureAwait(false);
             return Movement.None;
         }
 
@@ -302,6 +323,17 @@ public class MoveItemAction
     {
         int rowIndex = (toSlot - toStorage.StartIndex) / RowSize;
         int columnIndex = (toSlot - toStorage.StartIndex) % RowSize;
+
+        if (rowIndex + item.Definition!.Height > usedSlots.GetLength(0))
+        {
+            return true;
+        }
+
+        if (columnIndex + item.Definition.Width > usedSlots.GetLength(1))
+        {
+            return true;
+        }
+
         for (int r = rowIndex; r < rowIndex + item.Definition!.Height; r++)
         {
             for (int c = columnIndex; c < columnIndex + item.Definition.Width; c++)

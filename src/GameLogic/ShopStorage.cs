@@ -4,6 +4,8 @@
 
 namespace MUnique.OpenMU.GameLogic;
 
+using Nito.AsyncEx;
+
 /// <summary>
 /// The storage of the personal store of a player.
 /// </summary>
@@ -16,11 +18,11 @@ public class ShopStorage : Storage, IShopStorage
     public ShopStorage(Player player)
         : base(InventoryConstants.StoreSize, 0, InventoryConstants.FirstStoreItemSlotIndex, new ItemStorageAdapter(player.SelectedCharacter?.Inventory ?? throw Error.NotInitializedProperty(player, nameof(Character.Inventory)), InventoryConstants.FirstStoreItemSlotIndex, InventoryConstants.StoreSize))
     {
-        this.StoreLock = new object();
+        this.StoreLock = new AsyncLock();
     }
 
     /// <inheritdoc/>
-    public object StoreLock { get; }
+    public AsyncLock StoreLock { get; }
 
     /// <inheritdoc/>
     public string StoreName { get; set; } = string.Empty;
@@ -29,13 +31,13 @@ public class ShopStorage : Storage, IShopStorage
     public bool StoreOpen { get; set; }
 
     /// <inheritdoc/>
-    public override bool AddItem(byte slot, Item item)
+    public override async ValueTask<bool> AddItemAsync(byte slot, Item item)
     {
         if (this.StoreOpen)
         {
             return false;
         }
 
-        return base.AddItem(slot, item);
+        return await base.AddItemAsync(slot, item).ConfigureAwait(false);
     }
 }

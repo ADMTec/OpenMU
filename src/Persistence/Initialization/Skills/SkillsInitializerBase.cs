@@ -99,10 +99,19 @@ internal abstract class SkillsInitializerBase : InitializerBase
         {
             this.ApplyElementalModifier(elementalModifier, skill);
         }
+
+        skill.SetGuid(skill.Number);
     }
 
     private void ApplyElementalModifier(ElementalType elementalModifier, Skill skill)
     {
+        if ((SkillNumber)skill.Number is SkillNumber.IceArrow or SkillNumber.IceArrowStrengthener)
+        {
+            skill.ElementalModifierTarget = Stats.IceResistance.GetPersistent(this.GameConfiguration);
+            skill.MagicEffectDef = this.CreateEffect(ElementalType.Ice, MagicEffectNumber.Freeze, Stats.IsFrozen, 5);
+            return;
+        }
+
         switch (elementalModifier)
         {
             case ElementalType.Ice:
@@ -140,6 +149,15 @@ internal abstract class SkillsInitializerBase : InitializerBase
 
     private MagicEffectDefinition CreateEffect(ElementalType type, MagicEffectNumber effectNumber, AttributeDefinition targetAttribute, float durationInSeconds)
     {
+        if (this.GameConfiguration.MagicEffects.FirstOrDefault(
+                e => e.Number == (short)effectNumber
+                     && e.SubType == (byte)(0xFF - type)
+                     && Equals(e.Duration?.ConstantValue.Value, durationInSeconds)
+                     && e.PowerUpDefinitions.FirstOrDefault()?.TargetAttribute == targetAttribute) is { } existingEffect)
+        {
+            return existingEffect;
+        }
+
         var effect = this.Context.CreateNew<MagicEffectDefinition>();
         this.GameConfiguration.MagicEffects.Add(effect);
         effect.Name = Enum.GetName(effectNumber) ?? string.Empty;
@@ -147,12 +165,13 @@ internal abstract class SkillsInitializerBase : InitializerBase
         effect.Number = (short)effectNumber;
         effect.StopByDeath = true;
         effect.SubType = (byte)(0xFF - type);
-        effect.PowerUpDefinition = this.Context.CreateNew<PowerUpDefinitionWithDuration>();
-        effect.PowerUpDefinition.Duration = this.Context.CreateNew<PowerUpDefinitionValue>();
-        effect.PowerUpDefinition.Duration.ConstantValue.Value = durationInSeconds;
-        effect.PowerUpDefinition.Boost = this.Context.CreateNew<PowerUpDefinitionValue>();
-        effect.PowerUpDefinition.Boost.ConstantValue.Value = 1;
-        effect.PowerUpDefinition.TargetAttribute = targetAttribute.GetPersistent(this.GameConfiguration);
+        effect.Duration = this.Context.CreateNew<PowerUpDefinitionValue>();
+        effect.Duration.ConstantValue.Value = durationInSeconds;
+        var powerUpDefinition = this.Context.CreateNew<PowerUpDefinition>();
+        effect.PowerUpDefinitions.Add(powerUpDefinition);
+        powerUpDefinition.Boost = this.Context.CreateNew<PowerUpDefinitionValue>();
+        powerUpDefinition.Boost.ConstantValue.Value = 1;
+        powerUpDefinition.TargetAttribute = targetAttribute.GetPersistent(this.GameConfiguration);
         return effect;
     }
 

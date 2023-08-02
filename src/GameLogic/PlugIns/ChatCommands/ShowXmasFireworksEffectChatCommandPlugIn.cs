@@ -15,7 +15,7 @@ using MUnique.OpenMU.PlugIns;
 /// </summary>
 [Guid("0E23E4CE-6E7B-4F29-92D8-04A1335EC722")]
 [PlugIn("Show xmas fireworks effect chat command", "Handles the chat command '/xmasfireworks <x> <y>'. Shows an christmas fireworks effect at the specified coordinates.")]
-[ChatCommandHelp(Command, typeof(CoordinatesCommandArgs), CharacterStatus.GameMaster)]
+[ChatCommandHelp(Command, "Shows an christmas fireworks effect at the specified coordinates.", typeof(CoordinatesCommandArgs), CharacterStatus.GameMaster)]
 public class ShowXmasFireworksEffectChatCommandPlugIn : ChatCommandPlugInBase<CoordinatesCommandArgs>
 {
     private const string Command = "/xmasfireworks";
@@ -27,9 +27,9 @@ public class ShowXmasFireworksEffectChatCommandPlugIn : ChatCommandPlugInBase<Co
     public override CharacterStatus MinCharacterStatusRequirement => CharacterStatus.GameMaster;
 
     /// <inheritdoc/>
-    protected override void DoHandleCommand(Player gameMaster, CoordinatesCommandArgs arguments)
+    protected override async ValueTask DoHandleCommandAsync(Player gameMaster, CoordinatesCommandArgs arguments)
     {
         var coordinates = arguments.X == 0 ? gameMaster.Position : new Point(arguments.X, arguments.Y);
-        gameMaster.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IShowItemDropEffectPlugIn>()?.ShowEffect(ItemDropEffect.ChristmasFireworks, coordinates), true);
+        await gameMaster.ForEachWorldObserverAsync<IShowItemDropEffectPlugIn>(p => p.ShowEffectAsync(ItemDropEffect.ChristmasFireworks, coordinates), true).ConfigureAwait(false);
     }
 }

@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.Persistence.EntityFramework;
 
+using System.Collections;
 using System.Collections.Concurrent;
 using System.IO;
 
@@ -17,7 +18,7 @@ using MUnique.OpenMU.Persistence.EntityFramework.Model;
 internal class ConfigurationTypeRepository<T> : IRepository<T>, IConfigurationTypeRepository
     where T : class
 {
-    private readonly RepositoryManager _repositoryManager;
+    private readonly IContextAwareRepositoryProvider _repositoryProvider;
 
     private readonly Func<GameConfiguration, ICollection<T>> _collectionSelector;
 
@@ -31,11 +32,11 @@ internal class ConfigurationTypeRepository<T> : IRepository<T>, IConfigurationTy
     /// <summary>
     /// Initializes a new instance of the <see cref="ConfigurationTypeRepository{T}" /> class.
     /// </summary>
-    /// <param name="repositoryManager">The repository manager.</param>
+    /// <param name="repositoryProvider">The repository provider.</param>
     /// <param name="collectionSelector">The collection selector which returns the collection of <typeparamref name="T" /> of a <see cref="GameConfiguration" />.</param>
-    public ConfigurationTypeRepository(RepositoryManager repositoryManager, Func<GameConfiguration, ICollection<T>> collectionSelector)
+    public ConfigurationTypeRepository(IContextAwareRepositoryProvider repositoryProvider, Func<GameConfiguration, ICollection<T>> collectionSelector)
     {
-        this._repositoryManager = repositoryManager;
+        this._repositoryProvider = repositoryProvider;
         this._collectionSelector = collectionSelector;
     }
 
@@ -43,56 +44,69 @@ internal class ConfigurationTypeRepository<T> : IRepository<T>, IConfigurationTy
     /// Gets all objects by using the <see cref="_collectionSelector"/> to the current <see cref="GameConfiguration"/>.
     /// </summary>
     /// <returns>All objects of the repository.</returns>
-    public IEnumerable<T> GetAll()
+    public ValueTask<IEnumerable<T>> GetAllAsync()
     {
-        return this._collectionSelector(this.GetCurrentGameConfiguration());
+        return ValueTask.FromResult<IEnumerable<T>>(this._collectionSelector(this.GetCurrentGameConfiguration()));
+    }
+
+    /// <inheritdoc/>
+    async ValueTask<IEnumerable> IRepository.GetAllAsync()
+    {
+        return await this.GetAllAsync().ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public T GetById(Guid id)
+    public ValueTask<T?> GetByIdAsync(Guid id)
     {
         this.EnsureCacheForCurrentConfiguration();
+
         var dictionary = this._cache[this.GetCurrentGameConfiguration()];
         if (dictionary.TryGetValue(id, out var result))
         {
-            return result;
+            return ValueTask.FromResult<T?>(result);
         }
 
         throw new InvalidDataException($"The object of {typeof(T).Name} with the specified id {id} could not be found in the game configuration");
     }
 
     /// <inheritdoc />
-    public bool Delete(object obj)
+    public async ValueTask<bool> DeleteAsync(object obj)
     {
-        if (obj is T item)
+        if (obj is not T item)
         {
-            var gameConfiguration = this.GetCurrentGameConfiguration();
-            var collection = this._collectionSelector(gameConfiguration);
-            return collection.Remove(item);
+            return false;
         }
 
-        return false;
+        var gameConfiguration = this.GetCurrentGameConfiguration();
+        var collection = this._collectionSelector(gameConfiguration);
+        return collection.Remove(item);
     }
 
     /// <inheritdoc />
-    public bool Delete(Guid id)
+    public async ValueTask<bool> DeleteAsync(Guid id)
     {
-        return this.Delete(this.GetById(id));
+        var obj = await this.GetByIdAsync(id).ConfigureAwait(false);
+        if (obj is null)
+        {
+            return false;
+        }
+
+        return await this.DeleteAsync(obj).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    object IRepository.GetById(Guid id)
+    async ValueTask<object?> IRepository.GetByIdAsync(Guid id)
     {
-        return this.GetById(id);
+        return await this.GetByIdAsync(id).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Ensures the cache for the current configuration.
+    /// TODO: Call this at a better place and time - so that we can remove this check before every GetById
     /// </summary>
     public void EnsureCacheForCurrentConfiguration()
     {
         var configuration = this.GetCurrentGameConfiguration();
-
         if (this._cache.ContainsKey(configuration))
         {
             return;
@@ -118,7 +132,7 @@ internal class ConfigurationTypeRepository<T> : IRepository<T>, IConfigurationTy
 
     private GameConfiguration GetCurrentGameConfiguration()
     {
-        var context = (this._repositoryManager.ContextStack.GetCurrentContext() as CachingEntityFrameworkContext)?.Context as EntityDataContext;
+        var context = (this._repositoryProvider.ContextStack.GetCurrentContext() as CachingEntityFrameworkContext)?.Context as EntityDataContext;
         if (context is null)
         {
             throw new InvalidOperationException("This repository can only be used within an account context.");

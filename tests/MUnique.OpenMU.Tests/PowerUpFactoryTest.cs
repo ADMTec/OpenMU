@@ -30,9 +30,9 @@ public class PowerUpFactoryTest
     /// Tests if the item option results in an corresponding power up.
     /// </summary>
     [Test]
-    public void ItemOptions()
+    public async ValueTask ItemOptionsAsync()
     {
-        var player = TestHelper.CreatePlayer();
+        var player = await TestHelper.CreatePlayerAsync().ConfigureAwait(false);
         var factory = this.GetPowerUpFactory();
         var item = this.GetItemWithOption();
         var result = factory.GetPowerUps(item, player.Attributes!);
@@ -43,9 +43,9 @@ public class PowerUpFactoryTest
     /// Tests if the item option of level 0 results in the corresponding power up.
     /// </summary>
     [Test]
-    public void ItemBasePowerUpLevel0()
+    public async ValueTask ItemBasePowerUpLevel0Async()
     {
-        var player = TestHelper.CreatePlayer();
+        var player = await TestHelper.CreatePlayerAsync().ConfigureAwait(false);
         var factory = this.GetPowerUpFactory();
         var item = this.GetItemWithBasePowerUp();
         var result = factory.GetPowerUps(item, player.Attributes!);
@@ -56,9 +56,9 @@ public class PowerUpFactoryTest
     /// Tests if the item option of level 3 results in the corresponding power up.
     /// </summary>
     [Test]
-    public void ItemBasePowerUpLevel3()
+    public async ValueTask ItemBasePowerUpLevel3Async()
     {
-        var player = TestHelper.CreatePlayer();
+        var player = await TestHelper.CreatePlayerAsync().ConfigureAwait(false);
         var factory = this.GetPowerUpFactory();
         var item = this.GetItemWithBasePowerUp();
         item.Level = 3;
@@ -70,9 +70,9 @@ public class PowerUpFactoryTest
     /// Tests if the power ups don't get created if the item has no more durability.
     /// </summary>
     [Test]
-    public void NoPowerUpsWhenItemBroken()
+    public async ValueTask NoPowerUpsWhenItemBrokenAsync()
     {
-        var player = TestHelper.CreatePlayer();
+        var player = await TestHelper.CreatePlayerAsync().ConfigureAwait(false);
         var factory = this.GetPowerUpFactory();
         var item = this.GetItemWithBasePowerUp();
         item.Durability = 0;
@@ -84,9 +84,9 @@ public class PowerUpFactoryTest
     /// Tests if the power ups don't get created if the item is not equipped at the player.
     /// </summary>
     [Test]
-    public void NoPowerUpsWhenItemUnwearable()
+    public async ValueTask NoPowerUpsWhenItemUnwearableAsync()
     {
-        var player = TestHelper.CreatePlayer();
+        var player = await TestHelper.CreatePlayerAsync().ConfigureAwait(false);
         var factory = this.GetPowerUpFactory();
         var item = this.GetItemWithBasePowerUp();
         item.ItemSlot = UnwearableSlot;
@@ -98,9 +98,9 @@ public class PowerUpFactoryTest
     /// Tests if the power ups don't get created when the item has no options.
     /// </summary>
     [Test]
-    public void NoPowerUpsInItem()
+    public async ValueTask NoPowerUpsInItemAsync()
     {
-        var player = TestHelper.CreatePlayer();
+        var player = await TestHelper.CreatePlayerAsync().ConfigureAwait(false);
         var factory = this.GetPowerUpFactory();
         var item = this.GetItem();
         var result = factory.GetPowerUps(item, player.Attributes!);
@@ -266,7 +266,7 @@ public class PowerUpFactoryTest
         item.Object.ItemSlot = 0;
         item.Object.Durability = item.Object.Definition.Durability;
         item.Setup(i => i.ItemOptions).Returns(new List<ItemOptionLink>());
-        item.Setup(i => i.ItemSetGroups).Returns(new List<ItemSetGroup>());
+        item.Setup(i => i.ItemSetGroups).Returns(new List<ItemOfItemSet>());
         return item.Object;
     }
 
@@ -288,14 +288,17 @@ public class PowerUpFactoryTest
     {
         var resultMock = new Mock<ItemBasePowerUpDefinition>();
         resultMock.SetupAllProperties();
-        resultMock.Setup(r => r.BonusPerLevel).Returns(new List<LevelBonus>());
+        var bonusTableMock = new Mock<ItemLevelBonusTable>();
+        bonusTableMock.Setup(r => r.BonusPerLevel).Returns(new List<LevelBonus>());
         var result = resultMock.Object;
         result.BaseValueElement = new ConstantElement(PowerUpStrength);
         result.TargetAttribute = Stats.MaximumPhysBaseDmg;
-        result.BonusPerLevel.Add(new LevelBonus(1, this._levelBonus[1]));
-        result.BonusPerLevel.Add(new LevelBonus(2, this._levelBonus[2]));
-        result.BonusPerLevel.Add(new LevelBonus(3, this._levelBonus[3]));
-        result.BonusPerLevel.Add(new LevelBonus(4, this._levelBonus[4]));
+        var bonusTable = bonusTableMock.Object;
+        result.BonusPerLevelTable = bonusTable;
+        bonusTable.BonusPerLevel.Add(new LevelBonus(1, this._levelBonus[1]));
+        bonusTable.BonusPerLevel.Add(new LevelBonus(2, this._levelBonus[2]));
+        bonusTable.BonusPerLevel.Add(new LevelBonus(3, this._levelBonus[3]));
+        bonusTable.BonusPerLevel.Add(new LevelBonus(4, this._levelBonus[4]));
         return result;
     }
 
@@ -324,9 +327,10 @@ public class PowerUpFactoryTest
         foreach (var level in levels)
         {
             var item = this.GetItem();
+            var itemOfItemSet = new ItemOfItemSet { ItemDefinition = item.Definition, ItemSetGroup = armorSet.Object };
             item.Definition!.PossibleItemSetGroups.Add(armorSet.Object);
-            item.ItemSetGroups.Add(armorSet.Object);
-            armorSet.Object.Items.Add(new ItemOfItemSet { ItemDefinition = item.Definition });
+            item.ItemSetGroups.Add(itemOfItemSet);
+            armorSet.Object.Items.Add(itemOfItemSet);
             item.Level = level;
             yield return item;
         }
@@ -349,11 +353,12 @@ public class PowerUpFactoryTest
         for (int i = 0; i < itemCount; i++)
         {
             var item = this.GetItem();
+            var itemOfSet = new ItemOfItemSet { BonusOption = bonusOption, ItemDefinition = item.Definition, ItemSetGroup = ancientSet.Object};
             item.Definition!.PossibleItemSetGroups.Add(ancientSet.Object);
-            item.ItemSetGroups.Add(ancientSet.Object);
+            item.ItemSetGroups.Add(itemOfSet);
             item.ItemOptions.Add(new ItemOptionLink { ItemOption = bonusOption, Level = 1 });
 
-            ancientSet.Object.Items.Add(new ItemOfItemSet { BonusOption = bonusOption, ItemDefinition = item.Definition });
+            ancientSet.Object.Items.Add(itemOfSet);
             yield return item;
         }
     }

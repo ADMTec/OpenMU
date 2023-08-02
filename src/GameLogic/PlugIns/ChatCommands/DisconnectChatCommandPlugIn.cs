@@ -5,6 +5,7 @@
 namespace MUnique.OpenMU.GameLogic.PlugIns.ChatCommands;
 
 using System.Runtime.InteropServices;
+using Nito.AsyncEx.Synchronous;
 using MUnique.OpenMU.GameLogic.PlugIns.ChatCommands.Arguments;
 using MUnique.OpenMU.PlugIns;
 
@@ -13,7 +14,7 @@ using MUnique.OpenMU.PlugIns;
 /// </summary>
 [Guid("B5E0F108-9E55-48F6-A7A8-220BFAEF2F3E")]
 [PlugIn("Disconnect chat command", "Handles the chat command '/disconnect <char>'. Disconnects a player from the game server.")]
-[ChatCommandHelp(Command, typeof(DisconnectChatCommandArgs), CharacterStatus.GameMaster)]
+[ChatCommandHelp(Command, "Disconnects a player from the game server.", typeof(DisconnectChatCommandArgs), CharacterStatus.GameMaster)]
 public class DisconnectChatCommandPlugIn : ChatCommandPlugInBase<DisconnectChatCommandArgs>
 {
     private const string Command = "/disconnect";
@@ -25,14 +26,14 @@ public class DisconnectChatCommandPlugIn : ChatCommandPlugInBase<DisconnectChatC
     public override CharacterStatus MinCharacterStatusRequirement => CharacterStatus.GameMaster;
 
     /// <inheritdoc />
-    protected override void DoHandleCommand(Player gameMaster, DisconnectChatCommandArgs arguments)
+    protected override async ValueTask DoHandleCommandAsync(Player gameMaster, DisconnectChatCommandArgs arguments)
     {
         var player = this.GetPlayerByCharacterName(gameMaster, arguments.CharacterName ?? string.Empty);
-        player.Disconnect();
+        await player.DisconnectAsync().ConfigureAwait(false);
 
         if (!player.Name.Equals(gameMaster.Name))
         {
-            this.ShowMessageTo(gameMaster, $"[{this.Key}] {player.Name} has been disconnected.");
+            await this.ShowMessageToAsync(gameMaster, $"[{this.Key}] {player.Name} has been disconnected.").ConfigureAwait(false);
         }
     }
 }

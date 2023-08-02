@@ -4,8 +4,10 @@
 
 namespace MUnique.OpenMU.GameLogic.MiniGames;
 
+using System.Collections.Concurrent;
 using System.Threading;
 using MUnique.OpenMU.DataModel.Statistics;
+using MUnique.OpenMU.GameLogic.Attributes;
 using MUnique.OpenMU.GameLogic.NPC;
 using MUnique.OpenMU.GameLogic.PlayerActions.MiniGames;
 using MUnique.OpenMU.GameLogic.PlugIns;
@@ -13,22 +15,25 @@ using MUnique.OpenMU.GameLogic.PlugIns.ChatCommands;
 using MUnique.OpenMU.GameLogic.Views;
 using MUnique.OpenMU.Interfaces;
 using MUnique.OpenMU.Persistence;
+using Nito.AsyncEx;
 using Nito.AsyncEx.Synchronous;
 
 /// <summary>
 /// The context of a mini game.
 /// </summary>
-public class MiniGameContext : Disposable, IEventStateProvider
+public class MiniGameContext : AsyncDisposable, IEventStateProvider
 {
     private readonly IGameContext _gameContext;
     private readonly IMapInitializer _mapInitializer;
-    private readonly SemaphoreSlim _enterLock = new (1);
+    private readonly AsyncReaderWriterLock _enterLock = new();
 
-    private readonly HashSet<Player> _enteredPlayers = new ();
+    private readonly HashSet<Player> _enteredPlayers = new();
+    private readonly ConcurrentDictionary<MonsterDefinition, bool> _rewardRelatedKills;
 
-    private readonly CancellationTokenSource _gameEndedCts = new ();
+    private readonly CancellationTokenSource _gameEndedCts = new();
 
-    private readonly HashSet<byte> _currentSpawnWaves = new ();
+    private readonly HashSet<byte> _currentSpawnWaves = new();
+    private readonly List<ChangeEventContext> _remainingEvents = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MiniGameContext"/> class.
@@ -44,12 +49,19 @@ public class MiniGameContext : Disposable, IEventStateProvider
         this.Key = key;
         this.Definition = definition;
         this.Logger = this._gameContext.LoggerFactory.CreateLogger(this.GetType());
+        this.DropGenerator = this._gameContext.DropGenerator;
 
         this.Map = this.CreateMap();
 
+        this._rewardRelatedKills = new(
+            this.Definition.Rewards
+                .Where(r => r.RequiredKill is not null)
+                .Select(r => new KeyValuePair<MonsterDefinition, bool>(r.RequiredKill!, false))
+                .Distinct());
+
         this.State = MiniGameState.Open;
 
-        _ = Task.Run(this.RunGameAsync);
+        _ = Task.Run(() => this.RunGameAsync(this.GameEndedToken), this.GameEndedToken);
     }
 
     /// <summary>
@@ -76,43 +88,88 @@ public class MiniGameContext : Disposable, IEventStateProvider
     public bool IsEventRunning => this.State == MiniGameState.Playing;
 
     /// <summary>
+    /// Gets the player count.
+    /// </summary>
+    public int PlayerCount
+    {
+        get
+        {
+            using var l = this._enterLock.ReaderLock();
+            return this._enteredPlayers.Count(p => p.IsAlive);
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether it's allowed to kill other players without consequences.
+    /// </summary>
+    public virtual bool AllowPlayerKilling { get; }
+
+    /// <summary>
+    /// Gets the remaining time of the event, in case it has been finished by the player earlier than the timeout.
+    /// </summary>
+    protected virtual TimeSpan RemainingTime => TimeSpan.Zero;
+
+    /// <summary>
+    /// Gets a value indicating whether a winner is existing.
+    /// </summary>
+    protected virtual Player? Winner => null;
+
+    /// <summary>
     /// Gets the logger for this instance.
     /// </summary>
     protected ILogger Logger { get; }
 
     /// <summary>
+    /// Gets the <see cref="CancellationToken"/> which is cancelled when the game ends.
+    /// </summary>
+    protected CancellationToken GameEndedToken => this._gameEndedCts.Token;
+
+    /// <summary>
+    /// Gets the next event which targets should be fulfilled by the players.
+    /// </summary>
+    protected ChangeEventContext? NextEvent { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the drop generator which should be used during the mini game.
+    /// </summary>
+    protected IDropGenerator DropGenerator { get; set; }
+
+    /// <summary>
+    /// Gets the minimum player count to start the game.
+    /// </summary>
+    protected virtual int MinimumPlayerCount => 1;
+
+    /// <summary>
     /// Tries to enter the mini game. It will fail, if it's full, of if it's not in an open state.
     /// </summary>
     /// <param name="player">The player which tries to enter.</param>
-    /// <param name="enterResult">The result of entering the game.</param>
     /// <returns>A value indicating whether entering had success.</returns>
-    public bool TryEnter(Player player, out EnterResult enterResult)
+    public async ValueTask<EnterResult> TryEnterAsync(Player player)
     {
-        this._enterLock.Wait();
-        try
+        using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
         {
             if (this.State != MiniGameState.Open)
             {
-                enterResult = EnterResult.NotOpen;
-                return false;
+                return EnterResult.NotOpen;
             }
 
             if (this._enteredPlayers.Count >= this.Definition.MaximumPlayerCount)
             {
-                enterResult = EnterResult.Full;
-                return false;
+                return EnterResult.Full;
+            }
+
+            if (!await this.AreEquippedItemsAllowedAsync(player).ConfigureAwait(false))
+            {
+                return EnterResult.Failed;
             }
 
             this._enteredPlayers.Add(player);
         }
-        finally
-        {
-            this._enterLock.Release();
-        }
 
         player.CurrentMiniGame = this;
-        enterResult = EnterResult.Success;
-        return true;
+        player.PlayerPickedUpItem += this.OnPlayerPickedUpItemAsync;
+
+        return EnterResult.Success;
     }
 
     /// <inheritdoc />
@@ -121,35 +178,59 @@ public class MiniGameContext : Disposable, IEventStateProvider
         return this._currentSpawnWaves.Contains(waveNumber);
     }
 
-    /// <inheritdoc />
-    protected override void Dispose(bool disposing)
+    /// <summary>
+    /// Determines whether an item allowed to be equipped during this game.
+    /// </summary>
+    /// <param name="item">The item.</param>
+    public virtual bool IsItemAllowedToEquip(Item item)
     {
-        base.Dispose(disposing);
+        // Additional checks can be implemented in specific mini games.
+        return true;
+    }
 
-        this._enterLock.Wait();
-        try
+    /// <summary>
+    /// Determines whether performing the specified skill is allowed during the mini game.
+    /// </summary>
+    /// <param name="skill">The skill.</param>
+    /// <param name="attacker">The attacker or skill performer.</param>
+    /// <param name="target">The target.</param>
+    public virtual bool IsSkillAllowed(Skill skill, Player attacker, IAttackable target)
+    {
+        // Additional checks can be implemented in specific mini games.
+        return true;
+    }
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        return $"{this.Definition.Name} for {this._gameContext}";
+    }
+
+    /// <inheritdoc />
+    protected override async ValueTask DisposeAsyncCore()
+    {
+        this.Logger.LogDebug("{context}: Disposing mini game...", this);
+        await base.DisposeAsyncCore().ConfigureAwait(false);
+
+        using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
         {
             this.State = MiniGameState.Disposed;
         }
-        finally
-        {
-            this._enterLock.Release();
-        }
 
         try
         {
-            this.MovePlayersToSafezoneAsync().AsTask().WaitAndUnwrapException();
+            await this.MovePlayersToSafezoneAsync().ConfigureAwait(false);
 
-            this.Map.ObjectAdded -= this.OnObjectAddedToMap;
-            this.Map.ObjectRemoved -= this.OnObjectRemovedFromMap;
+            this.Map.ObjectAdded -= this.OnObjectAddedToMapAsync;
+            this.Map.ObjectRemoved -= this.OnObjectRemovedFromMapAsync;
 
-            this._gameContext.RemoveMiniGame(this);
+            await this._gameContext.RemoveMiniGameAsync(this).ConfigureAwait(false);
             this._gameEndedCts.Cancel();
             this._gameEndedCts.Dispose();
         }
         catch (Exception ex)
         {
-            this.Logger.LogError(ex, "Unexpected error during dispose: {0}", ex.Message);
+            this.Logger.LogError(ex, "{context}: Unexpected error during dispose: {ex}", this, ex);
         }
     }
 
@@ -157,26 +238,33 @@ public class MiniGameContext : Disposable, IEventStateProvider
     /// Executes the action for each player of this game.
     /// </summary>
     /// <param name="playerAction">The action which should be executed for each player of the game.</param>
-    protected async ValueTask ForEachPlayerAsync(Action<Player> playerAction)
+    protected async ValueTask ForEachPlayerAsync(Func<Player, Task> playerAction)
     {
-        await this._enterLock.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            this._enteredPlayers.ForEach(playerAction);
-        }
-        finally
-        {
-            this._enterLock.Release();
-        }
+        using var @lock = await this._enterLock.ReaderLockAsync().ConfigureAwait(false);
+        await this._enteredPlayers.Select(playerAction).WhenAll().ConfigureAwait(false);
     }
 
     /// <summary>
     /// Will be called when the game has been started.
     /// </summary>
     /// <param name="players">The player which started with the game.</param>
-    protected virtual void OnGameStart(ICollection<Player> players)
+    protected virtual async ValueTask OnGameStartAsync(ICollection<Player> players)
     {
-        // can be overwritten
+        var startEvents = this.Definition.ChangeEvents
+            .OrderBy(e => e.Index)
+            .TakeWhile(e => e is { Index: <= 0, NumberOfKills: 0 })
+            .ToList();
+
+        foreach (var changeEvent in startEvents)
+        {
+            await this.ApplyChangeEventAsync(changeEvent).ConfigureAwait(false);
+        }
+
+        this._remainingEvents.AddRange(
+            this.Definition.ChangeEvents
+                .Except(startEvents)
+                .Select(e => new ChangeEventContext(e, this._enteredPlayers.Count)));
+        this.UpdateNextEvent();
     }
 
     /// <summary>
@@ -186,28 +274,176 @@ public class MiniGameContext : Disposable, IEventStateProvider
     /// <param name="e">The event parameters.</param>
     protected virtual void OnMonsterDied(object? sender, DeathInformation e)
     {
+        if (sender is AttackableNpcBase npc)
+        {
+            this._rewardRelatedKills.TryUpdate(npc.Definition, true, false);
+            this.CheckKillForEventChanges(npc);
+        }
+    }
+
+    /// <summary>
+    /// Will be called when a player of the game has been killed.
+    /// </summary>
+    /// <param name="sender">The sender (player) of the event.</param>
+    /// <param name="e">The event parameters.</param>
+    protected virtual void OnPlayerDied(object? sender, DeathInformation e)
+    {
+        if (sender is Player player)
+        {
+            this.CheckKillForEventChanges(player);
+        }
+    }
+
+    /// <summary>
+    /// Will be called when a destructible of the game has been destroyed.
+    /// </summary>
+    /// <param name="sender">The sender (destructible) of the event.</param>
+    /// <param name="e">The event parameters.</param>
+    protected virtual void OnDestructibleDied(object? sender, DeathInformation e)
+    {
+        if (sender is AttackableNpcBase npc)
+        {
+            this._rewardRelatedKills.TryUpdate(npc.Definition, true, false);
+            this.CheckKillForEventChanges(npc);
+        }
+    }
+
+    /// <summary>
+    /// Will be called when an item has been picked up by player.
+    /// </summary>
+    /// <param name="args">The event parameters.</param>
+    protected virtual ValueTask OnPlayerPickedUpItemAsync((Player Picker, ILocateable DroppedItem) args)
+    {
         // can be overwritten
+        return ValueTask.CompletedTask;
     }
 
     /// <summary>
     /// Shows the achieved score to the player.
     /// </summary>
     /// <param name="player">The player to which it should be shown.</param>
-    protected virtual void ShowScore(Player player)
+    protected virtual ValueTask ShowScoreAsync(Player player)
     {
         // can be overwritten
+        return ValueTask.CompletedTask;
     }
 
     /// <summary>
     /// Will be called when the game has been ended.
     /// </summary>
     /// <param name="finishers">The players which finished the game to the end.</param>
-    protected virtual void GameEnded(ICollection<Player> finishers)
+    protected virtual async ValueTask GameEndedAsync(ICollection<Player> finishers)
     {
         foreach (var player in finishers)
         {
-            this.ShowScore(player);
+            await this.ShowScoreAsync(player).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Called when an item was dropped on the map.
+    /// </summary>
+    /// <param name="item">The item.</param>
+    protected virtual void OnItemDroppedOnMap(DroppedItem item)
+    {
+        // can be overwritten
+    }
+
+    /// <summary>
+    /// Will be called when an object has been ended to map.
+    /// </summary>
+    /// <param name="args">The event parameters.</param>
+    protected virtual async ValueTask OnObjectAddedToMapAsync((GameMap Map, ILocateable Object) args)
+    {
+        this._gameContext.PlugInManager.GetPlugInPoint<IObjectAddedToMapPlugIn>()?.ObjectAddedToMap(args.Map, args.Object);
+        if (args.Object is Monster monster)
+        {
+            monster.Died += this.OnMonsterDied;
+        }
+
+        if (args.Object is Destructible destructible)
+        {
+            destructible.Died += this.OnDestructibleDied;
+        }
+
+        if (args.Object is Player player)
+        {
+            player.Died += this.OnPlayerDied;
+        }
+
+        if (args.Object is DroppedItem item)
+        {
+            this.OnItemDroppedOnMap(item);
+        }
+    }
+
+    /// <summary>
+    /// Will be called when an object has been removed from map.
+    /// </summary>
+    /// <param name="args">The event parameters.</param>
+    protected virtual async ValueTask OnObjectRemovedFromMapAsync((GameMap Map, ILocateable Object) args)
+    {
+        try
+        {
+            this._gameContext.PlugInManager.GetPlugInPoint<IObjectRemovedFromMapPlugIn>()?.ObjectRemovedFromMap(args.Map, args.Object);
+            if (args.Object is not Player player)
+            {
+                return;
+            }
+
+            player.CurrentMiniGame = null;
+            player.PlayerPickedUpItem -= this.OnPlayerPickedUpItemAsync;
+            bool cantGameProceed;
+            using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
+            {
+                player.Died -= this.OnPlayerDied;
+                this._enteredPlayers.Remove(player);
+                cantGameProceed = this._enteredPlayers.Count == 0 && this.State != MiniGameState.Open;
+            }
+
+            if (cantGameProceed)
+            {
+                this._gameEndedCts.Cancel();
+            }
+            else if (player.IsAlive)
+            {
+                this.CheckKillForEventChanges(player);
+            }
+            else
+            {
+                // no action required.
+            }
+        }
+        catch (Exception ex)
+        {
+            this.Logger.LogError(ex, "{context}: Error when handling the removed map object {obj}.", this, args.Object);
+        }
+    }
+
+    /// <summary>
+    /// Called when the map terrain changed due to an <see cref="MiniGameChangeEvent"/>.
+    /// </summary>
+    /// <param name="changeEvent">The change event.</param>
+    protected virtual ValueTask OnTerrainChangedAsync(MiniGameChangeEvent changeEvent)
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Called before the map terrain is changing due to an <see cref="MiniGameChangeEvent"/>.
+    /// </summary>
+    /// <param name="changeEvent">The change event.</param>
+    protected virtual ValueTask OnTerrainChangingAsync(MiniGameChangeEvent changeEvent)
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Finishes the event.
+    /// </summary>
+    protected virtual void FinishEvent()
+    {
+        this._gameEndedCts.Cancel();
     }
 
     /// <summary>
@@ -215,20 +451,27 @@ public class MiniGameContext : Disposable, IEventStateProvider
     /// </summary>
     /// <param name="player">The player who should receive the rewards.</param>
     /// <param name="rank">The rank of the player in the current game.</param>
-    protected void GiveRewards(Player player, int rank)
+    /// <returns>The bonus score and the given money.</returns>
+    protected async Task<(int BonusScore, int GivenMoney)> GiveRewardsAndGetBonusScoreAsync(Player player, int rank)
     {
-        var rewards = this.Definition.Rewards.Where(r => r.Rank is null || r.Rank == rank);
+        int bonusScore = 0;
+        int givenMoney = 0;
+        var rewards = this.Definition.Rewards.Where(r => this.DoesRewardApply(player, rank, r));
         foreach (var reward in rewards)
         {
-            this.GiveReward(player, reward);
+            var result = await this.GiveRewardAsync(player, reward).ConfigureAwait(false);
+            bonusScore += result.BonusScore;
+            givenMoney += result.GivenMoney;
         }
+
+        return (bonusScore, givenMoney);
     }
 
     /// <summary>
     /// Saves the ranking of this game.
     /// </summary>
     /// <param name="scoreEntries">The entries of the ranking.</param>
-    protected void SaveRanking(IEnumerable<(int Rank, Character Character, int Score)> scoreEntries)
+    protected async ValueTask SaveRankingAsync(IEnumerable<(int Rank, Character Character, int Score)> scoreEntries)
     {
         if (!this.Definition.SaveRankingStatistics)
         {
@@ -237,7 +480,7 @@ public class MiniGameContext : Disposable, IEventStateProvider
 
         try
         {
-            using var context = this._gameContext.PersistenceContextProvider.CreateNewTypedContext<MiniGameRankingEntry>();
+            using var context = this._gameContext.PersistenceContextProvider.CreateNewTypedContext<MiniGameRankingEntry>(false);
             context.Attach(this.Definition);
             var instanceId = Guid.NewGuid();
             var timestamp = DateTime.UtcNow;
@@ -252,31 +495,44 @@ public class MiniGameContext : Disposable, IEventStateProvider
                 entry.Timestamp = timestamp;
             }
 
-            context.SaveChanges();
+            await context.SaveChangesAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            this.Logger.LogError(ex, "Error while saving mini game ranking");
+            this.Logger.LogError(ex, "{context}: Error while saving mini game ranking: {ex}", this, ex);
         }
     }
 
-    private void GiveReward(Player player, MiniGameReward reward)
+    private async ValueTask<(int BonusScore, int GivenMoney)> GiveRewardAsync(Player player, MiniGameReward reward)
     {
         switch (reward.RewardType)
         {
             case MiniGameRewardType.Experience:
-                player.AddExperience(reward.RewardAmount, null);
+                await player.AddExperienceAsync(reward.RewardAmount, null).ConfigureAwait(false);
+                break;
+            case MiniGameRewardType.ExperiencePerRemainingSeconds:
+                var seconds = (int)this.RemainingTime.TotalSeconds;
+                if (seconds > 0)
+                {
+                    await player.AddExperienceAsync(seconds * reward.RewardAmount, null).ConfigureAwait(false);
+                }
+
                 break;
             case MiniGameRewardType.Money:
                 if (!player.TryAddMoney(reward.RewardAmount))
                 {
-                    player.ShowMessage("Couldn't add reward money, inventory is full.");
+                    await player.ShowMessageAsync("Couldn't add reward money, inventory is full.").ConfigureAwait(false);
                 }
 
-                break;
+                return (0, reward.RewardAmount);
             case MiniGameRewardType.Item:
-                this.GiveItemReward(player, reward);
+                await this.GiveItemRewardAsync(player, reward).ConfigureAwait(false);
                 break;
+            case MiniGameRewardType.ItemDrop:
+                await this.GiveItemRewardAsync(player, reward, true).ConfigureAwait(false);
+                break;
+            case MiniGameRewardType.Score:
+                return (reward.RewardAmount, 0);
             case MiniGameRewardType.Undefined:
                 this.Logger.LogWarning($"Undefined reward type in {reward.GetId()}");
                 break;
@@ -284,60 +540,94 @@ public class MiniGameContext : Disposable, IEventStateProvider
                 this.Logger.LogError($"Reward type {reward.RewardType} in {reward.GetId()} is not implemented!");
                 throw new NotImplementedException($"Reward type {reward.RewardType} is not implemented");
         }
+
+        return (0, 0);
     }
 
-    private void GiveItemReward(Player player, MiniGameReward reward)
+    private async ValueTask GiveItemRewardAsync(Player player, MiniGameReward reward, bool drop = false)
     {
         if (reward.ItemReward is null)
         {
-            this.Logger.LogWarning($"Item reward is not set in {reward.GetId()}");
+            this.Logger.LogWarning("{context}: Item reward is not set in {reward}", this, reward.GetId());
             return;
         }
 
-        var item = this._gameContext.DropGenerator.GenerateItemDrop(reward.ItemReward);
-        if (item is null)
+        for (int i = 0; i < reward.RewardAmount; i++)
         {
-            this.Logger.LogInformation($"No item has been generated by reward {reward.GetId()} for player {player}.");
-            return;
-        }
+            if (reward.ItemReward.Chance < 1
+                && reward.ItemReward.Chance != 0 // If we don't add a chance (legacy), we assume that it's 1.
+                && !Rand.NextRandomBool(reward.ItemReward.Chance))
+            {
+                this.Logger.LogDebug("{context}: No item has been generated by reward {reward} for player {player} due to missed chance ({reward.ItemReward.Chance}).", this, reward.GetId(), player, reward.ItemReward.Chance);
+                continue;
+            }
 
-        if (!player.Inventory?.AddItem(item) ?? false)
-        {
-            this.Logger.LogInformation($"Reward {item} for {player} has been dropped by players coordinates {player.Position}.");
-            this.Map.Add(new DroppedItem(item, player.Position, this.Map, player, player.GetAsEnumerable()));
+            var item = this._gameContext.DropGenerator.GenerateItemDrop(reward.ItemReward);
+            if (item is null)
+            {
+                this.Logger.LogDebug("{context}: No item has been generated by reward {reward} for player {player}.", this, reward.GetId(), player);
+                return;
+            }
+
+            var droppedItem = new DroppedItem(item, player.RandomPosition, this.Map, player, player.GetAsEnumerable());
+
+            var shouldDrop = drop || !(player.Inventory is not null && await player.Inventory.AddItemAsync(item).ConfigureAwait(false));
+            if (shouldDrop)
+            {
+                this.Logger.LogDebug("{context}: Reward {item} for {player} has been dropped by players coordinates {position}.", this, item, player, player.Position);
+                await this.Map.AddAsync(droppedItem).ConfigureAwait(false);
+            }
         }
     }
 
-    private void RunSpawnWaves()
-    {
-        foreach (var spawnWave in this.Definition.SpawnWaves)
-        {
-            this.RunSpawnWaveAsync(spawnWave).ConfigureAwait(false);
-        }
-    }
-
-    private async ValueTask RunSpawnWaveAsync(MiniGameSpawnWave spawnWave)
+    private async Task RunSpawnWavesAsync(CancellationToken cancellationToken)
     {
         try
         {
-            if (spawnWave.StartTime > TimeSpan.Zero)
+            foreach (var spawnWave in this.Definition.SpawnWaves)
             {
-                await Task.Delay(spawnWave.StartTime, this._gameEndedCts.Token).ConfigureAwait(false);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                await this.RunSpawnWaveAsync(spawnWave, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // game ended.
+        }
+    }
+
+    private async ValueTask RunSpawnWaveAsync(MiniGameSpawnWave spawnWave, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
             }
 
-            this.Logger.LogInformation("Starting next wave: {0}", spawnWave.Description);
+            if (spawnWave.StartTime > TimeSpan.Zero)
+            {
+                await Task.Delay(spawnWave.StartTime, cancellationToken).ConfigureAwait(false);
+            }
+
+            this.Logger.LogDebug("{context}: Starting next wave: {wave}", this, spawnWave.Description);
             if (spawnWave.Message is { } message)
             {
-                await this.ShowMessageAsync(message);
+                await this.ShowMessageAsync(message).ConfigureAwait(false);
             }
 
             this._currentSpawnWaves.Add(spawnWave.WaveNumber);
-            this._mapInitializer.InitializeNpcsOnWaveStart(this.Map, this, spawnWave.WaveNumber);
-            await Task.Delay(spawnWave.EndTime - spawnWave.StartTime, this._gameEndedCts.Token).ConfigureAwait(false);
-            this.Logger.LogInformation("Wave ended: {0}", spawnWave.Description);
+            await this._mapInitializer.InitializeNpcsOnWaveStartAsync(this.Map, this, spawnWave.WaveNumber).ConfigureAwait(false);
+            await Task.Delay(spawnWave.EndTime - spawnWave.StartTime, cancellationToken).ConfigureAwait(false);
+            this.Logger.LogDebug("{context}: Wave ended: {wave}", this, spawnWave.Description);
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException)
         {
+            // do nothing, as it's expected when game ends ...
         }
         catch (Exception ex)
         {
@@ -349,115 +639,140 @@ public class MiniGameContext : Disposable, IEventStateProvider
         }
     }
 
-    private async ValueTask RunGameAsync()
+    private async ValueTask RunGameAsync(CancellationToken cancellationToken)
     {
+        this.Logger.LogDebug("{context}: Running the game ...", this);
         var countdownMessageDuration = TimeSpan.FromSeconds(30);
         try
         {
-            var enterDuration = this.Definition.EnterDuration.Subtract(countdownMessageDuration).AtLeast(countdownMessageDuration);
-            var gameDuration = this.Definition.GameDuration.Subtract(countdownMessageDuration).AtLeast(countdownMessageDuration);
+            var enterDuration = this.Definition.EnterDuration.AtLeast(countdownMessageDuration);
+            var gameDuration = this.Definition.GameDuration.AtLeast(countdownMessageDuration);
             var exitDuration = this.Definition.ExitDuration.Subtract(countdownMessageDuration).AtLeast(countdownMessageDuration);
 
-            await Task.Delay(enterDuration, this._gameEndedCts.Token).ConfigureAwait(false);
-            if (this._enteredPlayers.Count == 0)
+            this.Logger.LogDebug("{context}: Waiting for entering players for {enterDuration}", this, enterDuration);
+
+            var messagePeriod = TimeSpan.FromMinutes(1);
+            for (; enterDuration >= messagePeriod; enterDuration = enterDuration.Subtract(messagePeriod))
             {
+                if (this.Definition.MapCreationPolicy != MiniGameMapCreationPolicy.Shared)
+                {
+                    await this.ShowMessageAsync($"{this.Definition.Name} starts in {(int)enterDuration.TotalMinutes} minutes.").ConfigureAwait(false);
+                }
+
+                await Task.Delay(messagePeriod, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (enterDuration >= TimeSpan.Zero)
+            {
+                await Task.Delay(enterDuration, cancellationToken).ConfigureAwait(false);
+            }
+
+            await this.CloseEntranceAsync().ConfigureAwait(false);
+            if (this.PlayerCount < this.MinimumPlayerCount)
+            {
+                await this.ShowMessageAsync($"Can't start with less than {this.MinimumPlayerCount} players.").ConfigureAwait(false);
+                if (this.Definition.EntranceFee > 0)
+                {
+                    await this.ForEachPlayerAsync(async player => player.TryAddMoney(this.Definition.EntranceFee)).ConfigureAwait(false);
+                }
+
                 return;
             }
 
             await this.ShowCountdownMessageAsync().ConfigureAwait(false);
-            await Task.Delay(countdownMessageDuration).ConfigureAwait(false);
+            this.Logger.LogDebug("{context}: Waiting for the countdown duration of {countdownMessageDuration}", this, countdownMessageDuration);
+            await Task.Delay(countdownMessageDuration, cancellationToken).ConfigureAwait(false);
 
+            this.Logger.LogDebug("{context}: Starting the game...", this);
             await this.StartAsync().ConfigureAwait(false);
 
-            await Task.Delay(gameDuration, this._gameEndedCts.Token).ConfigureAwait(false);
-            await this.ShowCountdownMessageAsync().ConfigureAwait(false);
-            await Task.Delay(countdownMessageDuration).ConfigureAwait(false);
+            this.Logger.LogDebug("{context}: Waiting for the game duration of {gameDuration}", this, gameDuration);
+            try
+            {
+                await Task.Delay(gameDuration, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                this.Logger.LogDebug("{context}: Finished event earlier", this);
+            }
 
+            this.Logger.LogDebug("{context}: Stopping the game...", this);
             await this.StopAsync().ConfigureAwait(false);
 
-            await Task.Delay(exitDuration, this._gameEndedCts.Token).ConfigureAwait(false);
+            this.Logger.LogDebug("{context}: Waiting for the exit duration of {exitDuration}", this, exitDuration);
+            await Task.Delay(exitDuration, default).ConfigureAwait(false);
             await this.ShowCountdownMessageAsync().ConfigureAwait(false);
-            await Task.Delay(countdownMessageDuration).ConfigureAwait(false);
 
+            this.Logger.LogDebug("{context}: Waiting for the exit countdown duration of {countdownMessageDuration}", this, countdownMessageDuration);
+            await Task.Delay(countdownMessageDuration, default).ConfigureAwait(false);
+
+            this.Logger.LogDebug("{context}: Shutting down event", this);
             await this.ShutdownGameAsync().ConfigureAwait(false);
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException ex)
         {
+            this.Logger.LogDebug(ex, "{context}: Received OperationCanceledException: {0}", this, ex);
         }
         catch (Exception ex)
         {
-            this.Logger.LogError(ex, "Unexpected error during mini game event: {0}", ex.Message);
+            this.Logger.LogError(ex, "{context}: Unexpected error during mini game event: {ex}", this, ex);
         }
         finally
         {
-            this.Dispose();
+            await this.DisposeAsync();
+        }
+    }
+
+    private async ValueTask CloseEntranceAsync()
+    {
+        using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
+        {
+            this.State = MiniGameState.Closed;
         }
     }
 
     private async ValueTask StartAsync()
     {
         ICollection<Player> players;
-        await this._enterLock.WaitAsync().ConfigureAwait(false);
-        try
+        using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
         {
             this.State = MiniGameState.Playing;
             players = this._enteredPlayers.ToList();
         }
-        finally
-        {
-            this._enterLock.Release();
-        }
 
-        this.OnGameStart(players);
-        this.RunSpawnWaves();
-        this._mapInitializer.InitializeNpcsOnEventStart(this.Map, this);
+        await this.OnGameStartAsync(players).ConfigureAwait(false);
+        await this._mapInitializer.InitializeNpcsOnEventStartAsync(this.Map, this).ConfigureAwait(false);
+        _ = Task.Run(() => this.RunSpawnWavesAsync(this.GameEndedToken), this.GameEndedToken);
     }
 
     private async ValueTask ShowCountdownMessageAsync()
     {
-        await this._enterLock.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            this._enteredPlayers.ForEach(p => p.ViewPlugIns.GetPlugIn<IUpdateMiniGameStateViewPlugIn>()?.UpdateState(this.Definition.Type, this.State));
-        }
-        finally
-        {
-            this._enterLock.Release();
-        }
+        await this.ForEachPlayerAsync(player => player.InvokeViewPlugInAsync<IUpdateMiniGameStateViewPlugIn>(p => p.UpdateStateAsync(this.Definition.Type, this.State)).AsTask()).ConfigureAwait(false);
     }
 
-    private ValueTask ShowMessageAsync(string message)
+    private async ValueTask ShowMessageAsync(string message, MessageType messageType = MessageType.GoldenCenter)
     {
-        return this.ForEachPlayerAsync(player => player.ViewPlugIns.GetPlugIn<IShowMessagePlugIn>()?.ShowMessage(message, MessageType.GoldenCenter));
+        await this.ForEachPlayerAsync(player => player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync(message, messageType)).AsTask()).ConfigureAwait(false);
     }
 
     private async ValueTask StopAsync()
     {
-        await this._enterLock.WaitAsync().ConfigureAwait(false);
-        try
+        using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
         {
             this.State = MiniGameState.Ended;
-        }
-        finally
-        {
-            this._enterLock.Release();
+            this._gameEndedCts.Cancel();
         }
 
         this._currentSpawnWaves.Clear();
-        this.Map.ClearEventSpawnedNpcs();
+        await this.Map.ClearEventSpawnedNpcsAsync().ConfigureAwait(false);
 
         List<Player> players;
-        await this._enterLock.WaitAsync().ConfigureAwait(false);
-        try
+        using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
         {
             players = this._enteredPlayers.ToList();
         }
-        finally
-        {
-            this._enterLock.Release();
-        }
 
-        this.GameEnded(players);
+        await this.GameEndedAsync(players).ConfigureAwait(false);
     }
 
     private GameMap CreateMap()
@@ -470,71 +785,274 @@ public class MiniGameContext : Disposable, IEventStateProvider
         var mapDefinition = this.Definition.Entrance?.Map ?? throw new InvalidOperationException($"{nameof(this.Definition)} contains no entrance map.");
         var map = this._mapInitializer.CreateGameMap(mapDefinition);
 
-        map.ObjectRemoved += this.OnObjectRemovedFromMap;
-        map.ObjectAdded += this.OnObjectAddedToMap;
+        map.ObjectRemoved += this.OnObjectRemovedFromMapAsync;
+        map.ObjectAdded += this.OnObjectAddedToMapAsync;
         return map;
-    }
-
-    private void OnObjectAddedToMap(object? sender, (GameMap Map, ILocateable Object) args)
-    {
-        this._gameContext.PlugInManager.GetPlugInPoint<IObjectAddedToMapPlugIn>()?.ObjectAddedToMap(args.Map, args.Object);
-        if (args.Object is Monster monster)
-        {
-            monster.Died += this.OnMonsterDied;
-        }
-    }
-
-    private void OnObjectRemovedFromMap(object? sender, (GameMap Map, ILocateable Object) args)
-    {
-        this._gameContext.PlugInManager.GetPlugInPoint<IObjectRemovedFromMapPlugIn>()?.ObjectRemovedFromMap(args.Map, args.Object);
-        if (args.Object is not Player player)
-        {
-            return;
-        }
-
-        player.CurrentMiniGame = null;
-        bool cantGameProceed;
-        this._enterLock.Wait();
-        try
-        {
-            this._enteredPlayers.Remove(player);
-            cantGameProceed = this._enteredPlayers.Count == 0 && this.State != MiniGameState.Open;
-        }
-        finally
-        {
-            this._enterLock.Release();
-        }
-
-        if (cantGameProceed)
-        {
-            this._gameEndedCts.Cancel();
-        }
     }
 
     private async ValueTask ShutdownGameAsync()
     {
         await this.MovePlayersToSafezoneAsync().ConfigureAwait(false);
 
-        this.Dispose();
+        await this.DisposeAsync();
     }
 
     private async ValueTask MovePlayersToSafezoneAsync()
     {
         List<Player> players;
-        await this._enterLock.WaitAsync().ConfigureAwait(false);
-        try
+        using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
         {
             players = this._enteredPlayers.ToList();
             this._enteredPlayers.Clear();
         }
-        finally
-        {
-            this._enterLock.Release();
-        }
 
         foreach (var player in players)
         {
-            player.WarpToSafezone();
+            await player.WarpToSafezoneAsync().ConfigureAwait(false);
+        }
+    }
+
+    private bool DoesRewardApply(Player player, int playerRank, MiniGameReward reward)
+    {
+        if (reward.Rank is not null && reward.Rank != playerRank)
+        {
+            return false;
+        }
+
+        if (reward.RequiredSuccess.HasFlag(MiniGameSuccessFlags.Alive) && (!player.IsAlive || player.CurrentMap != this.Map))
+        {
+            return false;
+        }
+
+        if (reward.RequiredSuccess.HasFlag(MiniGameSuccessFlags.Dead) && (player.IsAlive && player.CurrentMap == this.Map))
+        {
+            return false;
+        }
+
+        if (reward.RequiredSuccess.HasFlag(MiniGameSuccessFlags.WinnerExists) && this.Winner is null)
+        {
+            return false;
+        }
+
+        if (reward.RequiredSuccess.HasFlag(MiniGameSuccessFlags.WinnerNotExists) && this.Winner is not null)
+        {
+            return false;
+        }
+
+        if (reward.RequiredSuccess.HasFlag(MiniGameSuccessFlags.Winner) && this.Winner != player)
+        {
+            return false;
+        }
+
+        if (reward.RequiredSuccess.HasFlag(MiniGameSuccessFlags.Loser)
+            && (this.Winner == player || (player.Party == this.Winner?.Party && player.Party is not null)))
+        {
+            return false;
+        }
+
+        if (reward.RequiredSuccess.HasFlag(MiniGameSuccessFlags.WinningParty)
+            && (this.Winner?.Party is null || this.Winner.Party != player.Party))
+        {
+            return false;
+        }
+
+        if (reward.RequiredSuccess.HasFlag(MiniGameSuccessFlags.WinnerOrInWinningParty)
+            && (this.Winner?.Party is null || this.Winner.Party != player.Party)
+            && this.Winner != player)
+        {
+            return false;
+        }
+
+        if (reward.RequiredKill is { } requiredKill
+            && (!this._rewardRelatedKills.TryGetValue(requiredKill, out var killed)
+                || !killed))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task ApplyChangeEventAsync(MiniGameChangeEvent changeEvent, string? triggeredBy = null)
+    {
+        try
+        {
+            if (changeEvent.TerrainChanges.Any())
+            {
+                await this.OnTerrainChangingAsync(changeEvent).ConfigureAwait(false);
+                await this.UpdateClientTerrainAsync(changeEvent.TerrainChanges).ConfigureAwait(false);
+                this.UpdateServerTerrain(changeEvent.TerrainChanges);
+                await this.Map.ClearDropsOnInvalidTerrain().ConfigureAwait(false);
+                await this.OnTerrainChangedAsync(changeEvent).ConfigureAwait(false);
+            }
+
+            if (changeEvent.SpawnArea is { } spawnArea)
+            {
+                for (int i = 0; i < spawnArea.Quantity; i++)
+                {
+                    await this._mapInitializer.InitializeSpawnAsync(this.Map, spawnArea, this).ConfigureAwait(false);
+                }
+            }
+
+            if (changeEvent.Message is { } message)
+            {
+                await this.ShowMessageAsync(string.Format(message, triggeredBy)).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            this.Logger.LogError(ex, "Unexpected exception at change event {changeEvent}: {ex}", changeEvent.Description, ex);
+        }
+    }
+
+    private void UpdateServerTerrain(ICollection<MiniGameTerrainChange> changes)
+    {
+        foreach (var change in changes)
+        {
+            var isSafezone = change.TerrainAttribute is TerrainAttributeType.Safezone;
+            var map = isSafezone ? this.Map.Terrain.SafezoneMap : this.Map.Terrain.WalkMap;
+            var targetValue = isSafezone ? change.SetTerrainAttribute : !change.SetTerrainAttribute;
+            for (var x = change.StartX; x <= change.EndX; x++)
+            {
+                for (var y = change.StartY; y <= change.EndY; y++)
+                {
+                    map[x, y] = targetValue;
+                    this.Map.Terrain.UpdateAiGridValue(x, y);
+                }
+            }
+        }
+    }
+
+    private async ValueTask UpdateClientTerrainAsync(ICollection<MiniGameTerrainChange> changes)
+    {
+        var groupedChanges = changes
+            .Where(c => c.IsClientUpdateRequired)
+            .GroupBy(
+                c => (c.SetTerrainAttribute, c.TerrainAttribute),
+                c => (c.StartX, c.StartY, c.EndX, c.EndY))
+            .Select(g => (g.Key, Areas: g.ToList()))
+            .ToList();
+
+        await this.ForEachPlayerAsync(async player =>
+        {
+            foreach (var group in groupedChanges)
+            {
+                await player.InvokeViewPlugInAsync<IChangeTerrainAttributesViewPlugin>(p => p.ChangeAttributesAsync(group.Key.TerrainAttribute, group.Key.SetTerrainAttribute, group.Areas)).ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
+    }
+
+    private void CheckKillForEventChanges(IAttackable killedObject)
+    {
+        if (this.NextEvent is not { } nextEvent)
+        {
+            return;
+        }
+
+        if (this.IsKillValid(killedObject, nextEvent.Definition) && nextEvent.RegisterKill())
+        {
+            this._remainingEvents.Remove(nextEvent);
+            this.UpdateNextEvent();
+            _ = Task.Run(() => this.ApplyChangeEventAsync(nextEvent.Definition, killedObject.LastDeath?.KillerName));
+        }
+    }
+
+    private void UpdateNextEvent()
+    {
+        this.NextEvent = this._remainingEvents.MinBy(e => e.Definition.Index);
+    }
+
+    private bool IsKillValid(IAttackable killedObject, MiniGameChangeEvent definition)
+    {
+        if (definition.MinimumTargetLevel.HasValue && killedObject.Attributes[Stats.Level] < definition.MinimumTargetLevel)
+        {
+            return false;
+        }
+
+        if (definition.Target == KillTarget.AnyMonster && killedObject is not Monster)
+        {
+            return false;
+        }
+
+        if (definition.Target == KillTarget.Specific
+            && (killedObject is not NonPlayerCharacter npc || npc.Definition.Number != definition.TargetDefinition?.Number))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private async ValueTask<bool> AreEquippedItemsAllowedAsync(Player player)
+    {
+        if (player.Inventory is not { } inventory)
+        {
+            return false;
+        }
+
+        var result = true;
+        foreach (var item in inventory.EquippedItems)
+        {
+            if (!this.IsItemAllowedToEquip(item))
+            {
+                await player.ShowMessageAsync($"Can't enter event with equipped item '{item.Definition?.Name ?? item.ToString()}'.").ConfigureAwait(false);
+                result = false;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// The context of the <see cref="MiniGameChangeEvent"/>.
+    /// </summary>
+    protected class ChangeEventContext
+    {
+        private int _actualKills;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ChangeEventContext"/> class.
+        /// </summary>
+        /// <param name="definition">The definition.</param>
+        /// <param name="playerCount">The player count.</param>
+        public ChangeEventContext(MiniGameChangeEvent definition, int playerCount)
+        {
+            this.Definition = definition;
+            this.RequiredKills = definition.NumberOfKills;
+            if (this.Definition.MultiplyKillsByPlayers)
+            {
+                this.RequiredKills *= playerCount;
+            }
+        }
+
+        /// <summary>
+        /// Gets the definition of the change event.
+        /// </summary>
+        public MiniGameChangeEvent Definition { get; }
+
+        /// <summary>
+        /// Gets the required kills.
+        /// </summary>
+        public int RequiredKills { get; }
+
+        /// <summary>
+        /// Gets the actual kills.
+        /// </summary>
+        public int ActualKills => this._actualKills;
+
+        /// <summary>
+        /// Registers a kill and returns if the target has been achieved.
+        /// </summary>
+        /// <returns>True, if the target has been achieved just right now.</returns>
+        public bool RegisterKill()
+        {
+            if (this._actualKills == this.RequiredKills)
+            {
+                // Already achieved.
+                return false;
+            }
+
+            return Interlocked.Increment(ref this._actualKills) == this.RequiredKills;
         }
     }
 }

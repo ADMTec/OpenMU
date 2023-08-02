@@ -14,7 +14,7 @@ using MUnique.OpenMU.PlugIns;
 /// </summary>
 [Guid("BF4DA282-8CFE-4110-B1C5-A01D3F224FAB")]
 [PlugIn("Create monster chat command", "Handles the chat command '/createmonster <number> <intelligent>'. Creates a monster which can be remote controlled by the GM.")]
-[ChatCommandHelp(Command, typeof(CreateMonsterChatCommandArgs), CharacterStatus.GameMaster)]
+[ChatCommandHelp(Command, "Creates a monster which can be remote controlled by the game master.", typeof(CreateMonsterChatCommandArgs), CharacterStatus.GameMaster)]
 internal class CreateMonsterChatCommand : ChatCommandPlugInBase<CreateMonsterChatCommandArgs>
 {
     private const string Command = "/createmonster";
@@ -26,12 +26,12 @@ internal class CreateMonsterChatCommand : ChatCommandPlugInBase<CreateMonsterCha
     public override CharacterStatus MinCharacterStatusRequirement => CharacterStatus.GameMaster;
 
     /// <inheritdoc />
-    protected override void DoHandleCommand(Player gameMaster, CreateMonsterChatCommandArgs arguments)
+    protected override async ValueTask DoHandleCommandAsync(Player gameMaster, CreateMonsterChatCommandArgs arguments)
     {
         var monsterDef = gameMaster.GameContext.Configuration.Monsters.FirstOrDefault(m => m.Number == arguments.MonsterNumber);
         if (monsterDef is null)
         {
-            this.ShowMessageTo(gameMaster, $"Monster with number {arguments.MonsterNumber} not found.");
+            await this.ShowMessageToAsync(gameMaster, $"Monster with number {arguments.MonsterNumber} not found.").ConfigureAwait(false);
             return;
         }
 
@@ -49,12 +49,11 @@ internal class CreateMonsterChatCommand : ChatCommandPlugInBase<CreateMonsterCha
         };
 
         INpcIntelligence intelligence = arguments.IsIntelligent ? new BasicMonsterIntelligence() : new NullMonsterIntelligence();
-        var monster = new Monster(area, monsterDef, gameMap, NullDropGenerator.Instance, intelligence, gameMaster.GameContext.PlugInManager);
+        var monster = new Monster(area, monsterDef, gameMap, NullDropGenerator.Instance, intelligence, gameMaster.GameContext.PlugInManager, gameMaster.GameContext.PathFinderPool);
         intelligence.Npc = monster;
         monster.Initialize();
-        gameMap.Add(monster);
-        gameMaster.PlayerDisconnected += (_, _) => monster.Dispose();
+        await gameMap.AddAsync(monster).ConfigureAwait(false);
 
-        this.ShowMessageTo(gameMaster, $"Monster with number {arguments.MonsterNumber} created, id: {monster.Id}.");
+        await this.ShowMessageToAsync(gameMaster, $"Monster with number {arguments.MonsterNumber} created, id: {monster.Id}.").ConfigureAwait(false);
     }
 }

@@ -6,9 +6,9 @@ namespace MUnique.OpenMU.GameServer;
 
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using Nito.AsyncEx;
 using MUnique.OpenMU.DataModel.Configuration;
 using MUnique.OpenMU.GameLogic;
-using MUnique.OpenMU.GameLogic.Views.Guild;
 using MUnique.OpenMU.Interfaces;
 using MUnique.OpenMU.Persistence;
 using MUnique.OpenMU.PlugIns;
@@ -20,13 +20,14 @@ public class GameServerContext : GameContext, IGameServerContext
 {
     private readonly GameServerDefinition _gameServerDefinition;
 
-    private readonly ConcurrentDictionary<uint, List<Player>> _playersByGuild = new ();
+    private readonly ConcurrentDictionary<uint, LockableList<Player>> _playersByGuild = new ();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GameServerContext" /> class.
     /// </summary>
     /// <param name="gameServerDefinition">The game server definition.</param>
     /// <param name="guildServer">The guild server.</param>
+    /// <param name="eventPublisher">The message publisher.</param>
     /// <param name="loginServer">The login server.</param>
     /// <param name="friendServer">The friend server.</param>
     /// <param name="persistenceContextProvider">The persistence context provider.</param>
@@ -37,6 +38,7 @@ public class GameServerContext : GameContext, IGameServerContext
     public GameServerContext(
         GameServerDefinition gameServerDefinition,
         IGuildServer guildServer,
+        IEventPublisher eventPublisher,
         ILoginServer loginServer,
         IFriendServer friendServer,
         IPersistenceContextProvider persistenceContextProvider,
@@ -55,6 +57,7 @@ public class GameServerContext : GameContext, IGameServerContext
         this._gameServerDefinition = gameServerDefinition;
         this.Id = gameServerDefinition.ServerID;
         this.GuildServer = guildServer;
+        this.EventPublisher = eventPublisher;
         this.LoginServer = loginServer;
         this.FriendServer = friendServer;
         this.ServerConfiguration = gameServerDefinition.ServerConfiguration ?? throw new InvalidOperationException("GameServerDefinition requires a ServerConfiguration");
@@ -69,13 +72,16 @@ public class GameServerContext : GameContext, IGameServerContext
     public byte Id { get; }
 
     /// <inheritdoc/>
-    public IGuildServer GuildServer { get; }
+    public IGuildServer GuildServer { get; } // TODO: Use DI where this is required
 
     /// <inheritdoc/>
-    public ILoginServer LoginServer { get; }
+    public IEventPublisher EventPublisher { get; } // TODO: Use DI where this is required, make this private
 
     /// <inheritdoc/>
-    public IFriendServer FriendServer { get; }
+    public ILoginServer LoginServer { get; } // TODO: Use DI where this is required
+
+    /// <inheritdoc/>
+    public IFriendServer FriendServer { get; } // TODO: Use DI where this is required
 
     /// <inheritdoc/>
     public GameServerConfiguration ServerConfiguration { get; }
@@ -84,25 +90,25 @@ public class GameServerContext : GameContext, IGameServerContext
     public override float ExperienceRate => base.ExperienceRate * this._gameServerDefinition.ExperienceRate;
 
     /// <inheritdoc />
-    public void ForEachGuildPlayer(uint guildId, Action<Player> action)
+    public override string ToString()
+    {
+        return $"Game Server {this.Id}";
+    }
+
+    /// <inheritdoc />
+    public async ValueTask ForEachGuildPlayerAsync(uint guildId, Func<Player, Task> action)
     {
         if (!this._playersByGuild.TryGetValue(guildId, out var playerList))
         {
             return;
         }
 
-        lock (playerList)
-        {
-            for (int i = playerList.Count - 1; i >= 0; i--)
-            {
-                var player = playerList[i];
-                action(player);
-            }
-        }
+        using var readLock = await playerList.Lock.ReaderLockAsync();
+        await playerList.Select(action).WhenAll().ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public void ForEachAlliancePlayer(uint guildId, Action<Player> action)
+    public async ValueTask ForEachAlliancePlayerAsync(uint guildId, Func<Player, Task> action)
     {
         if (!this._playersByGuild.TryGetValue(guildId, out var playerList))
         {
@@ -110,42 +116,35 @@ public class GameServerContext : GameContext, IGameServerContext
         }
 
         // TODO: iterate other guilds of the alliance as well; maybe introduce another dictionary with alliance players
-
-        lock (playerList)
-        {
-            for (int i = playerList.Count - 1; i >= 0; i--)
-            {
-                var player = playerList[i];
-                action(player);
-            }
-        }
+        using var readLock = await playerList.Lock.ReaderLockAsync();
+        await playerList.Select(action).WhenAll().ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public override void AddPlayer(Player player)
+    public override async ValueTask AddPlayerAsync(Player player)
     {
-        base.AddPlayer(player);
-        player.PlayerLeftWorld += this.PlayerLeftWorld;
-        player.PlayerEnteredWorld += this.PlayerEnteredWorld;
+        await base.AddPlayerAsync(player).ConfigureAwait(false);
+        player.PlayerLeftWorld += this.PlayerLeftWorldAsync;
+        player.PlayerEnteredWorld += this.PlayerEnteredWorldAsync;
     }
 
     /// <inheritdoc/>
-    public override void RemovePlayer(Player player)
+    public override async ValueTask RemovePlayerAsync(Player player)
     {
-        player.PlayerEnteredWorld -= this.PlayerEnteredWorld;
-        player.PlayerLeftWorld -= this.PlayerLeftWorld;
-        base.RemovePlayer(player);
+        player.PlayerEnteredWorld -= this.PlayerEnteredWorldAsync;
+        player.PlayerLeftWorld -= this.PlayerLeftWorldAsync;
+        await base.RemovePlayerAsync(player).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public void RemoveGuild(uint guildId)
+    public async ValueTask RemoveGuildAsync(uint guildId)
     {
         this._playersByGuild.Remove(guildId, out _);
         this.GuildDeleted?.Invoke(this, new GuildDeletedEventArgs(guildId));
     }
 
     /// <inheritdoc />
-    public void RegisterGuildMember(Player guildMember)
+    public async ValueTask RegisterGuildMemberAsync(Player guildMember)
     {
         if (guildMember.GuildStatus is null)
         {
@@ -153,15 +152,13 @@ public class GameServerContext : GameContext, IGameServerContext
         }
 
         var guildId = guildMember.GuildStatus.GuildId;
-        var guildList = this._playersByGuild.GetOrAdd(guildId, id => new List<Player>());
-        lock (guildList)
-        {
-            guildList.Add(guildMember);
-        }
+        var guildList = this._playersByGuild.GetOrAdd(guildId, id => new LockableList<Player>());
+        using var writeLock = await guildList.Lock.WriterLockAsync();
+        guildList.Add(guildMember);
     }
 
     /// <inheritdoc />
-    public void UnregisterGuildMember(Player guildMember)
+    public async ValueTask UnregisterGuildMemberAsync(Player guildMember)
     {
         if (guildMember.GuildStatus is null)
         {
@@ -174,45 +171,54 @@ public class GameServerContext : GameContext, IGameServerContext
             return;
         }
 
-        lock (guildList)
+        using var writeLock = await guildList.Lock.WriterLockAsync();
+        guildList.Remove(guildMember);
+    }
+
+    private async ValueTask PlayerEnteredWorldAsync(Player player)
+    {
+        try
         {
-            guildList.Remove(guildMember);
+            if (player is not { SelectedCharacter: { } selectedCharacter })
+            {
+                return;
+            }
+
+            await this.EventPublisher.PlayerEnteredGameAsync(this.Id, selectedCharacter.Id, selectedCharacter.Name).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            player.Logger.LogError(ex, "Unexpected error when notifying the event publisher (player entered world).");
         }
     }
 
-    private void PlayerEnteredWorld(object? sender, EventArgs e)
+    private async ValueTask PlayerLeftWorldAsync(Player player)
     {
-        if (sender is not Player { SelectedCharacter: { } selectedCharacter } player)
+        if (player is not { SelectedCharacter: { } selectedCharacter })
         {
             return;
         }
 
-        this.FriendServer.SetOnlineState(selectedCharacter.Id, selectedCharacter.Name, this.Id);
-        player.GuildStatus = this.GuildServer.PlayerEnteredGame(selectedCharacter.Id, selectedCharacter.Name, this.Id);
+        try
+        {
+            await this.EventPublisher.PlayerLeftGameAsync(this.Id, selectedCharacter.Id, selectedCharacter.Name, player.GuildStatus?.GuildId ?? 0).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            player.Logger.LogError(ex, "Unexpected error when notifying the event publisher (player left world).");
+        }
+
         if (player.GuildStatus is null)
         {
             return;
         }
 
-        player.ForEachObservingPlayer(p => p.ViewPlugIns.GetPlugIn<IAssignPlayersToGuildPlugIn>()?.AssignPlayerToGuild(player, true), true);
-        this.RegisterGuildMember(player);
+        await this.UnregisterGuildMemberAsync(player).ConfigureAwait(false);
+        player.GuildStatus = null;
     }
 
-    private void PlayerLeftWorld(object? sender, EventArgs e)
+    private class LockableList<T> : List<T>
     {
-        if (sender is not Player { SelectedCharacter: { } selectedCharacter } player)
-        {
-            return;
-        }
-
-        this.FriendServer.SetOnlineState(selectedCharacter.Id, selectedCharacter.Name, 0xFF);
-        if (player.GuildStatus is not { } guildStatus)
-        {
-            return;
-        }
-
-        this.GuildServer.GuildMemberLeftGame(guildStatus.GuildId, selectedCharacter.Id, this.Id);
-        this.UnregisterGuildMember(player);
-        player.GuildStatus = null;
+        public AsyncReaderWriterLock Lock { get; } = new ();
     }
 }

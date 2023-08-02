@@ -5,6 +5,7 @@
 namespace MUnique.OpenMU.GameLogic;
 
 using MUnique.OpenMU.GameLogic.NPC;
+using MUnique.OpenMU.Pathfinding;
 using MUnique.OpenMU.PlugIns;
 
 /// <summary>
@@ -28,7 +29,6 @@ public class MapInitializer : IMapInitializer
         this._dropGenerator = dropGenerator;
         this._configuration = configuration;
         this._logger = logger;
-        this.ItemDropDuration = 60;
         this.ChunkSize = 8;
     }
 
@@ -38,12 +38,12 @@ public class MapInitializer : IMapInitializer
     public PlugInManager? PlugInManager { get; set; }
 
     /// <summary>
-    /// Gets or sets the duration of the item drop on created <see cref="GameMap"/>s.
+    /// Gets or sets the path finder pool.
     /// </summary>
     /// <value>
-    /// The duration of the item drop on created <see cref="GameMap"/>s.
+    /// The path finder pool.
     /// </value>
-    protected int ItemDropDuration { get; set; }
+    public IObjectPool<PathFinder>? PathFinderPool { get; set; }
 
     /// <summary>
     /// Gets or sets the size of the chunk of created <see cref="GameMap"/>s.
@@ -76,12 +76,10 @@ public class MapInitializer : IMapInitializer
     }
 
     /// <inheritdoc />
-    public void InitializeState(GameMap createdMap)
+    public async ValueTask InitializeStateAsync(GameMap createdMap)
     {
-        if (this.PlugInManager is null)
-        {
-            throw new InvalidOperationException("PlugInManager must be set first");
-        }
+        _ = this.PlugInManager ?? throw new InvalidOperationException("PlugInManager must be set first");
+        _ = this.PathFinderPool ?? throw new InvalidOperationException("PathFinderPool must be set first");
 
         this._logger.LogDebug("Start creating monster instances for map {createdMap}", createdMap);
         var automaticSpawns = createdMap.Definition.MonsterSpawns
@@ -91,7 +89,7 @@ public class MapInitializer : IMapInitializer
         {
             for (int i = 0; i < spawnArea.Quantity; i++)
             {
-                this.InitializeNpc(createdMap, spawnArea);
+                await this.InitializeSpawnAsync(createdMap, spawnArea).ConfigureAwait(false);
             }
         }
 
@@ -103,12 +101,10 @@ public class MapInitializer : IMapInitializer
     /// </summary>
     /// <param name="createdMap">The created map.</param>
     /// <param name="eventStateProvider">The event state provider.</param>
-    public void InitializeNpcsOnEventStart(GameMap createdMap, IEventStateProvider eventStateProvider)
+    public async ValueTask InitializeNpcsOnEventStartAsync(GameMap createdMap, IEventStateProvider eventStateProvider)
     {
-        if (this.PlugInManager is null)
-        {
-            throw new InvalidOperationException("PlugInManager must be set first");
-        }
+        _ = this.PlugInManager ?? throw new InvalidOperationException("PlugInManager must be set first");
+        _ = this.PathFinderPool ?? throw new InvalidOperationException("PathFinderPool must be set first");
 
         this._logger.LogDebug("Start creating event monster instances for map {createdMap}", createdMap);
         var eventSpawns = createdMap.Definition.MonsterSpawns
@@ -119,7 +115,7 @@ public class MapInitializer : IMapInitializer
         {
             for (int i = 0; i < spawnArea.Quantity; i++)
             {
-                this.InitializeNpc(createdMap, spawnArea, eventStateProvider);
+                await this.InitializeSpawnAsync(createdMap, spawnArea, eventStateProvider).ConfigureAwait(false);
             }
         }
 
@@ -127,12 +123,10 @@ public class MapInitializer : IMapInitializer
     }
 
     /// <inheritdoc />
-    public void InitializeNpcsOnWaveStart(GameMap createdMap, IEventStateProvider eventStateProvider, byte waveNumber)
+    public async ValueTask InitializeNpcsOnWaveStartAsync(GameMap createdMap, IEventStateProvider eventStateProvider, byte waveNumber)
     {
-        if (this.PlugInManager is null)
-        {
-            throw new InvalidOperationException("PlugInManager must be set first");
-        }
+        _ = this.PlugInManager ?? throw new InvalidOperationException("PlugInManager must be set first");
+        _ = this.PathFinderPool ?? throw new InvalidOperationException("PathFinderPool must be set first");
 
         this._logger.LogDebug("Start creating event monster instances for map {createdMap}", createdMap);
         var waveSpawns = createdMap.Definition.MonsterSpawns
@@ -144,11 +138,72 @@ public class MapInitializer : IMapInitializer
         {
             for (int i = 0; i < spawnArea.Quantity; i++)
             {
-                this.InitializeNpc(createdMap, spawnArea, eventStateProvider);
+                await this.InitializeSpawnAsync(createdMap, spawnArea, eventStateProvider).ConfigureAwait(false);
             }
         }
 
         this._logger.LogDebug("Finished creating event monster instances for map {createdMap}", createdMap);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<NonPlayerCharacter?> InitializeSpawnAsync(
+        GameMap createdMap,
+        MonsterSpawnArea spawnArea,
+        IEventStateProvider? eventStateProvider = null,
+        IDropGenerator? dropGenerator = null)
+    {
+        _ = this.PlugInManager ?? throw new InvalidOperationException("PlugInManager must be set first");
+        _ = this.PathFinderPool ?? throw new InvalidOperationException("PathFinderPool must be set first");
+
+        var monsterDef = spawnArea.MonsterDefinition!;
+        NonPlayerCharacter npc;
+
+        var intelligence = this.TryCreateConfiguredNpcIntelligence(monsterDef, createdMap);
+
+        if (monsterDef.ObjectKind == NpcObjectKind.Monster)
+        {
+            this._logger.LogDebug("Creating monster {spawn}", spawnArea);
+            npc = new Monster(spawnArea, monsterDef, createdMap, dropGenerator ?? this._dropGenerator, intelligence ?? new BasicMonsterIntelligence(), this.PlugInManager, this.PathFinderPool,  eventStateProvider);
+        }
+        else if (monsterDef.ObjectKind == NpcObjectKind.Guard)
+        {
+            this._logger.LogDebug("Creating guard {spawn}", spawnArea);
+            npc = new Monster(spawnArea, monsterDef, createdMap, NullDropGenerator.Instance, intelligence ?? new GuardIntelligence(), this.PlugInManager, this.PathFinderPool, eventStateProvider);
+        }
+        else if (monsterDef.ObjectKind == NpcObjectKind.Trap)
+        {
+            this._logger.LogDebug("Creating trap {spawn}", spawnArea);
+            npc = new Trap(spawnArea, monsterDef, createdMap, intelligence ?? new RandomAttackInRangeTrapIntelligence(createdMap));
+        }
+        else if (monsterDef.ObjectKind == NpcObjectKind.SoccerBall)
+        {
+            this._logger.LogDebug("Creating soccer ball {spawn}", spawnArea);
+            npc = new SoccerBall(spawnArea, monsterDef, createdMap);
+        }
+        else if (monsterDef.ObjectKind == NpcObjectKind.Destructible)
+        {
+            this._logger.LogDebug("Creating destructible {spawn}", spawnArea);
+            npc = new Destructible(spawnArea, monsterDef, createdMap, eventStateProvider, dropGenerator ?? this._dropGenerator, this.PlugInManager!);
+        }
+        else
+        {
+            this._logger.LogDebug("Creating npc {spawn}", spawnArea);
+            npc = new NonPlayerCharacter(spawnArea, monsterDef, createdMap);
+        }
+
+        try
+        {
+            npc.Initialize();
+            await createdMap.AddAsync(npc).ConfigureAwait(false);
+            return npc;
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, $"Object {spawnArea} couldn't be initialized.", spawnArea);
+            await npc.DisposeAsync().ConfigureAwait(false);
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -172,48 +227,8 @@ public class MapInitializer : IMapInitializer
     {
         this._logger.LogDebug("Creating GameMap {0}", definition);
         return definition.BattleZone?.Type == BattleType.Soccer
-            ? new SoccerGameMap(definition, this.ItemDropDuration, this.ChunkSize)
-            : new GameMap(definition, this.ItemDropDuration, this.ChunkSize);
-    }
-
-    private void InitializeNpc(GameMap createdMap, MonsterSpawnArea spawnArea, IEventStateProvider? eventStateProvider = null)
-    {
-        var monsterDef = spawnArea.MonsterDefinition!;
-        NonPlayerCharacter npc;
-
-        var intelligence = this.TryCreateConfiguredNpcIntelligence(monsterDef, createdMap);
-
-        if (monsterDef.ObjectKind == NpcObjectKind.Monster)
-        {
-            this._logger.LogDebug("Creating monster {spawn}", spawnArea);
-            npc = new Monster(spawnArea, monsterDef, createdMap, this._dropGenerator, intelligence ?? new BasicMonsterIntelligence(), this.PlugInManager!, eventStateProvider);
-        }
-        else if (monsterDef.ObjectKind == NpcObjectKind.Trap)
-        {
-            this._logger.LogDebug("Creating trap {spawn}", spawnArea);
-            npc = new Trap(spawnArea, monsterDef, createdMap, intelligence ?? new RandomAttackInRangeTrapIntelligence(createdMap));
-        }
-        else if (monsterDef.ObjectKind == NpcObjectKind.SoccerBall)
-        {
-            this._logger.LogDebug("Creating soccer ball {spawn}", spawnArea);
-            npc = new SoccerBall(spawnArea, monsterDef, createdMap);
-        }
-        else
-        {
-            this._logger.LogDebug("Creating npc {spawn}", spawnArea);
-            npc = new NonPlayerCharacter(spawnArea, monsterDef, createdMap);
-        }
-
-        try
-        {
-            npc.Initialize();
-            createdMap.Add(npc);
-        }
-        catch (Exception ex)
-        {
-            this._logger.LogError(ex, $"Object {spawnArea} couldn't be initialized.", spawnArea);
-            npc.Dispose();
-        }
+            ? new SoccerGameMap(definition, this._configuration.ItemDropDuration, this.ChunkSize)
+            : new GameMap(definition, this._configuration.ItemDropDuration, this.ChunkSize);
     }
 
     private INpcIntelligence? TryCreateConfiguredNpcIntelligence(MonsterDefinition monsterDefinition, GameMap createdMap)
@@ -232,7 +247,15 @@ public class MapInitializer : IMapInitializer
                 return null;
             }
 
-            return Activator.CreateInstance(type, createdMap) as INpcIntelligence;
+            var constructorNeedsMap = type.GetConstructors().Any(c => c.GetParameters().Any(p => p.ParameterType == typeof(GameMap)));
+            if (constructorNeedsMap)
+            {
+                return Activator.CreateInstance(type, createdMap) as INpcIntelligence;
+            }
+            else
+            {
+                return Activator.CreateInstance(type) as INpcIntelligence;
+            }
         }
         catch (Exception ex)
         {

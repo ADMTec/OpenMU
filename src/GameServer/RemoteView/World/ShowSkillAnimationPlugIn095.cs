@@ -21,6 +21,8 @@ using MUnique.OpenMU.PlugIns;
 [MinimumClient(0, 95, ClientLanguage.Invariant)]
 public class ShowSkillAnimationPlugIn095 : IShowSkillAnimationPlugIn
 {
+    private const byte NovaStartSkillId = 58;
+    private const byte ComboSkillId = 59;
     private readonly RemotePlayer _player;
 
     /// <summary>
@@ -30,16 +32,31 @@ public class ShowSkillAnimationPlugIn095 : IShowSkillAnimationPlugIn
     public ShowSkillAnimationPlugIn095(RemotePlayer player) => this._player = player;
 
     /// <inheritdoc/>
-    public void ShowSkillAnimation(IAttacker attacker, IAttackable? target, Skill skill, bool effectApplied)
+    public ValueTask ShowSkillAnimationAsync(IAttacker attacker, IAttackable? target, Skill skill, bool effectApplied)
     {
-        this.ShowSkillAnimation(attacker, target, skill.Number, effectApplied);
+        return this.ShowSkillAnimationAsync(attacker, target, skill.Number, effectApplied);
     }
 
     /// <inheritdoc/>
-    public void ShowSkillAnimation(IAttacker attacker, IAttackable? target, short skillNumber, bool effectApplied)
+    public async ValueTask ShowSkillAnimationAsync(IAttacker attacker, IAttackable? target, short skillNumber, bool effectApplied)
     {
         var playerId = attacker.GetId(this._player);
         var targetId = target.GetId(this._player);
-        this._player.Connection?.SendSkillAnimation095((byte)skillNumber, playerId, targetId, effectApplied);
+        await this._player.Connection.SendSkillAnimation095Async((byte)skillNumber, playerId, targetId, effectApplied).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask ShowComboAnimationAsync(IAttacker attacker, IAttackable? target)
+    {
+        var playerId = attacker.GetId(this._player);
+        var targetId = ((IIdentifiable?)target ?? attacker).GetId(this._player);
+        await this._player.Connection.SendSkillAnimation095Async(ComboSkillId, playerId, targetId, false).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask ShowNovaStartAsync(IAttacker attacker)
+    {
+        var playerId = attacker.GetId(this._player);
+        await this._player.Connection.SendSkillAnimation095Async(NovaStartSkillId, playerId, 0, false).ConfigureAwait(false);
     }
 }

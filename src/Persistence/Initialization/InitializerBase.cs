@@ -43,6 +43,11 @@ public abstract class InitializerBase : IInitializer
     /// </value>
     protected GameConfiguration GameConfiguration { get; }
 
+    /// <summary>
+    /// Gets the maximum option level.
+    /// </summary>
+    protected virtual int MaximumOptionLevel => 4;
+
     /// <inheritdoc />
     public abstract void Initialize();
 
@@ -98,9 +103,91 @@ public abstract class InitializerBase : IInitializer
     {
         var powerUpDefinition = this.Context.CreateNew<PowerUpDefinition>();
         powerUpDefinition.TargetAttribute = attributeDefinition.GetPersistent(this.GameConfiguration);
-        powerUpDefinition.Boost = this.Context.CreateNew<PowerUpDefinitionValue>();
-        powerUpDefinition.Boost.ConstantValue.Value = value;
-        powerUpDefinition.Boost.ConstantValue.AggregateType = aggregateType;
+        if (value != 0)
+        {
+            powerUpDefinition.Boost = this.Context.CreateNew<PowerUpDefinitionValue>();
+            powerUpDefinition.Boost.ConstantValue.Value = value;
+            powerUpDefinition.Boost.ConstantValue.AggregateType = aggregateType;
+        }
+
         return powerUpDefinition;
+    }
+
+    /// <summary>
+    /// Creates the <see cref="ItemBasePowerUpDefinition"/>.
+    /// </summary>
+    /// <param name="attributeDefinition">The attribute definition.</param>
+    /// <param name="value">The value.</param>
+    /// <returns>The created <see cref="ItemBasePowerUpDefinition"/>.</returns>
+    protected ItemBasePowerUpDefinition CreateItemBasePowerUpDefinition(AttributeDefinition attributeDefinition, float value)
+    {
+        var powerUpDefinition = this.Context.CreateNew<ItemBasePowerUpDefinition>();
+        powerUpDefinition.TargetAttribute = attributeDefinition.GetPersistent(this.GameConfiguration);
+        powerUpDefinition.BaseValue = value;
+        return powerUpDefinition;
+    }
+
+    /// <summary>
+    /// Creates a new item bonus table and adds it to the <see cref="GameConfiguration"/>.
+    /// </summary>
+    /// <param name="values">The values, index is the item level.</param>
+    /// <param name="name">The name.</param>
+    /// <param name="description">The description.</param>
+    /// <returns>The created table.</returns>
+    protected ItemLevelBonusTable CreateItemBonusTable(float[] values, string name, string description)
+    {
+        var table = this.Context.CreateNew<ItemLevelBonusTable>();
+        this.GameConfiguration.ItemLevelBonusTables.Add(table);
+        table.Name = name;
+        table.Description = description;
+        for (int level = 0; level < values.Length; level++)
+        {
+            var value = values[level];
+            if (value != 0)
+            {
+                var levelBonus = this.Context.CreateNew<LevelBonus>();
+                levelBonus.Level = level;
+                levelBonus.AdditionalValue = values[level];
+                table.BonusPerLevel.Add(levelBonus);
+            }
+        }
+
+        return table;
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="IncreasableItemOption" /> with the specified parameters
+    /// with options for multiple option levels until <see cref="MaximumOptionLevel" />.
+    /// </summary>
+    /// <param name="number">The number.</param>
+    /// <param name="attributeDefinition">The attribute definition.</param>
+    /// <param name="value">The value.</param>
+    /// <param name="aggregateType">Type of the aggregate.</param>
+    /// <param name="valueIncrementPerLevel">The value increment per level.</param>
+    /// <param name="optionNumber">The option number.</param>
+    /// <returns>
+    /// The created <see cref="IncreasableItemOption" />.
+    /// </returns>
+    protected IncreasableItemOption CreateItemOption(int number, AttributeDefinition attributeDefinition, float value, AggregateType aggregateType, float valueIncrementPerLevel, short optionNumber)
+    {
+        var itemOption = this.Context.CreateNew<IncreasableItemOption>();
+        itemOption.SetGuid(optionNumber, attributeDefinition.Id.ExtractFirstTwoBytes());
+        itemOption.OptionType = this.GameConfiguration.ItemOptionTypes.First(t => t == ItemOptionTypes.Option);
+        itemOption.Number = number;
+
+        itemOption.PowerUpDefinition = this.CreatePowerUpDefinition(attributeDefinition, value, aggregateType);
+
+        for (int level = 1; level <= this.MaximumOptionLevel; level++)
+        {
+            var optionOfLevel = this.Context.CreateNew<ItemOptionOfLevel>();
+            optionOfLevel.Level = level;
+            optionOfLevel.PowerUpDefinition = this.CreatePowerUpDefinition(
+                itemOption.PowerUpDefinition.TargetAttribute!,
+                level * valueIncrementPerLevel,
+                aggregateType);
+            itemOption.LevelDependentOptions.Add(optionOfLevel);
+        }
+
+        return itemOption;
     }
 }

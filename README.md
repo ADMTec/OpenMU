@@ -41,7 +41,7 @@ This project is released under the MIT license (see LICENSE file).
 
 ## Used technologies
 
-The project is mainly written in C# and targets .NET 6.0.
+The project is mainly written in C# and targets .NET 7.0.
 
 The servers admin panel is hosted on an embedded ASP.NET Core webserver (Kestrel)
 and implemented as Blazor Server App.
@@ -49,6 +49,14 @@ and implemented as Blazor Server App.
 At the moment the persistence layer uses the [Entity Framework Core](https://github.com/aspnet/EntityFrameworkCore)
 and [PostgreSQL](https://www.postgresql.org) as database. Additionally, it's
 also possible to start it in a non-persistent in-memory mode.
+
+The project supports distributed hosting based on Dapr. Alternatively, it can be
+hosted in one process as well.
+
+## Deployment
+
+We provide Docker images and docker-compose files for easy deployment.
+Please take a look at the deploy-folder of this project.
 
 ## Contributions
 

@@ -13,18 +13,18 @@ using MUnique.OpenMU.GameServer.RemoteView;
 using MUnique.OpenMU.Interfaces;
 using MUnique.OpenMU.Network;
 using MUnique.OpenMU.Network.PlugIns;
+using MUnique.OpenMU.PlugIns;
 
 /// <summary>
 /// A game server listener that listens on a TCP port.
 /// To be visible in the server list, this listener also registers the game server at the connect server.
 /// </summary>
-/// <seealso cref="MUnique.OpenMU.GameServer.IGameServerListener" />
 public class DefaultTcpGameServerListener : IGameServerListener
 {
     private readonly ILogger<DefaultTcpGameServerListener> _logger;
 
     private readonly GameServerEndpoint _endPoint;
-    private readonly IGameServerInfo _gameServerInfo;
+    private readonly ServerInfo _gameServerInfo;
 
     private readonly IGameServerContext _gameContext;
 
@@ -42,7 +42,7 @@ public class DefaultTcpGameServerListener : IGameServerListener
     /// <param name="stateObserver">The connect server.</param>
     /// <param name="addressResolver">The address resolver which returns the address on which the listener will be bound to.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    public DefaultTcpGameServerListener(GameServerEndpoint endPoint, IGameServerInfo gameServerInfo, IGameServerContext gameContext, IGameServerStateObserver stateObserver, IIpAddressResolver addressResolver, ILoggerFactory loggerFactory)
+    public DefaultTcpGameServerListener(GameServerEndpoint endPoint, ServerInfo gameServerInfo, IGameServerContext gameContext, IGameServerStateObserver stateObserver, IIpAddressResolver addressResolver, ILoggerFactory loggerFactory)
     {
         this._endPoint = endPoint;
         this._gameServerInfo = gameServerInfo;
@@ -54,14 +54,14 @@ public class DefaultTcpGameServerListener : IGameServerListener
     }
 
     /// <inheritdoc/>
-    public event EventHandler<PlayerConnectedEventArgs>? PlayerConnected;
+    public event AsyncEventHandler<PlayerConnectedEventArgs>? PlayerConnected;
 
     private INetworkEncryptionFactoryPlugIn? EncryptionFactoryPlugIn { get; set; }
 
     private ClientVersion ClientVersion => new (this._endPoint.Client!.Season, this._endPoint.Client.Episode, this._endPoint.Client.Language);
 
     /// <inheritdoc/>
-    public void Start()
+    public async ValueTask StartAsync()
     {
         if (this._listener is { IsBound: true })
         {
@@ -79,15 +79,21 @@ public class DefaultTcpGameServerListener : IGameServerListener
         var port = this._endPoint.NetworkPort;
         this._logger.LogInformation("Starting Server Listener, port {port}", port);
         this._listener = new Listener(port, this.CreateDecryptor, this.CreateEncryptor, this._loggerFactory);
-        this._listener.ClientAccepted += this.OnClientAccepted;
-        this._listener.ClientAccepting += this.OnClientAccepting;
+        this._listener.ClientAccepted += this.OnClientAcceptedAsync;
+        this._listener.ClientAccepting += this.OnClientAcceptingAsync;
         if (this._endPoint.AlternativePublishedPort > 0)
         {
             port = this._endPoint.AlternativePublishedPort;
             this._logger.LogWarning("GameServer endpoint of port {0} has registered an alternative public port of {1}.", this._endPoint.NetworkPort, port);
         }
 
-        this._stateObserver.RegisterGameServer(this._gameServerInfo, new IPEndPoint(this._addressResolver.ResolveIPv4(), port));
+        this._stateObserver.RegisterGameServer(this._gameServerInfo, new IPEndPoint(await this._addressResolver.ResolveIPv4Async().ConfigureAwait(false), port));
+
+        if (this._addressResolver is ConfigurableIpResolver configurableIpResolver)
+        {
+            configurableIpResolver.ConfigurationChanged += this.OnResolverConfigurationChanged;
+        }
+
         this._listener.Start();
         this._logger.LogInformation("Server listener started.");
     }
@@ -95,8 +101,13 @@ public class DefaultTcpGameServerListener : IGameServerListener
     /// <inheritdoc/>
     public void Stop()
     {
+        if (this._addressResolver is ConfigurableIpResolver configurableIpResolver)
+        {
+            configurableIpResolver.ConfigurationChanged -= this.OnResolverConfigurationChanged;
+        }
+
         var port = this._endPoint.NetworkPort;
-        this._stateObserver.UnregisterGameServer(this._gameServerInfo);
+        this._stateObserver.UnregisterGameServer(this._gameServerInfo.Id);
         this._logger.LogInformation($"Stopping listener on port {port}.");
         if (this._listener is null || !this._listener.IsBound)
         {
@@ -108,6 +119,29 @@ public class DefaultTcpGameServerListener : IGameServerListener
 
         this._logger.LogInformation($"Stopped listener on port {port}.");
         this.EncryptionFactoryPlugIn = null;
+    }
+
+#pragma warning disable VSTHRD100 Exceptions are handled.
+    private async void OnResolverConfigurationChanged(object? sender, EventArgs e)
+#pragma warning restore VSTHRD100
+    {
+        try
+        {
+            if (this._listener?.IsBound is not true)
+            {
+                return;
+            }
+
+            var newAddress = await this._addressResolver.ResolveIPv4Async().ConfigureAwait(false);
+
+            var port = this._endPoint.NetworkPort;
+            this._stateObserver.UnregisterGameServer(this._gameServerInfo.Id);
+            this._stateObserver.RegisterGameServer(this._gameServerInfo, new IPEndPoint(newAddress, port));
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Failed to re-register at game server state observer after the ip resolver has been changed. Error: {ex}", ex);
+        }
     }
 
     private IPipelinedEncryptor? CreateEncryptor(PipeWriter arg)
@@ -124,7 +158,7 @@ public class DefaultTcpGameServerListener : IGameServerListener
             : new PipelinedDecryptor(arg);
     }
 
-    private void OnClientAccepting(object? sender, ClientAcceptingEventArgs e)
+    private async ValueTask OnClientAcceptingAsync(ClientAcceptingEventArgs e)
     {
         if (this._gameContext.PlayerCount >= this._gameContext.ServerConfiguration.MaximumPlayers)
         {
@@ -134,31 +168,38 @@ public class DefaultTcpGameServerListener : IGameServerListener
         }
     }
 
-    private void OnClientAccepted(object? sender, ClientAcceptedEventArgs e)
+    private async ValueTask OnClientAcceptedAsync(ClientAcceptedEventArgs e)
     {
         var connection = e.AcceptedConnection;
         var remoteEndPoint = connection.EndPoint as IPEndPoint;
         this.Log(l => l.LogDebug($"Game Client connected, Address {remoteEndPoint}"));
 
         var remotePlayer = new RemotePlayer(this._gameContext, connection, this.ClientVersion);
-        connection.Disconnected += (_, _) => remotePlayer.Disconnect();
-        this.OnPlayerConnected(remotePlayer);
+        connection.Disconnected += async () =>
+        {
+            await remotePlayer.DisconnectAsync().ConfigureAwait(false);
+            this._stateObserver.CurrentConnectionsChanged(this._gameContext.Id, this._gameContext.PlayerCount);
+        };
+
+        await this.OnPlayerConnectedAsync(remotePlayer).ConfigureAwait(false);
 
         // we don't want to await the call.
-        connection.BeginReceive();
+        _ = Task.Run(connection.BeginReceiveAsync);
     }
 
-    private void OnPlayerConnected(Player player)
+    private async ValueTask OnPlayerConnectedAsync(Player player)
     {
         var eventHandler = this.PlayerConnected;
         if (eventHandler != null)
         {
-            eventHandler(this, new PlayerConnectedEventArgs(player));
+            await eventHandler(new PlayerConnectedEventArgs(player)).ConfigureAwait(false);
         }
         else
         {
             this.Log(l => l.LogError($"Event {nameof(this.PlayerConnected)} was not handled."));
         }
+
+        this._stateObserver.CurrentConnectionsChanged(this._gameContext.Id, this._gameContext.PlayerCount);
     }
 
     private void Log(Action<ILogger<DefaultTcpGameServerListener>> logAction)

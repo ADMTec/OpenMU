@@ -11,6 +11,7 @@ using System.Runtime.InteropServices;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Nito.Disposables.Internals;
 
 /// <summary>
 /// The manager for plugins.
@@ -23,6 +24,7 @@ public class PlugInManager
     private readonly IDictionary<Guid, Type> _knownPlugIns = new ConcurrentDictionary<Guid, Type>();
     private readonly ConcurrentDictionary<Type, ISet<Type>> _knownPlugInsPerInterfaceType = new ();
     private readonly ConcurrentDictionary<Guid, Type> _activePlugIns = new ();
+    private object? _lastCreatedPlugIn;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlugInManager" /> class.
@@ -32,11 +34,14 @@ public class PlugInManager
     /// <param name="serviceProvider">The service provider.</param>
     public PlugInManager(ICollection<PlugInConfiguration>? configurations, ILoggerFactory loggerFactory, IServiceProvider? serviceProvider)
     {
+        _ = typeof(Nito.AsyncEx.AsyncReaderWriterLock); // Ensure Nito.AsyncEx.Coordination is loaded so it will be available in proxy generation.
+
         this._logger = loggerFactory.CreateLogger<PlugInManager>();
         this._serviceContainer = new ServiceContainer(serviceProvider);
         this._serviceContainer.AddService(typeof(PlugInManager), this);
         this._serviceContainer.AddService(typeof(ILoggerFactory), loggerFactory);
-        if (configurations?.Any() ?? false)
+
+        if (configurations is not null)
         {
             this.DiscoverAndRegisterPlugIns();
             var loadedAssemblies = new HashSet<string>();
@@ -246,7 +251,19 @@ public class PlugInManager
     /// </returns>
     public bool IsPlugInActive(Type plugInType)
     {
-        return this._activePlugIns.ContainsKey(plugInType.GUID);
+        return this.IsPlugInActive(plugInType.GUID);
+    }
+
+    /// <summary>
+    /// Determines whether the specified plug in type is configured as active.
+    /// </summary>
+    /// <param name="plugInTypeId">Identifier of the type of the plug in.</param>
+    /// <returns>
+    ///   <c>true</c> if the specified plug in type is configured as active; otherwise, <c>false</c>.
+    /// </returns>
+    public bool IsPlugInActive(Guid plugInTypeId)
+    {
+        return this._activePlugIns.ContainsKey(plugInTypeId);
     }
 
     /// <summary>
@@ -256,12 +273,14 @@ public class PlugInManager
     /// <typeparam name="TPlugInClass">The type of the plug in class.</typeparam>
     public void RegisterPlugIn<TPlugInInterface, TPlugInClass>()
         where TPlugInInterface : class
-        where TPlugInClass : TPlugInInterface
+        where TPlugInClass : class, TPlugInInterface
     {
         this.RegisterPlugInType(typeof(TPlugInClass));
         if (typeof(TPlugInInterface).GetCustomAttribute(typeof(PlugInPointAttribute)) != null)
         {
-            this.RegisterPlugInAtPlugInPoint<TPlugInInterface>(this.CreatePlugInInstance<TPlugInClass>());
+            var plugIn = this._lastCreatedPlugIn as TPlugInClass ?? this.CreatePlugInInstance<TPlugInClass>();
+            this._lastCreatedPlugIn = plugIn;
+            this.RegisterPlugInAtPlugInPoint<TPlugInInterface>(plugIn);
         }
         else if (this.GetCustomPlugInPointType(typeof(TPlugInInterface)) is { } customPlugInPointType)
         {
@@ -475,7 +494,24 @@ public class PlugInManager
             .Where(assembly => assembly.FullName is not null)
             .Where(assembly => !assembly.FullName!.StartsWith("System"))
             .Where(assembly => !assembly.FullName!.StartsWith("Microsoft"))
-            .SelectMany(assembly => assembly.DefinedTypes.Where(type => type.GetCustomAttribute<PlugInAttribute>() != null));
+            .Where(assembly => !assembly.FullName!.StartsWith("Nito"))
+            .Where(assembly => !assembly.FullName!.StartsWith("Blazor"))
+            .SelectMany(assembly =>
+                {
+                    try
+                    {
+                        return assembly.DefinedTypes.Where(type => type.GetCustomAttribute<PlugInAttribute>() != null);
+                    }
+                    catch (ReflectionTypeLoadException ex)
+                    {
+                        return ex.Types.WhereNotNull();
+                    }
+                    catch (Exception)
+                    {
+                        return Enumerable.Empty<Type>();
+                    }
+                }
+            );
     }
 
     private IEnumerable<Type> DiscoverPlugIns(Assembly assembly)
@@ -503,6 +539,8 @@ public class PlugInManager
                 this._logger.LogError(e, $"Couldn't register plugin type {plugIn}");
                 this._logger.LogError("TODO: Use ServiceContainer");
             }
+
+            this._lastCreatedPlugIn = null;
         }
     }
 

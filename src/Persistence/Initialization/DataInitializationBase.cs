@@ -8,9 +8,14 @@ using System.ComponentModel.Design;
 using Microsoft.Extensions.Logging;
 using MUnique.OpenMU.DataModel.Configuration;
 using MUnique.OpenMU.GameLogic;
+using MUnique.OpenMU.GameLogic.MuHelper;
+using MUnique.OpenMU.GameLogic.PlugIns.InvasionEvents;
+using MUnique.OpenMU.GameLogic.PlugIns.PeriodicTasks;
 using MUnique.OpenMU.GameLogic.Resets;
 using MUnique.OpenMU.GameServer.MessageHandler;
+using MUnique.OpenMU.Network;
 using MUnique.OpenMU.Network.PlugIns;
+using MUnique.OpenMU.Persistence.Initialization.Updates;
 using MUnique.OpenMU.PlugIns;
 
 /// <summary>
@@ -37,6 +42,9 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
 
     /// <inheritdoc />
     public abstract string Key { get; }
+
+    /// <inheritdoc />
+    public abstract string Caption { get; }
 
     /// <summary>
     /// Gets or sets the game configuration.
@@ -78,25 +86,27 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
     /// </summary>
     /// <param name="numberOfGameServers">The number of game servers.</param>
     /// <param name="createTestAccounts">If set to <c>true</c>, test accounts should be created.</param>
-    public void CreateInitialData(byte numberOfGameServers, bool createTestAccounts)
+    public async Task CreateInitialDataAsync(byte numberOfGameServers, bool createTestAccounts)
     {
         BaseMapInitializer.ClearDefaultDropItemGroups();
         using (var temporaryContext = this._persistenceContextProvider.CreateNewContext())
         {
             this.GameConfiguration = temporaryContext.CreateNew<GameConfiguration>();
-            temporaryContext.SaveChanges();
+            this.GameConfiguration.SetGuid(1);
+            this.CreateSystemConfiguration(temporaryContext);
+            await temporaryContext.SaveChangesAsync().ConfigureAwait(false);
         }
 
         using var contextWithConfiguration = this._persistenceContextProvider.CreateNewContext(this.GameConfiguration);
         this.Context = contextWithConfiguration;
         this.CreateGameClientDefinition();
-        this.CreateChatServerDefinition();
+        await this.CreateChatServerDefinitionAsync().ConfigureAwait(false);
         this.GameConfigurationInitializer.Initialize();
 
         var gameServerConfiguration = this.CreateGameServerConfiguration(this.GameConfiguration.Maps);
-        this.CreateGameServerDefinitions(gameServerConfiguration, numberOfGameServers);
-        this.CreateConnectServerDefinition();
-        this.Context.SaveChanges();
+        await this.CreateGameServerDefinitionsAsync(gameServerConfiguration, numberOfGameServers).ConfigureAwait(false);
+        await this.CreateConnectServerDefinitionAsync().ConfigureAwait(false);
+        await this.Context.SaveChangesAsync().ConfigureAwait(false);
 
         this.GameMapsInitializer.SetSafezoneMaps();
 
@@ -117,6 +127,7 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
         plugInManager.KnownPlugInTypes.ForEach(plugInType =>
         {
             var plugInConfiguration = this.Context.CreateNew<PlugInConfiguration>();
+            plugInConfiguration.SetGuid(plugInType.GUID);
             plugInConfiguration.TypeId = plugInType.GUID;
             plugInConfiguration.IsActive = true;
             this.GameConfiguration.PlugInConfigurations.Add(plugInConfiguration);
@@ -128,6 +139,31 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
                 plugInConfiguration.SetConfiguration(new ResetConfiguration());
             }
 
+            if (plugInType == typeof(ChaosCastleStartPlugIn))
+            {
+                plugInConfiguration.SetConfiguration(ChaosCastleStartConfiguration.Default);
+            }
+
+            if (plugInType == typeof(GoldenInvasionPlugIn))
+            {
+                plugInConfiguration.SetConfiguration(PeriodicInvasionConfiguration.DefaultGoldenInvasion);
+            }
+
+            if (plugInType == typeof(RedDragonInvasionPlugIn))
+            {
+                plugInConfiguration.SetConfiguration(PeriodicInvasionConfiguration.DefaultRedDragonInvasion);
+            }
+
+            if (plugInType == typeof(HappyHourPlugIn))
+            {
+                plugInConfiguration.SetConfiguration(HappyHourConfiguration.Default);
+            }
+
+            if (plugInType == typeof(MuHelperFeaturePlugIn))
+            {
+                plugInConfiguration.SetConfiguration(new MuHelperConfiguration());
+            }
+
             // We don't move the player anymore by his request. This was usually requested after a player performed a skill.
             // However, it adds way for cheaters to move through the map.
             // The plugin is therefore deactivated by default.
@@ -137,7 +173,9 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
             }
         });
 
-        this.Context.SaveChanges();
+        this.AddAllUpdateEntries(plugInManager);
+
+        await this.Context.SaveChangesAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -145,10 +183,37 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
     /// </summary>
     protected abstract void CreateGameClientDefinition();
 
-    private void CreateConnectServerDefinition()
+    private void AddAllUpdateEntries(PlugInManager plugInManager)
     {
-        var client = this.Context!.Get<GameClientDefinition>().First();
+        var updates = plugInManager.GetStrategyProvider<int, IConfigurationUpdatePlugIn>()
+                          ?.AvailableStrategies.Where(up => up.DataInitializationKey == this.Key)
+                          .OrderBy(up => up.Version)
+                          .ToList();
+        if (updates is not { Count: > 0 })
+        {
+            return;
+        }
+
+        foreach (var update in updates)
+        {
+            var entry = this.Context.CreateNew<ConfigurationUpdate>();
+            entry.Version = (int)update.Version;
+            entry.Name = update.Name;
+            entry.Description = update.Description;
+            entry.CreatedAt = update.CreatedAt;
+            entry.InstalledAt = DateTime.UtcNow;
+        }
+
+        var updateState = this.Context.CreateNew<ConfigurationUpdateState>();
+        updateState.InitializationKey = this.Key;
+        updateState.CurrentInstalledVersion = updates.Max(u => (int)u.Version);
+    }
+
+    private async ValueTask CreateConnectServerDefinitionAsync()
+    {
+        var client = (await this.Context.GetAsync<GameClientDefinition>().ConfigureAwait(false)).First();
         var connectServer = this.Context.CreateNew<ConnectServerDefinition>();
+        connectServer.SetGuid(1);
         connectServer.Client = client;
         connectServer.ClientListenerPort = 44405;
         connectServer.Description = $"Connect Server ({new ClientVersion(client.Season, client.Episode, client.Language)})";
@@ -166,20 +231,22 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
         connectServer.MaxServerListRequests = 20;
     }
 
-    private void CreateGameServerDefinitions(GameServerConfiguration gameServerConfiguration, int numberOfServers)
+    private async ValueTask CreateGameServerDefinitionsAsync(GameServerConfiguration gameServerConfiguration, int numberOfServers)
     {
         for (int i = 0; i < numberOfServers; i++)
         {
             var server = this.Context!.CreateNew<GameServerDefinition>();
+            server.SetGuid((short)i);
             server.ServerID = (byte)i;
             server.Description = $"Server {i}";
             server.ExperienceRate = 1.0f;
             server.GameConfiguration = this.GameConfiguration;
             server.ServerConfiguration = gameServerConfiguration;
 
-            foreach (var client in this.Context.Get<GameClientDefinition>().ToList())
+            foreach (var client in await this.Context.GetAsync<GameClientDefinition>().ConfigureAwait(false))
             {
                 var endPoint = this.Context.CreateNew<GameServerEndpoint>();
+                endPoint.SetGuid((short)i, (short)server.Endpoints.Count);
                 endPoint.Client = client;
                 endPoint.NetworkPort = 55901 + i;
                 server.Endpoints.Add(endPoint);
@@ -187,14 +254,16 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
         }
     }
 
-    private void CreateChatServerDefinition()
+    private async ValueTask CreateChatServerDefinitionAsync()
     {
         var server = this.Context!.CreateNew<ChatServerDefinition>();
+        server.SetGuid(0);
         server.ServerId = 0;
         server.Description = "Chat Server";
 
-        var client = this.Context!.Get<GameClientDefinition>().First();
+        var client = (await this.Context!.GetAsync<GameClientDefinition>().ConfigureAwait(false)).First();
         var endPoint = this.Context.CreateNew<ChatServerEndpoint>();
+        server.SetGuid(0);
         endPoint.Client = client;
         endPoint.NetworkPort = 55980;
         server.Endpoints.Add(endPoint);
@@ -202,7 +271,8 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
 
     private GameServerConfiguration CreateGameServerConfiguration(ICollection<GameMapDefinition> maps)
     {
-        var gameServerConfiguration = this.Context!.CreateNew<GameServerConfiguration>();
+        var gameServerConfiguration = this.Context.CreateNew<GameServerConfiguration>();
+        gameServerConfiguration.SetGuid(0);
         gameServerConfiguration.MaximumPlayers = 1000;
 
         // by default we add every map to a server configuration
@@ -212,5 +282,18 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
         }
 
         return gameServerConfiguration;
+    }
+
+    private void CreateSystemConfiguration(IContext context)
+    {
+        var systemConfiguration = context.CreateNew<SystemConfiguration>();
+        systemConfiguration.SetGuid(0);
+        systemConfiguration.AutoStart = true;
+        systemConfiguration.AutoUpdateSchema = true;
+        systemConfiguration.ReadConsoleInput = false;
+
+        var (type, param) = IpAddressResolverFactory.DetermineBestFittingResolver(Environment.GetCommandLineArgs());
+        systemConfiguration.IpResolver = type;
+        systemConfiguration.IpResolverParameter = param;
     }
 }

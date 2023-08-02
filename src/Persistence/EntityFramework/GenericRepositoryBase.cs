@@ -8,7 +8,6 @@ using System.Collections;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -24,20 +23,20 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
     /// <summary>
     /// Initializes a new instance of the <see cref="GenericRepositoryBase{T}" /> class.
     /// </summary>
-    /// <param name="repositoryManager">The repository manager.</param>
+    /// <param name="repositoryProvider">The repository provider.</param>
     /// <param name="logger">The logger.</param>
-    protected GenericRepositoryBase(RepositoryManager repositoryManager, ILogger logger)
+    protected GenericRepositoryBase(IContextAwareRepositoryProvider repositoryProvider, ILogger logger)
     {
         this._logger = logger;
-        this.RepositoryManager = repositoryManager;
+        this.RepositoryProvider = repositoryProvider;
         using var completeContext = new EntityDataContext();
         this.FullEntityType = completeContext.Model.FindEntityType(typeof(T)) ?? throw new InvalidOperationException($"{typeof(T)} is not included in the model");
     }
 
     /// <summary>
-    /// Gets the repository manager.
+    /// Gets the repository provider.
     /// </summary>
-    protected RepositoryManager RepositoryManager { get; }
+    protected IContextAwareRepositoryProvider RepositoryProvider { get; }
 
     /// <summary>
     /// Gets the complete meta model of the entity type in <see cref="EntityDataContext"/>.
@@ -45,62 +44,70 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
     protected IEntityType FullEntityType { get; }
 
     /// <inheritdoc/>
-    public bool Delete(Guid id)
+    public async ValueTask<bool> DeleteAsync(Guid id)
     {
-        if (this.GetById(id) is { } item)
+        if (await this.GetByIdAsync(id).ConfigureAwait(false) is { } item)
         {
-            return this.Delete(item);
+            return await this.DeleteAsync(item).ConfigureAwait(false);
         }
 
         return false;
     }
 
     /// <inheritdoc/>
-    public bool Delete(object obj)
+    public async ValueTask<bool> DeleteAsync(object obj)
     {
         using var context = this.GetContext();
-        return context.Context.Remove(obj) != null;
+        return context.Context.Remove(obj) is not null;
     }
 
     /// <inheritdoc/>
-    public virtual IEnumerable<T> GetAll()
+    async ValueTask<IEnumerable> IRepository.GetAllAsync()
+    {
+        return await this.GetAllAsync().ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual async ValueTask<IEnumerable<T>> GetAllAsync()
     {
         using var context = this.GetContext();
-        var result = context.Context.Set<T>().ToList();
-        this.LoadDependentData(result, context.Context);
+        var result = await context.Context.Set<T>().ToListAsync().ConfigureAwait(false);
+        await this.LoadDependentDataAsync(result, context.Context).ConfigureAwait(false);
         var newItems = context.Context.ChangeTracker.Entries<T>().Where(e => e.State == EntityState.Added).Select(e => e.Entity);
-        return result.Concat(newItems);
+        result.AddRange(newItems);
+        return result;
     }
 
     /// <inheritdoc/>
-    public virtual T? GetById(Guid id)
+    public virtual async ValueTask<T?> GetByIdAsync(Guid id)
     {
         using var context = this.GetContext();
-        var result = context.Context.Set<T>().Find(id);
+        
+        var result = await context.Context.Set<T>().FindAsync(id).ConfigureAwait(false);
         if (result is null)
         {
-            this._logger.LogDebug($"Object with id {id} could not be found.");
+            this._logger.LogDebug("Object with id {Id} could not be found.", id);
         }
         else
         {
-            this.LoadDependentData(result, context.Context);
+            await this.LoadDependentDataAsync(result, context.Context).ConfigureAwait(false);
         }
 
         return result;
     }
 
     /// <inheritdoc/>
-    object? IRepository.GetById(Guid id)
+    async ValueTask<object?> IRepository.GetByIdAsync(Guid id)
     {
-        return this.GetById(id);
+        return await this.GetByIdAsync(id).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public IEnumerable LoadByProperty(IProperty property, object propertyValue)
+    public async ValueTask<IEnumerable> LoadByPropertyAsync(IProperty property, object propertyValue)
     {
         using var context = this.GetContext();
-        var result = this.LoadByPropertyInternal(property, propertyValue, context.Context).OfType<T>().ToList();
-        this.LoadDependentData(result, context.Context);
+        var result = (await this.LoadByPropertyInternalAsync(property, propertyValue, context.Context).ConfigureAwait(false)).OfType<T>().ToList();
+        await this.LoadDependentDataAsync(result, context.Context).ConfigureAwait(false);
         return result;
     }
 
@@ -112,7 +119,7 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
     /// <returns>The navigations which should be considered when loading the data.</returns>
     protected virtual IEnumerable<INavigationBase> GetNavigations(EntityEntry entityEntry)
     {
-        return entityEntry.Navigations.Select(n => n.Metadata);
+        return FullEntityType.GetNavigations();
     }
 
     /// <summary>
@@ -120,14 +127,22 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
     /// </summary>
     /// <param name="obj">The object.</param>
     /// <param name="currentContext">The current context with which the object got loaded. It is necessary to retrieve the foreign key ids.</param>
-    protected virtual void LoadDependentData(object obj, DbContext currentContext)
+    protected virtual async ValueTask LoadDependentDataAsync(object obj, DbContext currentContext)
     {
         var entityEntry = currentContext.Entry(obj);
 
         foreach (var navigation in this.GetNavigations(entityEntry).OfType<INavigation>())
         {
-            if (!navigation.IsCollection)
+            if (!navigation.IsCollection && navigation.GetClrValue(obj) is null)
             {
+                if (currentContext is ITypedContext editContext
+                    && editContext.RootType != navigation.DeclaringEntityType
+                    && editContext.IsBackReference(entityEntry.Metadata.ClrType))
+                {
+                    // prevents endless loop.
+                    continue;
+                }
+
                 if (this.FullEntityType.FindPrimaryKey()?.Properties[0] == navigation.ForeignKey.Properties[0])
                 {
                     // The entity type is a many-to-many join entity and the property of the navigation is the "owner" of it.
@@ -135,7 +150,8 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
                 }
                 else
                 {
-                    this.LoadNavigationProperty(entityEntry, navigation);
+                    await this.LoadNavigationPropertyAsync(entityEntry, navigation).ConfigureAwait(false);
+                    navigation.SetIsLoadedWhenNoTracking(obj);
                 }
             }
         }
@@ -144,7 +160,15 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
         {
             if (collection.Metadata is INavigation metadata)
             {
-                this.LoadCollection(entityEntry, metadata, currentContext);
+                if (currentContext is ITypedContext editContext
+                    && editContext.RootType != metadata.DeclaringEntityType
+                    && editContext.IsBackReference(entityEntry.Metadata.ClrType))
+                {
+                    // prevents endless loop.
+                    continue;
+                }
+
+                await this.LoadCollectionAsync(entityEntry, metadata, currentContext).ConfigureAwait(false);
                 collection.IsLoaded = true;
             }
         }
@@ -155,11 +179,11 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
     /// </summary>
     /// <param name="loadedObjects">The loaded objects.</param>
     /// <param name="currentContext">The current context with which the objects got loaded. It is necessary to retrieve the foreign key ids.</param>
-    protected virtual void LoadDependentData(IEnumerable loadedObjects, DbContext currentContext)
+    protected virtual async ValueTask LoadDependentDataAsync(IEnumerable loadedObjects, DbContext currentContext)
     {
         foreach (var obj in loadedObjects)
         {
-            this.LoadDependentData(obj, currentContext);
+            await this.LoadDependentDataAsync(obj, currentContext).ConfigureAwait(false);
         }
     }
 
@@ -169,7 +193,7 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
     /// <param name="entityEntry">The entity entry.</param>
     /// <param name="navigation">The navigation.</param>
     /// <param name="context">The context.</param>
-    protected virtual void LoadCollection(EntityEntry entityEntry, INavigation navigation, DbContext context)
+    protected virtual async ValueTask LoadCollectionAsync(EntityEntry entityEntry, INavigation navigation, DbContext context)
     {
         var foreignKeyProperty = navigation.ForeignKey.Properties[0];
         var loadStatusAware = navigation.GetClrValue<ILoadingStatusAwareList>(entityEntry.Entity);
@@ -192,12 +216,12 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
 
         loadStatusAware.LoadingStatus = LoadingStatus.Loading;
 
-        if (this.RepositoryManager.GetRepository(foreignKeyProperty.DeclaringEntityType.ClrType) is ILoadByProperty repository)
+        if (this.RepositoryProvider.GetRepository(foreignKeyProperty.DeclaringEntityType.ClrType) is ILoadByProperty repository)
         {
             var foreignKeyValue = entityEntry.Property(navigation.ForeignKey.PrincipalKey.Properties[0].Name).CurrentValue;
             if (foreignKeyValue is { })
             {
-                var items = repository.LoadByProperty(foreignKeyProperty, foreignKeyValue);
+                var items = await repository.LoadByPropertyAsync(foreignKeyProperty, foreignKeyValue).ConfigureAwait(false);
                 foreach (var obj in items)
                 {
                     if (!loadStatusAware.Contains(obj))
@@ -211,7 +235,7 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
         }
         else
         {
-            this._logger.LogWarning($"No repository found which supports loading by foreign key for type ${foreignKeyProperty.DeclaringEntityType.ClrType}.");
+            this._logger.LogWarning("No repository found which supports loading by foreign key for type {ClrType}.", foreignKeyProperty.DeclaringEntityType.ClrType);
             loadStatusAware.LoadingStatus = LoadingStatus.Failed;
         }
     }
@@ -221,7 +245,7 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
     /// </summary>
     /// <param name="entityEntry">The entity entry from the context.</param>
     /// <param name="navigation">The navigation property.</param>
-    protected virtual void LoadNavigationProperty(EntityEntry entityEntry, IReadOnlyNavigation navigation)
+    protected virtual async ValueTask LoadNavigationPropertyAsync(EntityEntry entityEntry, IReadOnlyNavigation navigation)
     {
         if (navigation.ForeignKey.DeclaringEntityType != navigation.DeclaringEntityType)
         {
@@ -245,43 +269,43 @@ internal abstract class GenericRepositoryBase<T> : IRepository<T>, ILoadByProper
             IRepository? repository = null;
             try
             {
-                repository = this.RepositoryManager.GetRepository(navigation.TargetEntityType.ClrType);
+                repository = this.RepositoryProvider.GetRepository(navigation.TargetEntityType.ClrType);
             }
             catch (RepositoryNotFoundException ex)
             {
-                this._logger.LogError(ex, $"Repository not found: {ex.Message}");
+                this._logger.LogError(ex, "Repository not found: {Message}", ex.Message);
             }
 
             if (repository != null)
             {
-                if (!navigation.TrySetClrValue(entityEntry.Entity, repository.GetById(id)))
+                if (!navigation.TrySetClrValue(entityEntry.Entity, await repository.GetByIdAsync(id).ConfigureAwait(false)))
                 {
-                    this._logger.LogError($"Could not find setter for navigation {navigation}");
+                    this._logger.LogError("Could not find setter for navigation {Navigation}", navigation);
                 }
             }
             else
             {
-                this._logger.LogError($"Repository not found for navigation target type {navigation.TargetEntityType}.");
+                this._logger.LogError("Repository not found for navigation target type {TargetEntityType}.", navigation.TargetEntityType);
             }
         }
     }
 
     /// <summary>
-    /// Gets a context to work with. If no context is currently registered at the repository manager, a new one is getting created.
+    /// Gets a context to work with. If no context is currently registered at the repository provider, a new one is getting created.
     /// </summary>
     /// <returns>The context.</returns>
     protected abstract EntityFrameworkContextBase GetContext();
 
-    private IEnumerable LoadByPropertyInternal(IProperty property, object propertyValue, DbContext context)
+    private async ValueTask<IEnumerable> LoadByPropertyInternalAsync(IProperty property, object propertyValue, DbContext context)
     {
         if (property.ClrType == typeof(Guid))
         {
-            return context.Set<T>().Where(o => EF.Property<Guid>(o, property.Name) == (Guid)propertyValue);
+            return await context.Set<T>().Where(o => EF.Property<Guid>(o, property.Name) == (Guid)propertyValue).ToListAsync().ConfigureAwait(false);
         }
 
         if (property.ClrType == typeof(Guid?))
         {
-            return context.Set<T>().Where(o => EF.Property<Guid?>(o, property.Name) == (Guid?)propertyValue);
+            return await context.Set<T>().Where(o => EF.Property<Guid?>(o, property.Name) == (Guid?)propertyValue).ToListAsync().ConfigureAwait(false);
         }
 
         return Enumerable.Empty<object>();

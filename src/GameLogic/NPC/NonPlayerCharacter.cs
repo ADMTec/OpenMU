@@ -4,10 +4,9 @@
 
 namespace MUnique.OpenMU.GameLogic.NPC;
 
-using Nito.AsyncEx;
-
 using MUnique.OpenMU.GameLogic.Views.World;
 using MUnique.OpenMU.Pathfinding;
+using Nito.AsyncEx;
 
 /// <summary>
 /// The implementation of a non-player-character (Monster) which can not be attacked or attack.
@@ -47,7 +46,7 @@ public class NonPlayerCharacter : AsyncDisposable, IObservable, IRotatable, ILoc
     /// <summary>
     /// Gets the lock for <see cref="Observers"/>.
     /// </summary>
-    public AsyncReaderWriterLock ObserverLock { get; } = new ();
+    public AsyncReaderWriterLock ObserverLock { get; } = new();
 
     /// <inheritdoc/>
     public GameMap CurrentMap { get; }
@@ -56,6 +55,11 @@ public class NonPlayerCharacter : AsyncDisposable, IObservable, IRotatable, ILoc
     /// Gets or sets the spawn area of this instance.
     /// </summary>
     public MonsterSpawnArea SpawnArea { get; protected set; }
+
+    /// <summary>
+    /// Gets or sets the index of the spawn within the <see cref="SpawnArea"/>.
+    /// </summary>
+    public int SpawnIndex { get; set; }
 
     /// <inheritdoc/>
     public Bucket<ILocateable>? NewBucket { get; set; }
@@ -89,6 +93,14 @@ public class NonPlayerCharacter : AsyncDisposable, IObservable, IRotatable, ILoc
 
         this.Position = spawnPoint.Value;
         this.Rotation = GetSpawnDirection(this.SpawnArea.Direction);
+    }
+
+    /// <summary>
+    /// Called when this instance spawned on the map.
+    /// </summary>
+    public virtual void OnSpawn()
+    {
+        // can be overwritten
     }
 
     /// <inheritdoc/>

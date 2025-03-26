@@ -6,6 +6,7 @@ namespace MUnique.OpenMU.Web.AdminPanel;
 
 using System.IO;
 using Blazored.Modal;
+using Blazored.Toast;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.Extensions.DependencyInjection;
@@ -53,11 +54,12 @@ public static class WebApplicationExtensions
                 setup.FeatureProviders.Add(new GenericControllerFeatureProvider()));
 
         services.AddBlazoredModal();
+        services.AddBlazoredToast();
 
         services.AddScoped<ILookupController, PersistentObjectsLookupController>();
 
-        services.AddScoped<IDataSource<GameConfiguration>, GameConfigurationDataSource>();
-        services.AddScoped<IDataSource<Account>, AccountDataSource>();
+        services.AddSingleton<IDataSource<GameConfiguration>, GameConfigurationDataSource>();
+        services.AddSingleton<IDataSource<Account>, AccountDataSource>();
         services.AddScoped<SetupService>();
         services.AddScoped<DataUpdateService>();
         services.AddScoped<AccountService>();
@@ -66,6 +68,9 @@ public static class WebApplicationExtensions
         services.AddScoped<IDataService<PlugInConfigurationViewItem>>(serviceProvider => serviceProvider.GetService<PlugInController>()!);
         services.AddScoped<IUserService, NginxHtpasswdFileUserService>();
         services.AddScoped<IChangeNotificationService, ChangeNotificationService>();
+        services.AddScoped<NavigationHistory>();
+        services.AddScoped<LoggedInAccountService>();
+        services.AddScoped<IDataService<LoggedInAccount>>(serviceProvider => serviceProvider.GetService<LoggedInAccountService>()!);
 
         StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configuration);
         return builder;
@@ -78,7 +83,11 @@ public static class WebApplicationExtensions
     /// <returns>The configured web application.</returns>
     public static WebApplication ConfigureAdminPanel(this WebApplication app)
     {
-        if (!app.Environment.IsDevelopment())
+        if (app.Environment.IsDevelopment())
+        {
+            app.UseDeveloperExceptionPage();
+        }
+        else
         {
             app.UseExceptionHandler("/Error");
         }

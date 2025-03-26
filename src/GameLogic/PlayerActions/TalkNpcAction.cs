@@ -117,6 +117,23 @@ public class TalkNpcAction
             case NpcWindow.LegacyQuest:
                 await this.ShowLegacyQuestDialogAsync(player).ConfigureAwait(false);
                 break;
+            case NpcWindow.DoorkeeperTitusDuelWatch:
+                await player.InvokeViewPlugInAsync<IOpenNpcWindowPlugIn>(p => p.OpenNpcWindowAsync(npcStats.NpcWindow)).ConfigureAwait(false);
+                _ = Task.Run(async () =>
+                {
+                    while (player.IsActive() && player.OpenedNpc?.Definition.NpcWindow == NpcWindow.DoorkeeperTitusDuelWatch)
+                    {
+                        await player.GameContext.DuelRoomManager.ShowRoomsAsync(player).ConfigureAwait(false);
+                        await Task.Delay(5000).ConfigureAwait(false);
+                    }
+                });
+
+                break;
+            case NpcWindow.ChaosMachine:
+            case NpcWindow.RemoveJohOption:
+                player.BackupInventory = new BackupItemStorage(player.Inventory!.ItemStorage);
+                await player.InvokeViewPlugInAsync<IOpenNpcWindowPlugIn>(p => p.OpenNpcWindowAsync(npcStats.NpcWindow)).ConfigureAwait(false);
+                break;
             default:
                 await player.InvokeViewPlugInAsync<IOpenNpcWindowPlugIn>(p => p.OpenNpcWindowAsync(npcStats.NpcWindow)).ConfigureAwait(false);
                 break;

@@ -5,12 +5,14 @@
 namespace MUnique.OpenMU.DataModel.Configuration;
 
 using System.Globalization;
+using MUnique.OpenMU.Annotations;
 
 /// <summary>
 /// Defines the configuration of a game server.
 /// </summary>
 [AggregateRoot]
-public class GameServerDefinition
+[Cloneable]
+public partial class GameServerDefinition
 {
     /// <summary>
     /// Gets or sets the server identifier.
@@ -27,6 +29,11 @@ public class GameServerDefinition
     /// Be aware that this multiplies with the <see cref="MUnique.OpenMU.DataModel.Configuration.GameConfiguration.ExperienceRate"/>.
     /// </summary>
     public float ExperienceRate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether PVP is enabled on this server.
+    /// </summary>
+    public bool PvpEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the server configuration.

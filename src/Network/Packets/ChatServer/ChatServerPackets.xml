@@ -20,9 +20,9 @@
         </Field>
         <Field>
           <Index>6</Index>
-          <Type>String</Type>
+          <Type>Binary</Type>
           <Name>Token</Name>
-          <Description>A token (integer number), formatted as string. This value is also "encrypted" with the 3-byte XOR key (FC CF AB).</Description>
+          <Description>A token (integer number), formatted as string and "encrypted" with the 3-byte XOR key (FC CF AB).</Description>
           <Length>10</Length>
         </Field>
       </Fields>
@@ -48,6 +48,17 @@
           <Name>Name</Name>
           <Length>10</Length>
         </Field>
+      </Fields>
+    </Packet>
+    <Packet>
+      <HeaderType>C1Header</HeaderType>
+      <Code>01</Code>
+      <Name>LeaveChatRoom</Name>
+      <Length>3</Length>
+      <Direction>ClientToServer</Direction>
+      <SentWhen>This packet is sent by the client when it leaves the chat room, before the connection closes.</SentWhen>
+      <CausedReaction>The server will remove the client from the chat room, notifying the remaining clients.</CausedReaction>
+      <Fields>
       </Fields>
     </Packet>
     <Packet>
@@ -135,7 +146,7 @@
         </Field>
         <Field>
           <Index>5</Index>
-          <Type>String</Type>
+          <Type>Binary</Type>
           <Name>Message</Name>
           <Description>The message. It's "encrypted" with the 3-byte XOR key (FC CF AB).</Description>
         </Field>

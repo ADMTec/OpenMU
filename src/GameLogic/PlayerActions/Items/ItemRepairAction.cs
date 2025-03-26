@@ -45,6 +45,10 @@ public class ItemRepairAction
             item.Durability = item.GetMaximumDurabilityOfOnePiece();
             await player.InvokeViewPlugInAsync<IItemDurabilityChangedPlugIn>(p => p.ItemDurabilityChangedAsync(item, false)).ConfigureAwait(false);
         }
+        else
+        {
+            await player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync("You don't have enough money to repair.", MessageType.BlueNormal)).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -52,7 +56,7 @@ public class ItemRepairAction
     /// </summary>
     /// <param name="player">The player.</param>
     /// <remarks>
-    /// The client calculates a sum based on all items in the inventory, even these which are not equipped.
+    /// The client calculates a sum based on all items in the inventory, even those which are not equipped.
     /// However, it should really just repair the equipped ones.
     /// </remarks>
     public async ValueTask RepairAllItemsAsync(Player player)
@@ -87,6 +91,11 @@ public class ItemRepairAction
             {
                 item.Durability = item.GetMaximumDurabilityOfOnePiece();
                 await player.InvokeViewPlugInAsync<IItemDurabilityChangedPlugIn>(p => p.ItemDurabilityChangedAsync(item, false)).ConfigureAwait(false);
+            }
+            else
+            {
+                await player.InvokeViewPlugInAsync<IShowMessagePlugIn>(p => p.ShowMessageAsync("You don't have enough money to repair.", MessageType.BlueNormal)).ConfigureAwait(false);
+                break;
             }
         }
     }

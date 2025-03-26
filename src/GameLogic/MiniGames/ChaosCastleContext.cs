@@ -89,7 +89,7 @@ public sealed class ChaosCastleContext : MiniGameContext
     protected override TimeSpan RemainingTime => this._remainingTime;
 
     /// <inheritdoc />
-    protected override int MinimumPlayerCount => 2;
+    protected override int MinimumPlayerCount => 1;
 
     /// <inheritdoc />
     public override bool IsItemAllowedToEquip(Item item)
@@ -516,7 +516,7 @@ public sealed class ChaosCastleContext : MiniGameContext
         {
             var spawnArea = spawnAreas[i];
 
-            if (await this._mapInitializer.InitializeSpawnAsync(this.Map, spawnArea, this, this.DropGenerator).ConfigureAwait(false) is Monster monster)
+            if (await this._mapInitializer.InitializeSpawnAsync(i, this.Map, spawnArea, this, this.DropGenerator).ConfigureAwait(false) is Monster monster)
             {
                 this._monsters.TryAdd(monster, default);
             }

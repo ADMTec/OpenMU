@@ -104,6 +104,13 @@ public interface IGameServer : IManageableServer, IFriendSystemSubscriber
     ValueTask<bool> DisconnectPlayerAsync(string playerName);
 
     /// <summary>
+    /// Disconnects the account from the game.
+    /// </summary>
+    /// <param name="accountName">Name of the account.</param>
+    /// <returns>True, if the account has been disconnected; False, otherwise.</returns>
+    ValueTask<bool> DisconnectAccountAsync(string accountName);
+
+    /// <summary>
     /// Bans the player from the game.
     /// </summary>
     /// <param name="playerName">Name of the player.</param>
@@ -116,4 +123,12 @@ public interface IGameServer : IManageableServer, IFriendSystemSubscriber
     /// <param name="characterName">Name of the character.</param>
     /// <param name="guildStatus">The guild status of the character.</param>
     ValueTask AssignGuildToPlayerAsync(string characterName, GuildMemberStatus guildStatus);
+
+    /// <summary>
+    /// Notifies that a client tried to log into an already logged-in account.
+    /// The connected player can be notified about that.
+    /// </summary>
+    /// <param name="serverId">The identifier of the server on which the client tried to enter.</param>
+    /// <param name="loginName">The login name.</param>
+    ValueTask PlayerAlreadyLoggedInAsync(byte serverId, string loginName);
 }

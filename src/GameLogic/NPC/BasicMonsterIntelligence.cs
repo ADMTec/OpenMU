@@ -7,6 +7,7 @@ namespace MUnique.OpenMU.GameLogic.NPC;
 using System.Diagnostics;
 using System.Threading;
 using MUnique.OpenMU.GameLogic.Attributes;
+using MUnique.OpenMU.Pathfinding;
 
 /// <summary>
 /// A basic monster AI which is pretty basic.
@@ -23,6 +24,14 @@ public class BasicMonsterIntelligence : INpcIntelligence, IDisposable
     {
         this.Dispose();
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this instance can walk on safezone.
+    /// </summary>
+    /// <value>
+    ///   <c>true</c> if this instance can walk on safezone; otherwise, <c>false</c>.
+    /// </value>
+    public bool CanWalkOnSafezone { get; protected set; }
 
     /// <inheritdoc/>
     public NonPlayerCharacter Npc
@@ -48,7 +57,7 @@ public class BasicMonsterIntelligence : INpcIntelligence, IDisposable
     /// <inheritdoc/>
     public void Start()
     {
-        var startDelay = this.Npc.Definition.AttackDelay + TimeSpan.FromMilliseconds(Rand.NextInt(0, 1000));
+        var startDelay = this.Npc.Definition.AttackDelay + TimeSpan.FromMilliseconds(Rand.NextInt(0, 100));
         this.OnStart();
         this._aiTimer ??= new Timer(_ => this.SafeTick(), null, startDelay, this.Npc.Definition.AttackDelay);
     }
@@ -74,6 +83,12 @@ public class BasicMonsterIntelligence : INpcIntelligence, IDisposable
         {
             this.CurrentTarget = attackable;
         }
+    }
+
+    /// <inheritdoc/>
+    public virtual bool CanWalkOn(Point target)
+    {
+        return this.Monster.CurrentMap.Terrain.AIgrid[target.X, target.Y] == 1;
     }
 
     /// <summary>
@@ -112,7 +127,7 @@ public class BasicMonsterIntelligence : INpcIntelligence, IDisposable
         }
 
         var possibleTargets = tempObservers.OfType<IAttackable>()
-            .Where(a => a.IsActive() && !a.IsAtSafezone())
+            .Where(a => a.IsActive() && !a.IsAtSafezone() && a is not Player { IsInvisible: true })
             .ToList();
         var summons = possibleTargets.OfType<Player>()
             .Select(p => p.Summon?.Item1)
@@ -218,6 +233,7 @@ public class BasicMonsterIntelligence : INpcIntelligence, IDisposable
         {
             // Old Target out of Range?
             if (!target.IsAlive
+                || target is Player { IsInvisible: true }
                 || target.IsTeleporting
                 || target.IsAtSafezone()
                 || !target.IsInRange(this.Monster.Position, this.Npc.Definition.ViewRange)
@@ -239,7 +255,7 @@ public class BasicMonsterIntelligence : INpcIntelligence, IDisposable
         }
 
         // Target in Attack Range?
-        if (target.IsInRange(this.Monster.Position, this.Monster.Definition.AttackRange + 1) && !this.Monster.IsAtSafezone())
+        if (target.IsInRange(this.Monster.Position, this.Monster.Definition.AttackRange) && !this.Monster.IsAtSafezone())
         {
             await this.Monster.AttackAsync(target).ConfigureAwait(false);  // yes, attack
             return;

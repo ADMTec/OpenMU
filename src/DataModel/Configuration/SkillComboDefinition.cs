@@ -4,10 +4,13 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration;
 
+using MUnique.OpenMU.Annotations;
+
 /// <summary>
 /// Definition for a skill combo sequence.
 /// </summary>
-public class SkillComboDefinition
+[Cloneable]
+public partial class SkillComboDefinition
 {
     /// <summary>
     /// Gets or sets the name of the combo sequence.
@@ -24,4 +27,10 @@ public class SkillComboDefinition
     /// </summary>
     [MemberOfAggregate]
     public virtual ICollection<SkillComboStep> Steps { get; protected set; } = null!;
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        return this.Name;
+    }
 }

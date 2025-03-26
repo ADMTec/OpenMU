@@ -77,6 +77,9 @@ public static class MapsterConfigurator
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Entities.SkillEntry, MUnique.OpenMU.DataModel.Entities.SkillEntry>()
             .Include<SkillEntry, BasicModel.SkillEntry>();
 
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.AreaSkillSettings, MUnique.OpenMU.DataModel.Configuration.AreaSkillSettings>()
+            .Include<AreaSkillSettings, BasicModel.AreaSkillSettings>();
+
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.BattleZoneDefinition, MUnique.OpenMU.DataModel.Configuration.BattleZoneDefinition>()
             .Include<BattleZoneDefinition, BasicModel.BattleZoneDefinition>();
 
@@ -100,6 +103,12 @@ public static class MapsterConfigurator
 
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.DropItemGroup, MUnique.OpenMU.DataModel.Configuration.DropItemGroup>()
             .Include<DropItemGroup, BasicModel.DropItemGroup>();
+
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.DuelArea, MUnique.OpenMU.DataModel.Configuration.DuelArea>()
+            .Include<DuelArea, BasicModel.DuelArea>();
+
+        Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.DuelConfiguration, MUnique.OpenMU.DataModel.Configuration.DuelConfiguration>()
+            .Include<DuelConfiguration, BasicModel.DuelConfiguration>();
 
         Mapster.TypeAdapterConfig.GlobalSettings.NewConfig<MUnique.OpenMU.DataModel.Configuration.EnterGate, MUnique.OpenMU.DataModel.Configuration.EnterGate>()
             .Include<EnterGate, BasicModel.EnterGate>();

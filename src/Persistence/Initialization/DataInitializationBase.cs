@@ -5,12 +5,11 @@
 namespace MUnique.OpenMU.Persistence.Initialization;
 
 using System.ComponentModel.Design;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using MUnique.OpenMU.DataModel.Configuration;
 using MUnique.OpenMU.GameLogic;
-using MUnique.OpenMU.GameLogic.MuHelper;
-using MUnique.OpenMU.GameLogic.PlugIns.InvasionEvents;
-using MUnique.OpenMU.GameLogic.PlugIns.PeriodicTasks;
+using MUnique.OpenMU.GameLogic.PlayerActions.ItemConsumeActions;
 using MUnique.OpenMU.GameLogic.Resets;
 using MUnique.OpenMU.GameServer.MessageHandler;
 using MUnique.OpenMU.Network;
@@ -94,10 +93,12 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
             this.GameConfiguration = temporaryContext.CreateNew<GameConfiguration>();
             this.GameConfiguration.SetGuid(1);
             this.CreateSystemConfiguration(temporaryContext);
+            using var tempSuspension = temporaryContext.SuspendChangeNotifications();
             await temporaryContext.SaveChangesAsync().ConfigureAwait(false);
         }
 
         using var contextWithConfiguration = this._persistenceContextProvider.CreateNewContext(this.GameConfiguration);
+        using var notificationSuspension = contextWithConfiguration.SuspendChangeNotifications();
         this.Context = contextWithConfiguration;
         this.CreateGameClientDefinition();
         await this.CreateChatServerDefinitionAsync().ConfigureAwait(false);
@@ -120,54 +121,55 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
             // should never happen, but the access to the GameServer type is a trick to load the assembly into the current domain.
         }
 
+        var dataSource = new GameConfigurationDataSource(this._loggerFactory.CreateLogger<GameConfigurationDataSource>(), this._persistenceContextProvider);
+        await dataSource.GetOwnerAsync(this.GameConfiguration.GetId());
+        var referenceHandler = new ByDataSourceReferenceHandler(dataSource);
         var serviceContainer = new ServiceContainer();
         serviceContainer.AddService(typeof(IPersistenceContextProvider), this._persistenceContextProvider);
-        var plugInManager = new PlugInManager(null, this._loggerFactory, serviceContainer);
+        var plugInManager = new PlugInManager(null, this._loggerFactory, serviceContainer, referenceHandler);
         plugInManager.DiscoverAndRegisterPlugIns();
         plugInManager.KnownPlugInTypes.ForEach(plugInType =>
         {
             var plugInConfiguration = this.Context.CreateNew<PlugInConfiguration>();
             plugInConfiguration.SetGuid(plugInType.GUID);
             plugInConfiguration.TypeId = plugInType.GUID;
-            plugInConfiguration.IsActive = true;
+            plugInConfiguration.IsActive = !plugInType.IsAssignableTo(typeof(IDisabledByDefault));
             this.GameConfiguration.PlugInConfigurations.Add(plugInConfiguration);
 
-            // Resets are disabled by default.
-            if (plugInType == typeof(ResetFeaturePlugIn))
+            if (plugInType.GetInterfaces().Contains(typeof(ISupportDefaultCustomConfiguration)))
             {
-                plugInConfiguration.IsActive = false;
-                plugInConfiguration.SetConfiguration(new ResetConfiguration());
+                this.CreateDefaultPlugInConfiguration(plugInType, plugInConfiguration, referenceHandler);
             }
 
-            if (plugInType == typeof(ChaosCastleStartPlugIn))
+            if (plugInType == typeof(BlessJewelConsumeHandlerPlugIn))
             {
-                plugInConfiguration.SetConfiguration(ChaosCastleStartConfiguration.Default);
-            }
+                var config = new BlessJewelConsumeHandlerPlugInConfiguration
+                {
+                    MaximumLevel = 5,
+                    MinimumLevel = 0,
+                    SuccessRatePercentage = 100,
+                    SuccessRateBonusWithLuckPercentage = 0,
+                    ResetToLevel0WhenFailMinLevel = 0,
+                };
 
-            if (plugInType == typeof(GoldenInvasionPlugIn))
-            {
-                plugInConfiguration.SetConfiguration(PeriodicInvasionConfiguration.DefaultGoldenInvasion);
-            }
+                if (this.GameConfiguration.Items.FirstOrDefault(item => item is { Group: 13, Number: 37 }) is { } fenrir)
+                {
+                    config.RepairTargetItems.Add(fenrir);
+                }
 
-            if (plugInType == typeof(RedDragonInvasionPlugIn))
-            {
-                plugInConfiguration.SetConfiguration(PeriodicInvasionConfiguration.DefaultRedDragonInvasion);
-            }
-
-            if (plugInType == typeof(HappyHourPlugIn))
-            {
-                plugInConfiguration.SetConfiguration(HappyHourConfiguration.Default);
-            }
-
-            if (plugInType == typeof(MuHelperFeaturePlugIn))
-            {
-                plugInConfiguration.SetConfiguration(new MuHelperConfiguration());
+                plugInConfiguration.SetConfiguration(config, referenceHandler);
             }
 
             // We don't move the player anymore by his request. This was usually requested after a player performed a skill.
             // However, it adds way for cheaters to move through the map.
             // The plugin is therefore deactivated by default.
             if (plugInType.IsAssignableTo(typeof(CharacterMoveBaseHandlerPlugIn)))
+            {
+                plugInConfiguration.IsActive = false;
+            }
+
+            // Disable plugins marked as disabled by default.
+            if (plugInType.IsAssignableTo(typeof(IDisabledByDefault)))
             {
                 plugInConfiguration.IsActive = false;
             }
@@ -182,6 +184,20 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
     /// Creates the game client definition.
     /// </summary>
     protected abstract void CreateGameClientDefinition();
+
+    private void CreateDefaultPlugInConfiguration(Type plugInType, PlugInConfiguration plugInConfiguration, ReferenceHandler referenceHandler)
+    {
+        try
+        {
+            var plugin = (ISupportDefaultCustomConfiguration)Activator.CreateInstance(plugInType)!;
+            var defaultConfig = plugin.CreateDefaultConfig();
+            plugInConfiguration.SetConfiguration(defaultConfig, referenceHandler);
+        }
+        catch (Exception ex)
+        {
+            this._loggerFactory.CreateLogger(this.GetType()).LogWarning(ex, "Could not create custom default configuration for plugin type {plugInType}", plugInType);
+        }
+    }
 
     private void AddAllUpdateEntries(PlugInManager plugInManager)
     {
@@ -211,28 +227,23 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
 
     private async ValueTask CreateConnectServerDefinitionAsync()
     {
-        var client = (await this.Context.GetAsync<GameClientDefinition>().ConfigureAwait(false)).First();
-        var connectServer = this.Context.CreateNew<ConnectServerDefinition>();
-        connectServer.SetGuid(1);
-        connectServer.Client = client;
-        connectServer.ClientListenerPort = 44405;
-        connectServer.Description = $"Connect Server ({new ClientVersion(client.Season, client.Episode, client.Language)})";
-        connectServer.DisconnectOnUnknownPacket = true;
-        connectServer.MaximumReceiveSize = 6;
-        connectServer.Timeout = new TimeSpan(0, 1, 0);
-        connectServer.CurrentPatchVersion = new byte[] { 1, 3, 0x2B };
-        connectServer.PatchAddress = "patch.muonline.webzen.com";
-        connectServer.MaxConnectionsPerAddress = 30;
-        connectServer.CheckMaxConnectionsPerAddress = true;
-        connectServer.MaxConnections = 10000;
-        connectServer.ListenerBacklog = 100;
-        connectServer.MaxFtpRequests = 1;
-        connectServer.MaxIpRequests = 5;
-        connectServer.MaxServerListRequests = 20;
+        var port = 44405;
+        var clients = await this.Context.GetAsync<GameClientDefinition>().ConfigureAwait(false);
+        foreach (var client in clients.OrderBy(c => c.Season))
+        {
+            var connectServer = this.Context.CreateNew<ConnectServerDefinition>();
+            connectServer.InitializeDefaults();
+            connectServer.SetGuid(client.Season, client.Episode);
+            connectServer.Client = client;
+            connectServer.ClientListenerPort = port;
+            connectServer.Description = $"Connect Server ({client.Description})";
+            port++;
+        }
     }
 
     private async ValueTask CreateGameServerDefinitionsAsync(GameServerConfiguration gameServerConfiguration, int numberOfServers)
     {
+        var port = 55901;
         for (int i = 0; i < numberOfServers; i++)
         {
             var server = this.Context!.CreateNew<GameServerDefinition>();
@@ -248,8 +259,9 @@ public abstract class DataInitializationBase : IDataInitializationPlugIn
                 var endPoint = this.Context.CreateNew<GameServerEndpoint>();
                 endPoint.SetGuid((short)i, (short)server.Endpoints.Count);
                 endPoint.Client = client;
-                endPoint.NetworkPort = 55901 + i;
+                endPoint.NetworkPort = port;
                 server.Endpoints.Add(endPoint);
+                port++;
             }
         }
     }

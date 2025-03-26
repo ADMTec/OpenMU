@@ -5,8 +5,11 @@
 namespace MUnique.OpenMU.Web.AdminPanel.Components.Form;
 
 using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
+using System.Reflection;
 using Blazored.Modal;
 using Microsoft.AspNetCore.Components;
+using MUnique.OpenMU.DataModel.Composition;
 using MUnique.OpenMU.Persistence;
 
 /// <summary>
@@ -65,7 +68,9 @@ public partial class ItemTable<TItem>
 
     private async Task OnAddClickAsync()
     {
-        var modal = this._modal.Show<ModalObjectSelection<TItem>>($"Select {typeof(TItem).Name}");
+        var parameters = new ModalParameters();
+        parameters.Add(nameof(ModalCreateNew<TItem>.PersistenceContext), this.PersistenceContext);
+        var modal = this._modal.Show<ModalObjectSelection<TItem>>($"Select {typeof(TItem).Name}", parameters);
         var result = await modal.Result.ConfigureAwait(false);
         if (!result.Cancelled && result.Data is TItem item)
         {
@@ -105,9 +110,8 @@ public partial class ItemTable<TItem>
     {
         this.Value?.Remove(item);
 
-        // use the MemberOfAggregateAttribute here!
-        if (!this.ValueExpression!.GetAccessedMemberType().IsConfigurationType()
-            && !typeof(TItem).IsConfigurationType())
+        if (this.ValueExpression?.Body is MemberExpression { Member: PropertyInfo propertyInfo }
+            && propertyInfo.GetCustomAttribute<MemberOfAggregateAttribute>() is not null)
         {
             await this.PersistenceContext.DeleteAsync(item).ConfigureAwait(false);
         }

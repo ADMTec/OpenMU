@@ -4,10 +4,13 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration;
 
+using MUnique.OpenMU.Annotations;
+
 /// <summary>
 /// Defines a rectangle.
 /// </summary>
-public class Rectangle
+[Cloneable]
+public partial class Rectangle
 {
     /// <summary>
     /// Gets or sets the upper left corner, x-coordinate.
@@ -28,4 +31,15 @@ public class Rectangle
     /// Gets or sets the bottom right corner, y-coordinate.
     /// </summary>
     public byte Y2 { get; set; }
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        if (this.X1 == this.X2 && this.Y1 == this.Y2)
+        {
+            return $"{this.X1} / {this.Y1}";
+        }
+
+        return $"{this.X1} / {this.Y1} to {this.X2} / {this.Y2}";
+    }
 }

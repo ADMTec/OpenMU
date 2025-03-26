@@ -79,12 +79,11 @@ public readonly struct Authenticate
     }
 
     /// <summary>
-    /// Gets or sets a token (integer number), formatted as string. This value is also "encrypted" with the 3-byte XOR key (FC CF AB).
+    /// Gets or sets a token (integer number), formatted as string and "encrypted" with the 3-byte XOR key (FC CF AB).
     /// </summary>
-    public string Token
+    public Span<byte> Token
     {
-        get => this._data.Span.ExtractString(6, 10, System.Text.Encoding.UTF8);
-        set => this._data.Slice(6, 10).Span.WriteString(value, System.Text.Encoding.UTF8);
+        get => this._data.Slice(6, 10).Span;
     }
 
     /// <summary>
@@ -195,6 +194,76 @@ public readonly struct ChatRoomClientJoined
     /// <param name="packet">The packet as struct.</param>
     /// <returns>The packet as byte span.</returns>
     public static implicit operator Memory<byte>(ChatRoomClientJoined packet) => packet._data; 
+}
+
+
+/// <summary>
+/// Is sent by the client when: This packet is sent by the client when it leaves the chat room, before the connection closes.
+/// Causes reaction on server side: The server will remove the client from the chat room, notifying the remaining clients.
+/// </summary>
+public readonly struct LeaveChatRoom
+{
+    private readonly Memory<byte> _data;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LeaveChatRoom"/> struct.
+    /// </summary>
+    /// <param name="data">The underlying data.</param>
+    public LeaveChatRoom(Memory<byte> data)
+        : this(data, true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LeaveChatRoom"/> struct.
+    /// </summary>
+    /// <param name="data">The underlying data.</param>
+    /// <param name="initialize">If set to <c>true</c>, the header data is automatically initialized and written to the underlying span.</param>
+    private LeaveChatRoom(Memory<byte> data, bool initialize)
+    {
+        this._data = data;
+        if (initialize)
+        {
+            var header = this.Header;
+            header.Type = HeaderType;
+            header.Code = Code;
+            header.Length = (byte)Math.Min(data.Length, Length);
+        }
+    }
+
+    /// <summary>
+    /// Gets the header type of this data packet.
+    /// </summary>
+    public static byte HeaderType => 0xC1;
+
+    /// <summary>
+    /// Gets the operation code of this data packet.
+    /// </summary>
+    public static byte Code => 0x01;
+
+    /// <summary>
+    /// Gets the initial length of this data packet. When the size is dynamic, this value may be bigger than actually needed.
+    /// </summary>
+    public static int Length => 3;
+
+    /// <summary>
+    /// Gets the header of this packet.
+    /// </summary>
+    public C1Header Header => new (this._data);
+
+    /// <summary>
+    /// Performs an implicit conversion from a Memory of bytes to a <see cref="LeaveChatRoom"/>.
+    /// </summary>
+    /// <param name="packet">The packet as span.</param>
+    /// <returns>The packet as struct.</returns>
+    public static implicit operator LeaveChatRoom(Memory<byte> packet) => new (packet, false);
+
+    /// <summary>
+    /// Performs an implicit conversion from <see cref="LeaveChatRoom"/> to a Memory of bytes.
+    /// </summary>
+    /// <param name="packet">The packet as struct.</param>
+    /// <returns>The packet as byte span.</returns>
+    public static implicit operator Memory<byte>(LeaveChatRoom packet) => packet._data; 
 }
 
 
@@ -490,10 +559,9 @@ public readonly struct ChatMessage
     /// <summary>
     /// Gets or sets the message. It's "encrypted" with the 3-byte XOR key (FC CF AB).
     /// </summary>
-    public string Message
+    public Span<byte> Message
     {
-        get => this._data.Span.ExtractString(5, this._data.Length - 5, System.Text.Encoding.UTF8);
-        set => this._data.Slice(5).Span.WriteString(value, System.Text.Encoding.UTF8);
+        get => this._data.Slice(5).Span;
     }
 
     /// <summary>
@@ -511,10 +579,11 @@ public readonly struct ChatMessage
     public static implicit operator Memory<byte>(ChatMessage packet) => packet._data; 
 
     /// <summary>
-    /// Calculates the size of the packet for the specified field content.
+    /// Calculates the size of the packet for the specified length of <see cref="Message"/>.
     /// </summary>
-    /// <param name="content">The content of the variable 'Message' field from which the size will be calculated.</param>
-    public static int GetRequiredSize(string content) => System.Text.Encoding.UTF8.GetByteCount(content) + 1 + 5;
+    /// <param name="messageLength">The length in bytes of <see cref="Message"/> on which the required size depends.</param>
+        
+    public static int GetRequiredSize(int messageLength) => messageLength + 5;
 }
 
 

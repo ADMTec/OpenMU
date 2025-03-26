@@ -52,7 +52,7 @@ public abstract class BaseInvasionPlugIn<TConfiguration> : PeriodicTaskBasePlugI
     protected BaseInvasionPlugIn(MapEventType? mapEventType, (ushort MapId, ushort MonsterId, ushort Count)[]? mobs, (ushort MonsterId, ushort Count)[] mobsOnSelectedMap)
     {
         this._mapEventType = mapEventType;
-        this._mobs = mobs ?? Array.Empty<(ushort MapId, ushort MonsterId, ushort Count)>();
+        this._mobs = mobs ?? [];
         this._mobsOnSelectedMap = mobsOnSelectedMap;
     }
 
@@ -67,26 +67,18 @@ public abstract class BaseInvasionPlugIn<TConfiguration> : PeriodicTaskBasePlugI
     protected virtual ushort[] PossibleMaps { get; } = { LorenciaId, NoriaId, DeviasId };
 
     /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD100:Avoid async void methods", Justification = "Catching all Exceptions.")]
-    public virtual async void ObjectAddedToMap(GameMap map, ILocateable addedObject)
+    public virtual async ValueTask ObjectAddedToMapAsync(GameMap map, ILocateable addedObject)
     {
-        try
+        if (this._mapEventType is null)
         {
-            if (this._mapEventType is null)
-            {
-                return;
-            }
-
-            if (addedObject is Player player)
-            {
-                var state = this.GetStateByGameContext(player.GameContext);
-                var isEnabled = state.State != PeriodicTaskState.NotStarted;
-                await this.TrySendMapEventStateUpdateAsync(player, isEnabled).ConfigureAwait(false);
-            }
+            return;
         }
-        catch
+
+        if (addedObject is Player player)
         {
-            // must be catched because it's an async void method.
+            var state = this.GetStateByGameContext(player.GameContext);
+            var isEnabled = state.State != PeriodicTaskState.NotStarted;
+            await this.TrySendMapEventStateUpdateAsync(player, isEnabled).ConfigureAwait(false);
         }
     }
 
@@ -122,8 +114,8 @@ public abstract class BaseInvasionPlugIn<TConfiguration> : PeriodicTaskBasePlugI
             var monster = new Monster(area, monsterDefinition, gameMap, gameContext.DropGenerator, intelligence, gameContext.PlugInManager, gameContext.PathFinderPool);
 
             monster.Initialize();
-
             await gameMap.AddAsync(monster).ConfigureAwait(false);
+            monster.OnSpawn();
 
             this.Finished += CleanUpOnFinish;
             monster.Died += (_, _) => this.Finished -= CleanUpOnFinish;
@@ -200,8 +192,7 @@ public abstract class BaseInvasionPlugIn<TConfiguration> : PeriodicTaskBasePlugI
         var state = this.GetStateByGameContext(player.GameContext);
 
         return player.CurrentMap is { } map
-            && player.PlayerState.CurrentState != PlayerState.Disconnected
-            && player.PlayerState.CurrentState != PlayerState.Finished
+            && !player.PlayerState.CurrentState.IsDisconnectedOrFinished()
             && (!checkForCurrentMap || map.MapId == state.MapId);
     }
 

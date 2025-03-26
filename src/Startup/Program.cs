@@ -4,9 +4,11 @@
 
 namespace MUnique.OpenMU.Startup;
 
+using System;
 using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.IO;
+using System.Text.Json.Serialization;
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -17,6 +19,7 @@ using MUnique.OpenMU.ChatServer;
 using MUnique.OpenMU.ConnectServer;
 using MUnique.OpenMU.DataModel.Configuration;
 using MUnique.OpenMU.FriendServer;
+using MUnique.OpenMU.GameLogic;
 using MUnique.OpenMU.GuildServer;
 using MUnique.OpenMU.Interfaces;
 using MUnique.OpenMU.LoginServer;
@@ -54,6 +57,7 @@ internal sealed class Program : IDisposable
     /// </summary>
     public Program()
     {
+        AppDomain.CurrentDomain.UnhandledException += this.OnUnhandledException;
         SelfLog.Enable(Console.Error);
         var configuration = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
@@ -79,7 +83,9 @@ internal sealed class Program : IDisposable
         {
             if (_confirmExit)
             {
+#pragma warning disable VSTHRD103 // Call async methods when in an async method
                 exitCts.Cancel();
+#pragma warning restore VSTHRD103 // Call async methods when in an async method
                 Console.CancelKeyPress -= OnCancelKeyPress;
                 Console.WriteLine("\nBye! Press enter to finish");
             }
@@ -96,7 +102,9 @@ internal sealed class Program : IDisposable
         {
             if (!exitToken.IsCancellationRequested)
             {
+#pragma warning disable VSTHRD103 // Call async methods when in an async method
                 exitCts.Cancel();
+#pragma warning restore VSTHRD103 // Call async methods when in an async method
                 Debug.WriteLine("KILL");
             }
         };
@@ -153,6 +161,12 @@ internal sealed class Program : IDisposable
         this._serverHost?.Dispose();
     }
 
+    private static void DisplayCommands()
+    {
+        var commandList = "help, exit, gc, pid";
+        Console.WriteLine($"Commands available: {commandList}");
+    }
+
     private static async Task HandleConsoleInputAsync(CancellationTokenSource exitCts, CancellationToken exitToken)
     {
         Console.Write("> ");
@@ -162,7 +176,7 @@ internal sealed class Program : IDisposable
         {
             case "y" when _confirmExit:
             case "exit":
-                exitCts.Cancel();
+                await exitCts.CancelAsync().ConfigureAwait(false);
                 break;
             case "gc":
                 GC.Collect();
@@ -175,20 +189,32 @@ internal sealed class Program : IDisposable
                 break;
             case "?":
             case "help":
-                var commandList = "help, exit, gc, pid";
-                Console.WriteLine($"Commands available: {commandList}");
+                DisplayCommands();
                 break;
             case "":
             case null:
                 break;
             default:
                 Console.WriteLine("Unknown command");
-                goto case "help";
+                DisplayCommands();
+                break;
         }
 
         if (_confirmExit && !string.IsNullOrWhiteSpace(input))
         {
             _confirmExit = false;
+        }
+    }
+
+    private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        if (e.IsTerminating)
+        {
+            this._logger.Fatal(e.ExceptionObject as Exception, "Unhandled exception leading to terminating application: {0}", e.ExceptionObject);
+        }
+        else
+        {
+            this._logger.Error(e.ExceptionObject as Exception, "Unhandled exception: {0}", e.ExceptionObject);
         }
     }
 
@@ -212,6 +238,10 @@ internal sealed class Program : IDisposable
 
         builder.Services.AddSingleton(this._servers)
             .AddSingleton<IConfigurationChangePublisher, ConfigurationChangeHandler>()
+            .AddSingleton<IConfigurationChangeListener, ConfigurationChangeListener>()
+            .AddSingleton<ConfigurationChangeMediator>()
+            .AddSingleton<IConfigurationChangeMediator>(s => s.GetRequiredService<ConfigurationChangeMediator>())
+            .AddSingleton<IConfigurationChangeMediatorListener>(s => s.GetRequiredService<ConfigurationChangeMediator>())
             .AddSingleton(s => this.CreateIpResolver(s, args))
             .AddSingleton(this._gameServers)
             .AddSingleton(this._gameServers.Values)
@@ -219,9 +249,10 @@ internal sealed class Program : IDisposable
                 this.DeterminePersistenceContextProviderAsync(
                     args,
                     s.GetService<ILoggerFactory>() ?? throw new Exception($"{nameof(ILoggerFactory)} not registered."),
-                    s.GetService<IConfigurationChangePublisher>() ?? throw new Exception($"{nameof(IConfigurationChangePublisher)} not registered."))
+                    s.GetService<IConfigurationChangeListener>() ?? throw new Exception($"{nameof(IConfigurationChangeListener)} not registered."))
                     .WaitAndUnwrapException())
             .AddSingleton<IPersistenceContextProvider>(s => s.GetService<IMigratableDatabaseContextProvider>()!)
+            .AddSingleton<Lazy<IPersistenceContextProvider>>(s => new(() => s.GetService<IMigratableDatabaseContextProvider>()!))
             .AddSingleton<ILoginServer, LoginServer>()
             .AddSingleton<IGuildServer, GuildServer>()
             .AddSingleton<IFriendServer, FriendServer>()
@@ -229,6 +260,9 @@ internal sealed class Program : IDisposable
             .AddSingleton<IChatServer>(s => s.GetService<ChatServer>()!)
             .AddSingleton<ConnectServerFactory>()
             .AddSingleton<ConnectServerContainer>()
+            .AddSingleton<IConnectServerInstanceManager>(provider => provider.GetService<ConnectServerContainer>()!)
+            .AddSingleton<GameServerContainer>()
+            .AddSingleton<IGameServerInstanceManager>(provider => provider.GetService<GameServerContainer>()!)
             .AddScoped<IMapFactory, JavascriptMapFactory>()
             .AddSingleton<SetupService>()
             .AddSingleton<IEnumerable<IConnectServer>>(provider => provider.GetService<ConnectServerContainer>() ?? throw new Exception($"{nameof(ConnectServerContainer)} not registered."))
@@ -237,8 +271,21 @@ internal sealed class Program : IDisposable
             .AddSingleton<PlugInManager>()
             .AddSingleton<IServerProvider, LocalServerProvider>()
             .AddSingleton<ICollection<PlugInConfiguration>>(this.PlugInConfigurationsFactory)
+            .AddTransient<ReferenceHandler, ByDataSourceReferenceHandler>(provider =>
+            {
+                var persistenceContextProvider = provider.GetService<IPersistenceContextProvider>();
+                var dataSource = new GameConfigurationDataSource(
+                    provider.GetService<ILogger<GameConfigurationDataSource>>()!,
+                    persistenceContextProvider!);
+                var configId = persistenceContextProvider!.CreateNewConfigurationContext().GetDefaultGameConfigurationIdAsync(default).AsTask().WaitAndUnwrapException();
+                dataSource.GetOwnerAsync(configId!.Value).AsTask().WaitAndUnwrapException();
+                var referenceHandler = new ByDataSourceReferenceHandler(dataSource);
+                return referenceHandler;
+            })
+            .AddSingleton<IDataSource<GameConfiguration>, GameConfigurationDataSource>()
             .AddHostedService<ChatServerContainer>()
             .AddHostedService<GameServerContainer>()
+            .AddHostedService(provider => provider.GetService<GameServerContainer>()!)
             .AddHostedService(provider => provider.GetService<ConnectServerContainer>()!)
             .AddControllers().AddApplicationPart(typeof(ServerController).Assembly);
 
@@ -277,21 +324,25 @@ internal sealed class Program : IDisposable
     private ICollection<PlugInConfiguration> PlugInConfigurationsFactory(IServiceProvider serviceProvider)
     {
         var persistenceContextProvider = serviceProvider.GetService<IPersistenceContextProvider>() ?? throw new Exception($"{nameof(IPersistenceContextProvider)} not registered.");
-        using var context = persistenceContextProvider.CreateNewTypedContext<PlugInConfiguration>(false);
+        using var context = persistenceContextProvider.CreateNewTypedContext(typeof(PlugInConfiguration), false);
 
         var configs = context.GetAsync<PlugInConfiguration>().AsTask().WaitAndUnwrapException().ToList();
 
+        var referenceHandler = new ByDataSourceReferenceHandler(
+            new GameConfigurationDataSource(serviceProvider.GetService<ILogger<GameConfigurationDataSource>>()!, persistenceContextProvider));
+
         // We check if we miss any plugin configurations in the database. If we do, we try to add them.
-        var pluginManager = new PlugInManager(null, serviceProvider.GetService<ILoggerFactory>()!, serviceProvider);
+        var pluginManager = new PlugInManager(null, serviceProvider.GetService<ILoggerFactory>()!, serviceProvider, referenceHandler);
         pluginManager.DiscoverAndRegisterPlugIns();
 
         var typesWithCustomConfig = pluginManager.KnownPlugInTypes.Where(t => t.GetInterfaces().Contains(typeof(ISupportDefaultCustomConfiguration))).ToDictionary(t => t.GUID, t => t);
 
+        using var notificationSuspension = context.SuspendChangeNotifications();
         var typesWithMissingCustomConfigs = configs.Where(c => string.IsNullOrWhiteSpace(c.CustomConfiguration) && typesWithCustomConfig.ContainsKey(c.TypeId)).ToList();
         if (typesWithMissingCustomConfigs.Any())
         {
-            typesWithMissingCustomConfigs.ForEach(c => this.CreateDefaultPlugInConfiguration(typesWithCustomConfig[c.TypeId]!, c));
-            context.SaveChanges();
+            typesWithMissingCustomConfigs.ForEach(c => this.CreateDefaultPlugInConfiguration(typesWithCustomConfig[c.TypeId]!, c, referenceHandler));
+            _ = context.SaveChangesAsync().AsTask().WaitAndUnwrapException();
         }
 
         var typesWithMissingConfigs = pluginManager.KnownPlugInTypes.Where(t => configs.All(c => c.TypeId != t.GUID)).ToList();
@@ -300,11 +351,12 @@ internal sealed class Program : IDisposable
             return configs;
         }
 
-        configs.AddRange(this.CreateMissingPlugInConfigurations(typesWithMissingConfigs, persistenceContextProvider));
+        configs.AddRange(this.CreateMissingPlugInConfigurations(typesWithMissingConfigs, persistenceContextProvider, referenceHandler));
+        _ = context.SaveChangesAsync().AsTask().WaitAndUnwrapException();
         return configs;
     }
 
-    private IEnumerable<PlugInConfiguration> CreateMissingPlugInConfigurations(IEnumerable<Type> plugInTypes, IPersistenceContextProvider persistenceContextProvider)
+    private IEnumerable<PlugInConfiguration> CreateMissingPlugInConfigurations(IEnumerable<Type> plugInTypes, IPersistenceContextProvider persistenceContextProvider, ReferenceHandler referenceHandler)
     {
         GameConfiguration gameConfiguration;
 
@@ -319,26 +371,27 @@ internal sealed class Program : IDisposable
         {
             var plugInConfiguration = saveContext.CreateNew<PlugInConfiguration>();
             plugInConfiguration.TypeId = plugInType.GUID;
-            plugInConfiguration.IsActive = true;
+            plugInConfiguration.IsActive = !plugInType.IsAssignableTo(typeof(IDisabledByDefault));
             gameConfiguration.PlugInConfigurations.Add(plugInConfiguration);
             if (plugInType.GetInterfaces().Contains(typeof(ISupportDefaultCustomConfiguration)))
             {
-                this.CreateDefaultPlugInConfiguration(plugInType, plugInConfiguration);
+                this.CreateDefaultPlugInConfiguration(plugInType, plugInConfiguration, referenceHandler);
             }
 
             yield return plugInConfiguration;
         }
 
-        saveContext.SaveChanges();
+        using var notificationSuspension = saveContext.SuspendChangeNotifications();
+        _ = saveContext.SaveChangesAsync().AsTask().WaitAndUnwrapException();
     }
 
-    private void CreateDefaultPlugInConfiguration(Type plugInType, PlugInConfiguration plugInConfiguration)
+    private void CreateDefaultPlugInConfiguration(Type plugInType, PlugInConfiguration plugInConfiguration, ReferenceHandler referenceHandler)
     {
         try
         {
             var plugin = (ISupportDefaultCustomConfiguration)Activator.CreateInstance(plugInType)!;
             var defaultConfig = plugin.CreateDefaultConfig();
-            plugInConfiguration.SetConfiguration(defaultConfig);
+            plugInConfiguration.SetConfiguration(defaultConfig, referenceHandler);
         }
         catch (Exception ex)
         {
@@ -383,19 +436,19 @@ internal sealed class Program : IDisposable
         return parameter.Substring(parameter.IndexOf(':') + 1);
     }
 
-    private async Task<IMigratableDatabaseContextProvider> DeterminePersistenceContextProviderAsync(string[] args, ILoggerFactory loggerFactory, IConfigurationChangePublisher changePublisher)
+    private async Task<IMigratableDatabaseContextProvider> DeterminePersistenceContextProviderAsync(string[] args, ILoggerFactory loggerFactory, IConfigurationChangeListener changeListener)
     {
         var version = this.GetVersionParameter(args);
 
         IMigratableDatabaseContextProvider contextProvider;
         if (args.Contains("-demo"))
         {
-            contextProvider = new InMemoryPersistenceContextProvider(changePublisher);
+            contextProvider = new InMemoryPersistenceContextProvider(null); // TODO pass change mediator or whatever
             await this.InitializeDataAsync(version, loggerFactory, contextProvider).ConfigureAwait(false);
         }
         else
         {
-            contextProvider = await this.PrepareRepositoryProviderAsync(args.Contains("-reinit"), version, loggerFactory, changePublisher).ConfigureAwait(false);
+            contextProvider = await this.PrepareRepositoryProviderAsync(args.Contains("-reinit"), version, loggerFactory, changeListener).ConfigureAwait(false);
         }
 
         await this.ReadSystemConfigurationAsync(contextProvider).ConfigureAwait(false);
@@ -403,9 +456,9 @@ internal sealed class Program : IDisposable
         return contextProvider;
     }
 
-    private async Task<IMigratableDatabaseContextProvider> PrepareRepositoryProviderAsync(bool reinit, string version, ILoggerFactory loggerFactory, IConfigurationChangePublisher changePublisher)
+    private async Task<IMigratableDatabaseContextProvider> PrepareRepositoryProviderAsync(bool reinit, string version, ILoggerFactory loggerFactory, IConfigurationChangeListener changeListener)
     {
-        var contextProvider = new PersistenceContextProvider(loggerFactory, changePublisher);
+        var contextProvider = new PersistenceContextProvider(loggerFactory, changeListener);
         if (reinit || !await contextProvider.DatabaseExistsAsync().ConfigureAwait(false))
         {
             this._logger.Information("The database is getting (re-)initialized...");
@@ -415,7 +468,7 @@ internal sealed class Program : IDisposable
         }
         else if (!await contextProvider.IsDatabaseUpToDateAsync().ConfigureAwait(false))
         {
-            if (_systemConfiguration?.AutoUpdateSchema is true)
+            if (_systemConfiguration?.AutoUpdateSchema is true || await contextProvider.ShouldDoAutoSchemaUpdateAsync())
             {
                 Console.WriteLine("The database schema needs to be updated before the server can be started. Updating...");
                 await contextProvider.ApplyAllPendingUpdatesAsync().ConfigureAwait(false);
@@ -447,7 +500,7 @@ internal sealed class Program : IDisposable
 
     private async Task ReadSystemConfigurationAsync(IPersistenceContextProvider persistenceContextProvider)
     {
-        using var context = persistenceContextProvider.CreateNewTypedContext<SystemConfiguration>(false);
+        using var context = persistenceContextProvider.CreateNewTypedContext(typeof(SystemConfiguration), false);
         var config = (await context.GetAsync<SystemConfiguration>().ConfigureAwait(false)).FirstOrDefault();
         if (config != null)
         {
@@ -461,7 +514,10 @@ internal sealed class Program : IDisposable
         serviceContainer.AddService(typeof(ILoggerFactory), loggerFactory);
         serviceContainer.AddService(typeof(IPersistenceContextProvider), contextProvider);
 
-        var plugInManager = new PlugInManager(null, loggerFactory, serviceContainer);
+        var referenceHandler = new ByDataSourceReferenceHandler(
+            new GameConfigurationDataSource(serviceContainer.GetService<ILogger<GameConfigurationDataSource>>()!, contextProvider));
+
+        var plugInManager = new PlugInManager(null, loggerFactory, serviceContainer, referenceHandler);
         plugInManager.DiscoverAndRegisterPlugInsOf<IDataInitializationPlugIn>();
         var initialization = plugInManager.GetStrategy<IDataInitializationPlugIn>(version) ?? throw new Exception("Data initialization plugin not found");
         await initialization.CreateInitialDataAsync(3, true).ConfigureAwait(false);

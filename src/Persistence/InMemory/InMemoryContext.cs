@@ -5,7 +5,9 @@
 namespace MUnique.OpenMU.Persistence.InMemory;
 
 using System.Collections;
+using System.Threading;
 using Nito.AsyncEx.Synchronous;
+using Nito.Disposables;
 
 /// <summary>
 /// An in-memory context which get it's data from the repositories of the <see cref="InMemoryPersistenceContextProvider"/>.
@@ -43,7 +45,10 @@ public class InMemoryContext : IContext
         this.SavedChanges = null;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Saves the changes of the context.
+    /// </summary>
+    /// <returns><c>True</c>, if the saving was successful; <c>false</c>, otherwise.</returns>
     public bool SaveChanges()
     {
         foreach (var repository in this.Provider.MemoryRepositories)
@@ -55,7 +60,7 @@ public class InMemoryContext : IContext
     }
 
     /// <inheritdoc/>
-    public async ValueTask<bool> SaveChangesAsync()
+    public async ValueTask<bool> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var result = this.SaveChanges();
         if (result)
@@ -64,6 +69,12 @@ public class InMemoryContext : IContext
         }
 
         return result;
+    }
+
+    /// <inheritdoc />
+    public IDisposable SuspendChangeNotifications()
+    {
+        return new Disposable(() => { });
     }
 
     /// <inheritdoc/>
@@ -97,10 +108,28 @@ public class InMemoryContext : IContext
         {
             if (identifiable.Id == Guid.Empty)
             {
-                identifiable.Id = Guid.NewGuid();
+                identifiable.Id = GuidV7.NewGuid();
             }
 
             var repository = this.Provider.GetRepository<T>() as IMemoryRepository;
+            repository?.Add(identifiable.Id, newObject);
+        }
+
+        return newObject;
+    }
+
+    /// <inheritdoc/>
+    public object CreateNew(Type type, params object?[] args)
+    {
+        var newObject = typeof(Persistence.BasicModel.GameConfiguration).Assembly.CreateNew(type, args);
+        if (newObject is IIdentifiable identifiable)
+        {
+            if (identifiable.Id == Guid.Empty)
+            {
+                identifiable.Id = GuidV7.NewGuid();
+            }
+
+            var repository = this.Provider.GetRepository(type) as IMemoryRepository;
             repository?.Add(identifiable.Id, newObject);
         }
 
@@ -115,28 +144,34 @@ public class InMemoryContext : IContext
     }
 
     /// <inheritdoc/>
-    public async Task<T?> GetByIdAsync<T>(Guid id)
+    public async Task<T?> GetByIdAsync<T>(Guid id, CancellationToken cancellationToken)
         where T : class
     {
-        return await this.Provider.GetRepository<T>().GetByIdAsync(id).ConfigureAwait(false);
+        return await this.Provider.GetRepository<T>().GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public async Task<object?> GetByIdAsync(Guid id, Type type)
+    public async Task<object?> GetByIdAsync(Guid id, Type type, CancellationToken cancellationToken)
     {
-        return await this.Provider.GetRepository(type).GetByIdAsync(id).ConfigureAwait(false);
+        return await this.Provider.GetRepository(type).GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public ValueTask<IEnumerable<T>> GetAsync<T>()
+    public ValueTask<IEnumerable<T>> GetAsync<T>(CancellationToken cancellationToken)
         where T : class
     {
-        return this.Provider.GetRepository<T>().GetAllAsync();
+        return this.Provider.GetRepository<T>().GetAllAsync(cancellationToken);
     }
 
     /// <inheritdoc/>
-    public ValueTask<IEnumerable> GetAsync(Type type)
+    public ValueTask<IEnumerable> GetAsync(Type type, CancellationToken cancellationToken)
     {
-        return this.Provider.GetRepository(type).GetAllAsync();
+        return this.Provider.GetRepository(type).GetAllAsync(cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public bool IsSupporting(Type type)
+    {
+        return true;
     }
 }

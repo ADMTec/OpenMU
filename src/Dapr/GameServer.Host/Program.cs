@@ -2,12 +2,13 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using MUnique.OpenMU.Dapr.Common;
 using MUnique.OpenMU.DataModel.Configuration;
+using MUnique.OpenMU.GameLogic;
 using MUnique.OpenMU.GameServer.Host;
 using MUnique.OpenMU.Interfaces;
-using MUnique.OpenMU.Network;
 using MUnique.OpenMU.PlugIns;
 using MUnique.OpenMU.ServerClients;
 using MUnique.OpenMU.Web.Map;
@@ -29,6 +30,9 @@ services.AddSingleton<GameServer>()
     .AddSingleton<IList<IManageableServer>>(s => new List<IManageableServer>() { s.GetService<GameServer>()! })
     .AddSingleton(s => s.GetService<GameServer>()!.Context)
     .AddSingleton<IGameServerStateObserver, GameServerStatePublisher>()
+    .AddSingleton<ConfigurationChangeMediator>()
+    .AddSingleton<IConfigurationChangeMediator>(s => s.GetRequiredService<ConfigurationChangeMediator>())
+    .AddSingleton<IConfigurationChangeMediatorListener>(s => s.GetRequiredService<ConfigurationChangeMediator>())
     .AddSingleton<ILoginServer, LoginServer>()
     .AddSingleton<IGuildServer, GuildServer>()
     .AddSingleton<IEventPublisher, EventPublisher>()
@@ -50,9 +54,9 @@ metricsRegistry.AddMeters(MUnique.OpenMU.GameLogic.Metrics.Meters);
 builder.AddOpenTelemetryMetrics(metricsRegistry);
 
 var app = builder.BuildAndConfigure(true);
-
+app.UseStaticFiles();
 await app.WaitForUpdatedDatabaseAsync().ConfigureAwait(false);
 
 await app.Services.TryLoadPlugInConfigurationsAsync(plugInConfigurations).ConfigureAwait(false);
-
+await ((ObservableGameServerAdapter)app.Services.GetRequiredService<IObservableGameServer>()).InitializeAsync().ConfigureAwait(false);
 app.Run();

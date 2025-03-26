@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration;
 
+using MUnique.OpenMU.Annotations;
 using MUnique.OpenMU.AttributeSystem;
 using MUnique.OpenMU.DataModel.Configuration.Items;
 
@@ -153,6 +154,11 @@ public enum SkillTarget
     /// The primary target is stated explicitly, additional targets are all objects in the <see cref="Skill.ImplicitTargetRange"/> of the primary target.
     /// </summary>
     ExplicitWithImplicitInRange = 6,
+
+    /// <summary>
+    /// The skill target is only the own player implicitly.
+    /// </summary>
+    ImplicitPlayer = 7,
 }
 
 /// <summary>
@@ -184,7 +190,8 @@ public enum SkillTargetRestriction
 /// <summary>
 /// Defines a skill.
 /// </summary>
-public class Skill
+[Cloneable]
+public partial class Skill
 {
     /// <summary>
     /// Gets or sets the skill number.
@@ -198,6 +205,11 @@ public class Skill
     /// Gets or sets the name.
     /// </summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the attack damage. Only relevant for attack skills.
+    /// </summary>
+    public int AttackDamage { get; set; }
 
     /// <summary>
     /// Gets or sets the requirements to execute the skill.
@@ -284,7 +296,14 @@ public class Skill
     public virtual MasterSkillDefinition? MasterDefinition { get; set; }
 
     /// <summary>
-    /// Gets or sets the attack damage. Only relevant for attack skills.
+    /// Gets or sets the area skill settings.
     /// </summary>
-    public int AttackDamage { get; set; }
+    [MemberOfAggregate]
+    public virtual AreaSkillSettings? AreaSkillSettings { get; set; }
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        return this.Name;
+    }
 }

@@ -34,7 +34,7 @@ public class WeatherUpdatePlugIn : IPeriodicTaskPlugIn, IObjectAddedToMapPlugIn
         this._isRunning = true;
         try
         {
-            foreach (var map in await gameContext.GetMapsAsync())
+            foreach (var map in await gameContext.GetMapsAsync().ConfigureAwait(false))
             {
                 var weather = (byte)Rand.NextInt(0, 3);
                 var variation = (byte)Rand.NextInt(0, 10);
@@ -55,27 +55,33 @@ public class WeatherUpdatePlugIn : IPeriodicTaskPlugIn, IObjectAddedToMapPlugIn
     }
 
     /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD100:Avoid async void methods", Justification = "Catching all Exceptions.")]
-    public async void ObjectAddedToMap(GameMap map, ILocateable addedObject)
+    public void ForceStart()
     {
+        this._nextRunUtc = DateTime.UtcNow;
+    }
+
+    /// <inheritdoc />
+    public async ValueTask ObjectAddedToMapAsync(GameMap map, ILocateable addedObject)
+    {
+        if (addedObject is not Player player)
+        {
+            return;
+        }
+
         try
         {
-            if (addedObject is Player player)
-            {
-                await this.TrySendPlayerUpdateAsync(player).ConfigureAwait(false);
-            }
+            await this.TrySendPlayerUpdateAsync(player).ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
-            // must be catched because it's an async void method.
+            player.Logger.LogDebug(ex, "Unexpected error sending weather update.");
         }
     }
 
     private async Task TrySendPlayerUpdateAsync(Player player)
     {
         if (player.CurrentMap is { } map
-            && player.PlayerState.CurrentState != PlayerState.Disconnected
-            && player.PlayerState.CurrentState != PlayerState.Finished
+            && !player.PlayerState.CurrentState.IsDisconnectedOrFinished()
             && this._weatherStates.TryGetValue(map, out var weather))
         {
             try

@@ -4,15 +4,13 @@ The all in one (with traefik) deployment is recommended, if you want to host
 on a small machine with a low amount of players and want to host your
 MuOnline Website on the same machine.
 
-Once Traefik works as a Reverse Proxy, you can handle miltiple website
-without change the default port to HTTP/HTTPS connections.
+Once Traefik works as a Reverse Proxy, you can handle multiple websites
+without changing the default port to HTTP/HTTPS connections.
 
-Addin a few labels to your container, you will tell Traefik how to
-handle incoming requests and he will redirect to the correct website.
+Adding a few labels to your container, you will tell Traefik how to
+handle incoming requests and it will redirect to the correct website.
 
-``` yml
-version: '3'
-
+```yaml
 services:
   admin-panel:
     ...
@@ -35,7 +33,7 @@ services:
 
 You can even add multiple domains and/or subdomains to your host label
 
-``` yml
+``` yaml
 - "traefik.http.routers.muonline.rule=Host(`www.domain1.com`,`domain1.com`,`sub.domain1.com`)"
 ```
 
@@ -59,7 +57,7 @@ It will create a new folder OpenMU with the repository contents inside.
 
 ### Navigate to the docker-compose files
 
-Navigate to the folder deploy/all-in-one-traefik
+Navigate to the folder `deploy/all-in-one-traefik`
 
 ``` bash
 cd deploy/all-in-one-traefik
@@ -75,21 +73,15 @@ docker network create proxy
 
 ### Option A - for local testing
 
-Run your local environment traefik
+To run the official docker image on your local traefik server, just run:
 
 ``` bash
-docker compose -f docker-compose.traefik.dev.yml up -d
-```
-
-To use the official docker image, just run:
-
-``` bash
-docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.yml up -d
 ```
 
 And that's it. It's then available on your local computer through a loopback
 ip. Your AdminPanel URL is `http://admin.docker.localhost`. You can change it
-in docker-compose.dev.yml file
+in the `docker-compose.yml` file.
 
 However, if you want to make it available through the internet, you should choose
 Option B:
@@ -102,15 +94,15 @@ panel is not encrypted.
 
 #### Set your domain name as environment variable
 
-Make a copy of .env.example called .env and edit the .env file with your
+Make a copy of `.env.example` called `.env` and edit the `.env` file with your
 domain/subdomain to the AdminPanel URL.
 
 ``` bash
 cp .env.example .env
 ```
 
-Make a copy of data-traefik/acme.example.json called data-traefik/acme.json
-and apply permission 600 to acme.json
+Make a copy of `data-traefik/acme.example.json` called `data-traefik/acme.json`
+and apply permission 600 to `acme.json`
 
 ``` bash
 cp data-traefik/acme.example.json data-traefik/acme.json
@@ -120,7 +112,6 @@ chmod 600 data-traefik/acme.json
 #### Run it
 
 ``` bash
-docker compose -f docker-compose.traefik.prod.yml up -d
 docker compose -f docker-compose.prod.yml up -d
 ```
 

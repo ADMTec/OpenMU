@@ -14,6 +14,11 @@ using MUnique.OpenMU.Interfaces;
 public interface IPersistenceContextProvider
 {
     /// <summary>
+    /// Gets the repository provider.
+    /// </summary>
+    IRepositoryProvider RepositoryProvider { get; }
+
+    /// <summary>
     /// Creates a new context which doesn't use any caching.
     /// </summary>
     /// <returns>The newly created context.</returns>
@@ -69,13 +74,13 @@ public interface IPersistenceContextProvider
     IGuildServerContext CreateNewGuildContext();
 
     /// <summary>
-    /// Creates the new context which can be used to load and edit an object of <typeparamref name="T" />.
+    /// Creates the new context which can be used to load and edit an object of <paramref name="editType"/>.
     /// </summary>
-    /// <typeparam name="T">The type of object which should be handled.</typeparam>
-    /// <param name="useCache"></param>
+    /// <param name="editType">The type of object which should be handled.</param>
+    /// <param name="useCache">Flag, if the cache should be used.</param>
     /// <param name="gameConfiguration">The game configuration.</param>
     /// <returns>
-    /// A new context which can be used to load and edit an object of <typeparamref name="T" />.
+    /// A new context which can be used to load and edit an object of <paramref name="editType"/>.
     /// </returns>
-    IContext CreateNewTypedContext<T>(bool useCache, GameConfiguration? gameConfiguration = null);
+    IContext CreateNewTypedContext(Type editType, bool useCache, GameConfiguration? gameConfiguration = null);
 }

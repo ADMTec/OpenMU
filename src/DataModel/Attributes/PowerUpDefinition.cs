@@ -5,12 +5,14 @@
 namespace MUnique.OpenMU.DataModel.Attributes;
 
 using System.Globalization;
+using MUnique.OpenMU.Annotations;
 using MUnique.OpenMU.AttributeSystem;
 
 /// <summary>
 /// The power up definition which describes the boost of an target attribute.
 /// </summary>
-public class PowerUpDefinition
+[Cloneable]
+public partial class PowerUpDefinition
 {
     /// <summary>
     /// Gets or sets the target attribute.
@@ -34,7 +36,14 @@ public class PowerUpDefinition
         else if (this.Boost?.RelatedValues != null && this.Boost.RelatedValues.Any())
         {
             var relation = this.Boost.RelatedValues.First();
-            value = relation.InputAttribute?.Designation + relation.InputOperator.AsString() + relation.InputOperand;
+            if (relation.InputOperator == InputOperator.ExponentiateByAttribute)
+            {
+                value = relation.InputOperand + relation.InputOperator.AsString() + relation.InputAttribute?.Designation;
+            }
+            else
+            {
+                value = relation.InputAttribute?.Designation + relation.InputOperator.AsString() + relation.InputOperand;
+            }
         }
         else
         {

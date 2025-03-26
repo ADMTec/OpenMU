@@ -33,12 +33,12 @@ public static class ConnectionExtensions
     /// </summary>
     /// <param name="connection">The connection.</param>
     /// <param name="roomId">The room id.</param>
-    /// <param name="token">A token (integer number), formatted as string. This value is also "encrypted" with the 3-byte XOR key (FC CF AB).</param>
+    /// <param name="token">A token (integer number), formatted as string and "encrypted" with the 3-byte XOR key (FC CF AB).</param>
     /// <remarks>
     /// Is sent by the client when: This packet is sent by the client after it connected to the server, to authenticate itself.
     /// Causes reaction on server side: The server will check the token. If it's correct, the client gets added to the requested chat room.
     /// </remarks>
-    public static async ValueTask SendAuthenticateAsync(this IConnection? connection, ushort @roomId, string @token)
+    public static async ValueTask SendAuthenticateAsync(this IConnection? connection, ushort @roomId, Memory<byte> @token)
     {
         if (connection is null)
         {
@@ -50,7 +50,7 @@ public static class ConnectionExtensions
             var length = AuthenticateRef.Length;
             var packet = new AuthenticateRef(connection.Output.GetSpan(length)[..length]);
             packet.RoomId = @roomId;
-            packet.Token = @token;
+            @token.Span.CopyTo(packet.Token);
 
             return packet.Header.Length;
         }
@@ -82,6 +82,31 @@ public static class ConnectionExtensions
             packet.ClientIndex = @clientIndex;
             packet.Name = @name;
 
+            return packet.Header.Length;
+        }
+
+        await connection.SendAsync(WritePacket).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sends a <see cref="LeaveChatRoom" /> to this connection.
+    /// </summary>
+    /// <param name="connection">The connection.</param>
+    /// <remarks>
+    /// Is sent by the client when: This packet is sent by the client when it leaves the chat room, before the connection closes.
+    /// Causes reaction on server side: The server will remove the client from the chat room, notifying the remaining clients.
+    /// </remarks>
+    public static async ValueTask SendLeaveChatRoomAsync(this IConnection? connection)
+    {
+        if (connection is null)
+        {
+            return;
+        }
+
+        int WritePacket()
+        {
+            var length = LeaveChatRoomRef.Length;
+            var packet = new LeaveChatRoomRef(connection.Output.GetSpan(length)[..length]);
             return packet.Header.Length;
         }
 
@@ -129,7 +154,7 @@ public static class ConnectionExtensions
     /// Is sent by the server when: This packet is sent by the server after another chat client sent a message to the current chat room.
     /// Causes reaction on client side: The client will show the message.
     /// </remarks>
-    public static async ValueTask SendChatMessageAsync(this IConnection? connection, byte @senderIndex, byte @messageLength, string @message)
+    public static async ValueTask SendChatMessageAsync(this IConnection? connection, byte @senderIndex, byte @messageLength, Memory<byte> @message)
     {
         if (connection is null)
         {
@@ -138,11 +163,11 @@ public static class ConnectionExtensions
 
         int WritePacket()
         {
-            var length = ChatMessageRef.GetRequiredSize(message);
+            var length = ChatMessageRef.GetRequiredSize(message.Length);
             var packet = new ChatMessageRef(connection.Output.GetSpan(length)[..length]);
             packet.SenderIndex = @senderIndex;
             packet.MessageLength = @messageLength;
-            packet.Message = @message;
+            @message.Span.CopyTo(packet.Message);
 
             return packet.Header.Length;
         }

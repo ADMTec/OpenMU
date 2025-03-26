@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration;
 
+using MUnique.OpenMU.Annotations;
 using MUnique.OpenMU.AttributeSystem;
 using MUnique.OpenMU.DataModel.Configuration.Items;
 using MUnique.OpenMU.DataModel.Entities;
@@ -14,7 +15,8 @@ using MUnique.OpenMU.PlugIns;
 /// A game configuration contains the whole configuration of a game, directly or indirectly.
 /// </summary>
 [AggregateRoot]
-public class GameConfiguration
+[Cloneable]
+public partial class GameConfiguration
 {
     /// <summary>
     /// Gets or sets the maximum reachable level.
@@ -61,14 +63,14 @@ public class GameConfiguration
     public int MaximumVaultMoney { get; set; }
 
     /// <summary>
-    /// Gets or sets the experience table. Index is the player level, value the needed experience to reach that level.
+    /// Gets or sets the experience formula per level. The variable name for the level is "level".
     /// </summary>
-    public long[]? ExperienceTable { get; set; }
+    public string? ExperienceFormula { get; set; }
 
     /// <summary>
-    /// Gets or sets the master experience table. Index is the player level, value the needed experience to reach that level.
+    /// Gets or sets the experience formula per master level. The variable name for the level is "level".
     /// </summary>
-    public long[]? MasterExperienceTable { get; set; }
+    public string? MasterExperienceFormula { get; set; }
 
     /// <summary>
     /// Gets or sets the interval for attribute recoveries. See also MUnique.OpenMU.GameLogic.Attributes.Stats.Regeneration.
@@ -119,6 +121,11 @@ public class GameConfiguration
     public TimeSpan ItemDropDuration { get; set; }
 
     /// <summary>
+    /// Gets or sets the maximum droppable item option level.
+    /// </summary>
+    public byte MaximumItemOptionLevelDrop { get; set; }
+
+    /// <summary>
     /// Gets or sets the accumulated damage which needs to be done to decrease <see cref="Item.Durability"/> of a defending item by 1.
     /// </summary>
     public double DamagePerOneItemDurability { get; set; }
@@ -132,6 +139,12 @@ public class GameConfiguration
     /// Gets or sets the number of hits which needs to be done to decrease the <see cref="Item.Durability"/> of an offensive item by 1.
     /// </summary>
     public double HitsPerOneItemDurability { get; set; }
+
+    /// <summary>
+    /// Gets or sets the duel configuration.
+    /// </summary>
+    [MemberOfAggregate]
+    public virtual DuelConfiguration? DuelConfiguration { get; set; }
 
     /// <summary>
     /// Gets or sets the possible jewel mixes.

@@ -4,13 +4,15 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration.Quests;
 
+using MUnique.OpenMU.Annotations;
 using MUnique.OpenMU.AttributeSystem;
 using MUnique.OpenMU.DataModel.Entities;
 
 /// <summary>
 /// Defines the reward of a completed quest.
 /// </summary>
-public class QuestReward
+[Cloneable]
+public partial class QuestReward
 {
     /// <summary>
     /// Gets or sets the type of the reward.
@@ -52,7 +54,7 @@ public class QuestReward
 
         if (this.RewardType == QuestRewardType.Skill)
         {
-            return $"Skill: {this.SkillReward}";
+            return $"Skill: {this.SkillReward?.Name}";
         }
 
         if (this.RewardType == QuestRewardType.Attribute)

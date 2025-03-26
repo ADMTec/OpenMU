@@ -16,7 +16,7 @@ using Nito.AsyncEx;
 /// </summary>
 public sealed class SoccerBall : NonPlayerCharacter, IAttackable, IMovable
 {
-    private readonly AsyncLock _moveLock = new ();
+    private readonly AsyncLock _moveLock = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SoccerBall"/> class.
@@ -55,10 +55,11 @@ public sealed class SoccerBall : NonPlayerCharacter, IAttackable, IMovable
     public DeathInformation? LastDeath => null;
 
     /// <inheritdoc />
-    public async ValueTask AttackByAsync(IAttacker attacker, SkillEntry? skill, bool isCombo)
+    public async ValueTask<HitInfo?> AttackByAsync(IAttacker attacker, SkillEntry? skill, bool isCombo, double damageFactor = 1.0)
     {
         var direction = attacker.GetDirectionTo(this);
         await this.MoveToDirectionAsync(direction, skill is { }).ConfigureAwait(false);
+        return null;
     }
 
     /// <inheritdoc />

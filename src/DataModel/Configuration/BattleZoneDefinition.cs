@@ -4,10 +4,13 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration;
 
+using MUnique.OpenMU.Annotations;
+
 /// <summary>
 /// Defines a battle zone.
 /// </summary>
-public class BattleZoneDefinition
+[Cloneable]
+public partial class BattleZoneDefinition
 {
     /// <summary>
     /// Gets or sets the battle type.
@@ -51,4 +54,10 @@ public class BattleZoneDefinition
     /// </summary>
     [MemberOfAggregate]
     public virtual Rectangle? RightGoal { get; set; }
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        return $"Battle Zone ({this.Type})";
+    }
 }

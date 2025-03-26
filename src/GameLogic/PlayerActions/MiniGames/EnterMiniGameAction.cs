@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions.MiniGames;
 
+using MUnique.OpenMU.DataModel.Configuration.Items;
 using MUnique.OpenMU.GameLogic.Attributes;
 using MUnique.OpenMU.GameLogic.GuildWar;
 using MUnique.OpenMU.GameLogic.MiniGames;
@@ -16,6 +17,8 @@ using MUnique.OpenMU.GameLogic.Views.Inventory;
 /// </summary>
 public class EnterMiniGameAction
 {
+    private const int UndefinedTicketSlot = 0xFF;
+
     /// <summary>
     /// Tries to enter the mini game event of the specified type and level with the specified ticket item.
     /// </summary>
@@ -44,7 +47,8 @@ public class EnterMiniGameAction
         var characterLevel = player.Attributes![Stats.Level];
         var minLevel = isSpecialCharacter ? miniGameDefinition.MinimumSpecialCharacterLevel : miniGameDefinition.MinimumCharacterLevel;
         var maxLevel = isSpecialCharacter ? miniGameDefinition.MaximumSpecialCharacterLevel : miniGameDefinition.MaximumCharacterLevel;
-        if (characterLevel < minLevel)
+        var requiresMasterLevel = miniGameDefinition.RequiresMasterClass;
+        if (characterLevel < minLevel || (requiresMasterLevel && player.SelectedCharacter?.CharacterClass?.IsMasterClass is not true))
         {
             await player.InvokeViewPlugInAsync<IShowMiniGameEnterResultPlugIn>(p => p.ShowResultAsync(miniGameType, EnterResult.CharacterLevelTooLow)).ConfigureAwait(false);
             return;
@@ -168,14 +172,40 @@ public class EnterMiniGameAction
 
     private bool CheckTicketItem(MiniGameDefinition miniGameDefinition, Player player, byte gameTicketInventoryIndex, out Item? ticketItem)
     {
+        ticketItem = null;
+
         if (miniGameDefinition.TicketItem is not { } ticketItemDefinition)
         {
-            ticketItem = null;
             return true;
         }
 
-        ticketItem = player.Inventory?.GetItem(gameTicketInventoryIndex);
-        return ticketItemDefinition.Equals(ticketItem?.Definition) && ticketItem.Durability > 0 && ticketItem.Level == miniGameDefinition.TicketItemLevel;
+        if (gameTicketInventoryIndex != UndefinedTicketSlot)
+        {
+            ticketItem = player.Inventory?.GetItem(gameTicketInventoryIndex);
+            if (this.IsValidTicket(ticketItem, ticketItemDefinition, miniGameDefinition))
+            {
+                return true;
+            }
+        }
+
+        foreach (var candidateItem in player.Inventory?.FindItemsByDefinition(ticketItemDefinition) ?? Enumerable.Empty<Item>())
+        {
+            if (this.IsValidTicket(candidateItem, ticketItemDefinition, miniGameDefinition))
+            {
+                ticketItem = candidateItem;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsValidTicket(Item? ticketItem, ItemDefinition requiredItemDefinition, MiniGameDefinition miniGameDefinition)
+    {
+        return ticketItem is not null
+            && requiredItemDefinition.Equals(ticketItem.Definition)
+            && ticketItem.Durability > 0
+            && ticketItem.Level == miniGameDefinition.TicketItemLevel;
     }
 
     private bool CheckEntranceFee(MiniGameDefinition miniGameDefinition, Player player, out int entranceFee)

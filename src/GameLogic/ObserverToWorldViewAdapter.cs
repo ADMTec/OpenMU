@@ -5,16 +5,16 @@
 namespace MUnique.OpenMU.GameLogic;
 
 using System.Diagnostics;
-using Nito.AsyncEx;
 using MUnique.OpenMU.GameLogic.NPC;
 using MUnique.OpenMU.GameLogic.Views.World;
+using Nito.AsyncEx;
 
 /// <summary>
 /// Adapts the incoming calls from the <see cref="IBucketMapObserver"/> to the available view plugins.
 /// </summary>
 public sealed class ObserverToWorldViewAdapter : AsyncDisposable, IBucketMapObserver
 {
-    private readonly AsyncReaderWriterLock _observingLock = new ();
+    private readonly AsyncReaderWriterLock _observingLock = new();
     private readonly ISet<IObservable> _observingObjects = new HashSet<IObservable>();
     private readonly IWorldObserver _adaptee;
 
@@ -54,38 +54,38 @@ public sealed class ObserverToWorldViewAdapter : AsyncDisposable, IBucketMapObse
             return;
         }
 
-        if (item is Player player)
+        using (await this._observingLock.WriterLockAsync())
         {
-            await this._adaptee.InvokeViewPlugInAsync<INewPlayersInScopePlugIn>(p => p.NewPlayersInScopeAsync(player.GetAsEnumerable())).ConfigureAwait(false);
-        }
-        else if (item is NonPlayerCharacter npc)
-        {
-            await this._adaptee.InvokeViewPlugInAsync<INewNpcsInScopePlugIn>(p => p.NewNpcsInScopeAsync(npc.GetAsEnumerable())).ConfigureAwait(false);
-        }
-        else if (item is DroppedItem droppedItem)
-        {
-            await this._adaptee.InvokeViewPlugInAsync<IShowDroppedItemsPlugIn>(p => p.ShowDroppedItemsAsync(droppedItem.GetAsEnumerable(), true)).ConfigureAwait(false);
-        }
-        else if (item is DroppedMoney droppedMoney)
-        {
-            await this._adaptee.InvokeViewPlugInAsync<IShowMoneyDropPlugIn>(p => p.ShowMoneyAsync(droppedMoney.Id, true, droppedMoney.Amount, droppedMoney.Position)).ConfigureAwait(false);
-        }
-        else
-        {
-            // no action required.
-        }
+            if (item is Player { IsInvisible: false } player)
+            {
+                await this._adaptee.InvokeViewPlugInAsync<INewPlayersInScopePlugIn>(p => p.NewPlayersInScopeAsync(player.GetAsEnumerable())).ConfigureAwait(false);
+            }
+            else if (item is NonPlayerCharacter npc)
+            {
+                await this._adaptee.InvokeViewPlugInAsync<INewNpcsInScopePlugIn>(p => p.NewNpcsInScopeAsync(npc.GetAsEnumerable())).ConfigureAwait(false);
+            }
+            else if (item is DroppedItem droppedItem)
+            {
+                await this._adaptee.InvokeViewPlugInAsync<IShowDroppedItemsPlugIn>(p => p.ShowDroppedItemsAsync(droppedItem.GetAsEnumerable(), true)).ConfigureAwait(false);
+            }
+            else if (item is DroppedMoney droppedMoney)
+            {
+                await this._adaptee.InvokeViewPlugInAsync<IShowMoneyDropPlugIn>(p => p.ShowMoneyAsync(droppedMoney.Id, true, droppedMoney.Amount, droppedMoney.Position)).ConfigureAwait(false);
+            }
+            else
+            {
+                // no action required.
+            }
 
-        if (item is IObservable observable)
-        {
-            using (await this._observingLock.WriterLockAsync())
+            if (item is IObservable observable and not Player { IsInvisible: true })
             {
                 if (!this._observingObjects.Contains(observable))
                 {
                     this._observingObjects.Add(observable);
                 }
-            }
 
-            await observable.AddObserverAsync(this._adaptee).ConfigureAwait(false);
+                await observable.AddObserverAsync(this._adaptee).ConfigureAwait(false);
+            }
         }
     }
 
@@ -109,25 +109,25 @@ public sealed class ObserverToWorldViewAdapter : AsyncDisposable, IBucketMapObse
             return;
         }
 
-        if (item is IObservable observable)
+        using (await this._observingLock.WriterLockAsync())
         {
-            using (await this._observingLock.WriterLockAsync())
+            if (item is IObservable observable)
             {
                 this._observingObjects.Remove(observable);
+
+                await observable.RemoveObserverAsync(this._adaptee).ConfigureAwait(false);
             }
 
-            await observable.RemoveObserverAsync(this._adaptee).ConfigureAwait(false);
-        }
-
-        if (item is DroppedItem || item is DroppedMoney)
-        {
-            await this._adaptee.InvokeViewPlugInAsync<IDroppedItemsDisappearedPlugIn>(p => p.DroppedItemsDisappearedAsync(item.GetAsEnumerable().Select(i => i.Id))).ConfigureAwait(false);
-        }
-        else
-        {
-            if (item.IsActive())
+            if (item is DroppedItem || item is DroppedMoney)
             {
-                await this._adaptee.InvokeViewPlugInAsync<IObjectsOutOfScopePlugIn>(p => p.ObjectsOutOfScopeAsync(item.GetAsEnumerable())).ConfigureAwait(false);
+                await this._adaptee.InvokeViewPlugInAsync<IDroppedItemsDisappearedPlugIn>(p => p.DroppedItemsDisappearedAsync(item.GetAsEnumerable().Select(i => i.Id))).ConfigureAwait(false);
+            }
+            else
+            {
+                if (item.IsActive())
+                {
+                    await this._adaptee.InvokeViewPlugInAsync<IObjectsOutOfScopePlugIn>(p => p.ObjectsOutOfScopeAsync(item.GetAsEnumerable())).ConfigureAwait(false);
+                }
             }
         }
     }
@@ -140,31 +140,36 @@ public sealed class ObserverToWorldViewAdapter : AsyncDisposable, IBucketMapObse
             return;
         }
 
-        IEnumerable<IObservable> oldItems;
+        IEnumerable<ILocateable> oldItems;
         using (await this._observingLock.WriterLockAsync())
         {
-            oldItems = oldObjects.OfType<IObservable>().Where(item => this._observingObjects.Contains(item) && this.ObjectWillBeOutOfScope(item)).ToList();
-            oldItems.ForEach(item => this._observingObjects.Remove(item));
-        }
+            oldItems = oldObjects.Where(this.ObjectWillBeOutOfScope).ToList();
+            oldItems
+                .OfType<IObservable>()
+                .ForEach(item => this._observingObjects.Remove(item));
 
-        oldItems.ForEach(item => item.RemoveObserverAsync(this._adaptee));
+            await oldItems
+                .OfType<IObservable>()
+                .ForEachAsync(item => item.RemoveObserverAsync(this._adaptee))
+                .ConfigureAwait(false);
 
-        if (this._adaptee is IHasBucketInformation { NewBucket: null })
-        {
-            // adaptee (player) left the map or disconnected; it's not required to update the view
-        }
-        else
-        {
-            var droppedItems = oldItems.OfType<ILocateable>().Where(item => item is DroppedItem || item is DroppedMoney);
-            var nonItems = oldItems.OfType<ILocateable>().Except(droppedItems).WhereActive();
-            if (nonItems.Any())
+            if (this._adaptee is IHasBucketInformation { NewBucket: null })
             {
-                await this._adaptee.InvokeViewPlugInAsync<IObjectsOutOfScopePlugIn>(p => p.ObjectsOutOfScopeAsync(nonItems)).ConfigureAwait(false);
+                // adaptee (player) left the map or disconnected; it's not required to update the view
             }
-
-            if (droppedItems.Any())
+            else
             {
-                await this._adaptee.InvokeViewPlugInAsync<IDroppedItemsDisappearedPlugIn>(p => p.DroppedItemsDisappearedAsync(droppedItems.Select(item => item.Id))).ConfigureAwait(false);
+                var droppedItems = oldItems.Where(item => item is DroppedItem || item is DroppedMoney);
+                var nonItems = oldItems.Except(droppedItems).WhereActive();
+                if (nonItems.Any())
+                {
+                    await this._adaptee.InvokeViewPlugInAsync<IObjectsOutOfScopePlugIn>(p => p.ObjectsOutOfScopeAsync(nonItems)).ConfigureAwait(false);
+                }
+
+                if (droppedItems.Any())
+                {
+                    await this._adaptee.InvokeViewPlugInAsync<IDroppedItemsDisappearedPlugIn>(p => p.DroppedItemsDisappearedAsync(droppedItems.Select(item => item.Id))).ConfigureAwait(false);
+                }
             }
         }
     }
@@ -184,13 +189,14 @@ public sealed class ObserverToWorldViewAdapter : AsyncDisposable, IBucketMapObse
             newItems.ForEach(item => this._observingObjects.Add(item));
         }
 
-        var players = newItems.OfType<Player>().WhereActive();
+        var players = newItems.OfType<Player>().WhereActive().WhereNotInvisible();
         if (players.Any())
         {
             await this._adaptee.InvokeViewPlugInAsync<INewPlayersInScopePlugIn>(p => p.NewPlayersInScopeAsync(players, false)).ConfigureAwait(false);
         }
 
         var npcs = newItems.OfType<NonPlayerCharacter>().WhereActive();
+
         if (npcs.Any())
         {
             await this._adaptee.InvokeViewPlugInAsync<INewNpcsInScopePlugIn>(p => p.NewNpcsInScopeAsync(npcs, false)).ConfigureAwait(false);
@@ -208,7 +214,7 @@ public sealed class ObserverToWorldViewAdapter : AsyncDisposable, IBucketMapObse
             await this._adaptee.InvokeViewPlugInAsync<IShowMoneyDropPlugIn>(p => p.ShowMoneyAsync(money.Id, false, money.Amount, money.Position)).ConfigureAwait(false);
         }
 
-        newItems.ForEach(item => item.AddObserverAsync(this._adaptee));
+        await newItems.ForEachAsync(item => item.AddObserverAsync(this._adaptee)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -239,7 +245,7 @@ public sealed class ObserverToWorldViewAdapter : AsyncDisposable, IBucketMapObse
         await base.DisposeAsyncCore().ConfigureAwait(false);
     }
 
-    private bool ObjectWillBeOutOfScope(IObservable observable)
+    private bool ObjectWillBeOutOfScope(ILocateable locateable)
     {
         var myBucketInformations = this._adaptee as IHasBucketInformation;
         if (myBucketInformations is null)
@@ -253,20 +259,21 @@ public sealed class ObserverToWorldViewAdapter : AsyncDisposable, IBucketMapObse
             return true;
         }
 
-        var locateableBucketInformations = observable as IHasBucketInformation;
-        if (locateableBucketInformations is null)
+        if (locateable is IHasBucketInformation locateableBucketInformations)
         {
-            // We have to assume that this observable will be out of scope since it can't tell us where it goes
-            return true;
+            if (locateableBucketInformations.NewBucket is null)
+            {
+                // It's leaving the map, so will be out of scope
+                return true;
+            }
+
+            // If we observe the target bucket of the observable, it will be in our range
+            return !this.ObservingBuckets.Contains(locateableBucketInformations.NewBucket);
         }
 
-        if (locateableBucketInformations.NewBucket is null)
-        {
-            // It's leaving the map, so will be out of scope
-            return true;
-        }
-
-        // If we observe the target bucket of the observable, it will be in our range
-        return !this.ObservingBuckets.Contains(locateableBucketInformations.NewBucket);
+        // We have to assume that this observable will be
+        // out of scope since it can't tell us where it goes.
+        // That's okay, because otherwise, we wouldn't get here.
+        return true;
     }
 }

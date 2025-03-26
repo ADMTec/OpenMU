@@ -4,6 +4,8 @@
 
 namespace MUnique.OpenMU.GameLogic.NPC;
 
+using MUnique.OpenMU.Pathfinding;
+
 /// <summary>
 /// The monster intelligence which does nothing.
 /// </summary>
@@ -17,6 +19,9 @@ public sealed class NullMonsterIntelligence : INpcIntelligence
         get => this._npc ?? throw Error.NotInitializedProperty(this);
         set => this._npc = value;
     }
+
+    /// <inheritdoc />
+    public bool CanWalkOnSafezone => false;
 
     /// <inheritdoc />
     public void RegisterHit(IAttacker attacker)
@@ -34,5 +39,14 @@ public sealed class NullMonsterIntelligence : INpcIntelligence
     public void Pause()
     {
         // do nothing
+    }
+
+    /// <summary>
+    /// If Null Monster can walk on target.
+    /// </summary>
+    /// <param name="target">The target.</param>
+    public bool CanWalkOn(Point target)
+    {
+        return false;
     }
 }

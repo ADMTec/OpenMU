@@ -5,6 +5,7 @@
 namespace MUnique.OpenMU.GameLogic.MiniGames;
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Threading;
 using MUnique.OpenMU.DataModel.Statistics;
 using MUnique.OpenMU.GameLogic.Attributes;
@@ -16,7 +17,6 @@ using MUnique.OpenMU.GameLogic.Views;
 using MUnique.OpenMU.Interfaces;
 using MUnique.OpenMU.Persistence;
 using Nito.AsyncEx;
-using Nito.AsyncEx.Synchronous;
 
 /// <summary>
 /// The context of a mini game.
@@ -32,8 +32,10 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
 
     private readonly CancellationTokenSource _gameEndedCts = new();
 
-    private readonly HashSet<byte> _currentSpawnWaves = new();
+    private readonly ConcurrentDictionary<byte, MiniGameSpawnWave> _currentSpawnWaves = new();
     private readonly List<ChangeEventContext> _remainingEvents = new();
+
+    private Stopwatch? _elapsedTimeSinceStart;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MiniGameContext"/> class.
@@ -175,7 +177,7 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
     /// <inheritdoc />
     public bool IsSpawnWaveActive(byte waveNumber)
     {
-        return this._currentSpawnWaves.Contains(waveNumber);
+        return this._currentSpawnWaves.ContainsKey(waveNumber);
     }
 
     /// <summary>
@@ -209,23 +211,23 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
     /// <inheritdoc />
     protected override async ValueTask DisposeAsyncCore()
     {
-        this.Logger.LogDebug("{context}: Disposing mini game...", this);
-        await base.DisposeAsyncCore().ConfigureAwait(false);
-
-        using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
-        {
-            this.State = MiniGameState.Disposed;
-        }
-
         try
         {
+            this.Logger.LogDebug("{context}: Disposing mini game...", this);
+            await base.DisposeAsyncCore().ConfigureAwait(false);
+
+            using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
+            {
+                this.State = MiniGameState.Disposed;
+            }
+
             await this.MovePlayersToSafezoneAsync().ConfigureAwait(false);
 
             this.Map.ObjectAdded -= this.OnObjectAddedToMapAsync;
             this.Map.ObjectRemoved -= this.OnObjectRemovedFromMapAsync;
 
             await this._gameContext.RemoveMiniGameAsync(this).ConfigureAwait(false);
-            this._gameEndedCts.Cancel();
+            await this._gameEndedCts.CancelAsync();
             this._gameEndedCts.Dispose();
         }
         catch (Exception ex)
@@ -250,6 +252,9 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
     /// <param name="players">The player which started with the game.</param>
     protected virtual async ValueTask OnGameStartAsync(ICollection<Player> players)
     {
+        this._elapsedTimeSinceStart = new Stopwatch();
+        this._elapsedTimeSinceStart.Start();
+
         var startEvents = this.Definition.ChangeEvents
             .OrderBy(e => e.Index)
             .TakeWhile(e => e is { Index: <= 0, NumberOfKills: 0 })
@@ -355,7 +360,11 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
     /// <param name="args">The event parameters.</param>
     protected virtual async ValueTask OnObjectAddedToMapAsync((GameMap Map, ILocateable Object) args)
     {
-        this._gameContext.PlugInManager.GetPlugInPoint<IObjectAddedToMapPlugIn>()?.ObjectAddedToMap(args.Map, args.Object);
+        if (this._gameContext.PlugInManager.GetPlugInPoint<IObjectAddedToMapPlugIn>() is { } plugInPoint)
+        {
+            await plugInPoint.ObjectAddedToMapAsync(args.Map, args.Object).ConfigureAwait(false);
+        }
+
         if (args.Object is Monster monster)
         {
             monster.Died += this.OnMonsterDied;
@@ -385,7 +394,11 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
     {
         try
         {
-            this._gameContext.PlugInManager.GetPlugInPoint<IObjectRemovedFromMapPlugIn>()?.ObjectRemovedFromMap(args.Map, args.Object);
+            if (this._gameContext.PlugInManager.GetPlugInPoint<IObjectRemovedFromMapPlugIn>() is { } plugInPoint)
+            {
+                await plugInPoint.ObjectRemovedFromMapAsync(args.Map, args.Object).ConfigureAwait(false);
+            }
+
             if (args.Object is not Player player)
             {
                 return;
@@ -403,7 +416,7 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
 
             if (cantGameProceed)
             {
-                this._gameEndedCts.Cancel();
+                await this._gameEndedCts.CancelAsync().ConfigureAwait(false);
             }
             else if (player.IsAlive)
             {
@@ -480,9 +493,8 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
 
         try
         {
-            using var context = this._gameContext.PersistenceContextProvider.CreateNewTypedContext<MiniGameRankingEntry>(false);
-            context.Attach(this.Definition);
-            var instanceId = Guid.NewGuid();
+            using var context = this._gameContext.PersistenceContextProvider.CreateNewTypedContext(typeof(MiniGameRankingEntry), false);
+            var instanceId = GuidV7.NewGuid();
             var timestamp = DateTime.UtcNow;
             foreach (var score in scoreEntries)
             {
@@ -584,34 +596,38 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
     {
         try
         {
-            foreach (var spawnWave in this.Definition.SpawnWaves)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-
-                await this.RunSpawnWaveAsync(spawnWave, cancellationToken).ConfigureAwait(false);
-            }
+            // We already need to start all tasks, because they may overlap.
+            // So it's not okay to run them one after another.
+            var waveTasks = this.Definition.SpawnWaves
+                .OrderBy(wave => wave.WaveNumber)
+                .Select(wave => this.RunSpawnWaveAsync(wave, cancellationToken))
+                .ToList();
+            await Task.WhenAll(waveTasks).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             // game ended.
         }
+        catch (Exception ex)
+        {
+            this.Logger.LogError(ex, "Unexpected error during spawn waves: {0}", ex.Message);
+        }
     }
 
-    private async ValueTask RunSpawnWaveAsync(MiniGameSpawnWave spawnWave, CancellationToken cancellationToken)
+    private async Task RunSpawnWaveAsync(MiniGameSpawnWave spawnWave, CancellationToken cancellationToken)
     {
         try
         {
-            if (cancellationToken.IsCancellationRequested)
+            while (spawnWave.StartTime > this._elapsedTimeSinceStart?.Elapsed)
             {
-                return;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            if (spawnWave.StartTime > TimeSpan.Zero)
-            {
-                await Task.Delay(spawnWave.StartTime, cancellationToken).ConfigureAwait(false);
+                // Wait at least a second (or half of the remaining time) to the next check
+                var timeUntilNextCheck = (spawnWave.StartTime - this._elapsedTimeSinceStart!.Elapsed) / 2;
+                var requiredDelay = timeUntilNextCheck > TimeSpan.FromSeconds(1)
+                    ? timeUntilNextCheck
+                    : TimeSpan.FromSeconds(1);
+                await Task.Delay(requiredDelay, cancellationToken).ConfigureAwait(false);
             }
 
             this.Logger.LogDebug("{context}: Starting next wave: {wave}", this, spawnWave.Description);
@@ -620,7 +636,11 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
                 await this.ShowMessageAsync(message).ConfigureAwait(false);
             }
 
-            this._currentSpawnWaves.Add(spawnWave.WaveNumber);
+            if (!this._currentSpawnWaves.TryAdd(spawnWave.WaveNumber, spawnWave))
+            {
+                this.Logger.LogWarning("{context}: Duplicate spawn wave number in event: {wave}. Check your configuration, every spawn wave needs a distinct number.", this, spawnWave.Description);
+            }
+
             await this._mapInitializer.InitializeNpcsOnWaveStartAsync(this.Map, this, spawnWave.WaveNumber).ConfigureAwait(false);
             await Task.Delay(spawnWave.EndTime - spawnWave.StartTime, cancellationToken).ConfigureAwait(false);
             this.Logger.LogDebug("{context}: Wave ended: {wave}", this, spawnWave.Description);
@@ -628,6 +648,7 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
         catch (OperationCanceledException)
         {
             // do nothing, as it's expected when game ends ...
+            throw;
         }
         catch (Exception ex)
         {
@@ -635,7 +656,7 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
         }
         finally
         {
-            this._currentSpawnWaves.Remove(spawnWave.WaveNumber);
+            this._currentSpawnWaves.Remove(spawnWave.WaveNumber, out _);
         }
     }
 
@@ -700,11 +721,11 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
             await this.StopAsync().ConfigureAwait(false);
 
             this.Logger.LogDebug("{context}: Waiting for the exit duration of {exitDuration}", this, exitDuration);
-            await Task.Delay(exitDuration, default).ConfigureAwait(false);
+            await Task.Delay(exitDuration, default(CancellationToken)).ConfigureAwait(false);
             await this.ShowCountdownMessageAsync().ConfigureAwait(false);
 
             this.Logger.LogDebug("{context}: Waiting for the exit countdown duration of {countdownMessageDuration}", this, countdownMessageDuration);
-            await Task.Delay(countdownMessageDuration, default).ConfigureAwait(false);
+            await Task.Delay(countdownMessageDuration, default(CancellationToken)).ConfigureAwait(false);
 
             this.Logger.LogDebug("{context}: Shutting down event", this);
             await this.ShutdownGameAsync().ConfigureAwait(false);
@@ -719,7 +740,7 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
         }
         finally
         {
-            await this.DisposeAsync();
+            await this.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -760,7 +781,7 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
         using (await this._enterLock.WriterLockAsync().ConfigureAwait(false))
         {
             this.State = MiniGameState.Ended;
-            this._gameEndedCts.Cancel();
+            await this._gameEndedCts.CancelAsync().ConfigureAwait(false);
         }
 
         this._currentSpawnWaves.Clear();
@@ -794,7 +815,7 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
     {
         await this.MovePlayersToSafezoneAsync().ConfigureAwait(false);
 
-        await this.DisposeAsync();
+        await this.DisposeAsync().ConfigureAwait(false);
     }
 
     private async ValueTask MovePlayersToSafezoneAsync()
@@ -882,7 +903,7 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
                 await this.OnTerrainChangingAsync(changeEvent).ConfigureAwait(false);
                 await this.UpdateClientTerrainAsync(changeEvent.TerrainChanges).ConfigureAwait(false);
                 this.UpdateServerTerrain(changeEvent.TerrainChanges);
-                await this.Map.ClearDropsOnInvalidTerrain().ConfigureAwait(false);
+                await this.Map.ClearDropsOnInvalidTerrainAsync().ConfigureAwait(false);
                 await this.OnTerrainChangedAsync(changeEvent).ConfigureAwait(false);
             }
 
@@ -890,7 +911,7 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
             {
                 for (int i = 0; i < spawnArea.Quantity; i++)
                 {
-                    await this._mapInitializer.InitializeSpawnAsync(this.Map, spawnArea, this).ConfigureAwait(false);
+                    await this._mapInitializer.InitializeSpawnAsync(i, this.Map, spawnArea, this).ConfigureAwait(false);
                 }
             }
 
@@ -959,7 +980,9 @@ public class MiniGameContext : AsyncDisposable, IEventStateProvider
 
     private void UpdateNextEvent()
     {
-        this.NextEvent = this._remainingEvents.MinBy(e => e.Definition.Index);
+        this.NextEvent = this._remainingEvents.Count == 0
+            ? null
+            : this._remainingEvents.MinBy(e => e.Definition.Index);
     }
 
     private bool IsKillValid(IAttackable killedObject, MiniGameChangeEvent definition)

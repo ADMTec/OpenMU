@@ -31,8 +31,17 @@ public class TradeAcceptAction : BaseTradeAction
             }
             else
             {
-                await this.OpenTradeAsync(tradeAccepter).ConfigureAwait(false);
-                await this.OpenTradeAsync(tradePartner).ConfigureAwait(false);
+                try
+                {
+                    await this.OpenTradeAsync(tradeAccepter).ConfigureAwait(false);
+                    await this.OpenTradeAsync(tradePartner).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    tradeAccepter.Logger.LogError(ex, "Error while opening a trade between {tradeAccepter} and {tradePartner}", tradeAccepter, tradePartner);
+                    await this.CancelTradeAsync(tradeAccepter).ConfigureAwait(false);
+                    await this.CancelTradeAsync(tradePartner).ConfigureAwait(false);
+                }
             }
         }
         else
@@ -55,7 +64,7 @@ public class TradeAcceptAction : BaseTradeAction
     internal async ValueTask OpenTradeAsync(ITrader trader)
     {
         // first make sure that all items which could be transferred are already present in the database
-        await trader.PersistenceContext.SaveChangesAsync().ConfigureAwait(false);
+        await trader.SaveProgressAsync().ConfigureAwait(false);
 
         trader.BackupInventory = new BackupItemStorage(trader.Inventory!.ItemStorage);
         trader.TradingMoney = 0;

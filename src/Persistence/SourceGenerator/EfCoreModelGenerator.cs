@@ -7,6 +7,7 @@ namespace MUnique.OpenMU.Persistence.SourceGenerator;
 using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
+using MUnique.OpenMU.Annotations;
 using MUnique.OpenMU.AttributeSystem;
 using MUnique.OpenMU.DataModel.Composition;
 
@@ -33,6 +34,7 @@ public class EfCoreModelGenerator : ModelGeneratorBase, IUnboundSourceGenerator
     {
         ("MUnique.OpenMU.DataModel.Configuration.CharacterClass", false),
         ("MUnique.OpenMU.DataModel.Configuration.DropItemGroup", false),
+        ("MUnique.OpenMU.DataModel.Configuration.Items.IncreasableItemOption", false),
         ("MUnique.OpenMU.DataModel.Configuration.Items.ItemDefinition", false),
         ("MUnique.OpenMU.DataModel.Configuration.Items.ItemOption", false),
         ("MUnique.OpenMU.DataModel.Configuration.Items.ItemOptionType", false),
@@ -55,6 +57,7 @@ public class EfCoreModelGenerator : ModelGeneratorBase, IUnboundSourceGenerator
             var className = type.Name;
             var fullName = type.FullName;
             var standaloneCollectionProperties = this.GetStandaloneCollectionProperties(type).ToList();
+            var isCloneable = type.GetCustomAttribute<CloneableAttribute>(true) is not null;
 
             var classSource = $@"{string.Format(FileHeaderTemplate, className)}
 
@@ -72,7 +75,7 @@ internal partial class {className} : {fullName}, IIdentifiable
     {this.CreateConstructors(type, standaloneCollectionProperties.Any())}
     {this.CreateIdPropertyIfRequired(type)}
     {this.CreateNavigationProperties(type)}
-
+{(isCloneable ? this.OverrideClonable(type, className) : null)}
     /// <inheritdoc/>
     public override bool Equals(object obj)
     {{
@@ -224,6 +227,7 @@ public static class MapsterConfigurator
             .SelectMany(t => t.GetProperties().Where(p =>
                 p.PropertyType.IsGenericType &&
                 p.PropertyType.GetGenericTypeDefinition() == typeof(ICollection<>) &&
+                !IsMemberOfAggregate(p) &&
                 IsStandaloneType(p.PropertyType.GenericTypeArguments[0].FullName, t))).ToList();
 
         foreach (PropertyInfo propertyInfo in allStandaloneCollectionProperties)
@@ -322,6 +326,7 @@ public class ExtendedTypeContext : Microsoft.EntityFrameworkCore.DbContext
             .Where(p => type.FullName == GameConfigurationFullName ||
                         !(p.PropertyType.IsGenericType
                           && p.PropertyType.GetGenericTypeDefinition() == typeof(ICollection<>)
+                          && !IsMemberOfAggregate(p)
                           && IsStandaloneType(p.PropertyType.GenericTypeArguments[0].FullName, type)))
             .ToList();
 
@@ -471,7 +476,10 @@ public class ExtendedTypeContext : Microsoft.EntityFrameworkCore.DbContext
     private IEnumerable<PropertyInfo> GetStandaloneCollectionProperties(Type type)
     {
         return type.FullName != GameConfigurationFullName ?
-            type.GetProperties().Where(p => p.PropertyType.IsGenericType && p.PropertyType.GetGenericTypeDefinition() == typeof(ICollection<>) && IsStandaloneType(p.PropertyType.GenericTypeArguments[0].FullName, type)).ToList() :
+            type.GetProperties().Where(p => p.PropertyType.IsGenericType
+                                            && p.PropertyType.GetGenericTypeDefinition() == typeof(ICollection<>)
+                                            && !IsMemberOfAggregate(p)
+                                            && IsStandaloneType(p.PropertyType.GenericTypeArguments[0].FullName, type)).ToList() :
             Enumerable.Empty<PropertyInfo>();
     }
 

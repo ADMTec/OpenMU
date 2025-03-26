@@ -57,7 +57,7 @@ public class AncientSets : InitializerBase
             (5, ItemGroups.Helm, Stats.TotalVitality, 1),
             (5, ItemGroups.Pants, Stats.TotalVitality, 1),
             (5, ItemGroups.Armor, Stats.TotalVitality, 1),
-            (1, ItemGroups.Axes, Stats.TotalStrength, 1), // Morning Star
+            (1, ItemGroups.Scepters, Stats.TotalStrength, 1), // Morning Star
             (8, ItemGroups.Misc1, Stats.TotalAgility, 1)); // Ring of Ice
 
         var anonymous = this.AddAncientSet(
@@ -73,7 +73,7 @@ public class AncientSets : InitializerBase
             (5, ItemGroups.Boots, Stats.TotalVitality, 2),
             (5, ItemGroups.Helm, Stats.TotalVitality, 2),
             (5, ItemGroups.Pants, Stats.TotalVitality, 2),
-            (0, ItemGroups.Shields, Stats.TotalVitality, 2)); // Small Shield
+            (0, ItemGroups.Shields, Stats.TotalVitality, 1)); // Small Shield
 
         var hyperion = this.AddAncientSet(
             "Hyperion", // Bronze
@@ -99,9 +99,9 @@ public class AncientSets : InitializerBase
         mist.SetGuid(0, 2);
         this.AddItems(
             mist,
-            (0, ItemGroups.Gloves, Stats.TotalVitality, 2),
+            (0, ItemGroups.Gloves, Stats.TotalVitality, 1),
             (0, ItemGroups.Pants, Stats.TotalVitality, 2),
-            (0, ItemGroups.Helm, Stats.TotalVitality, 2));
+            (0, ItemGroups.Helm, Stats.TotalVitality, 1));
 
         var eplete = this.AddAncientSet(
             "Eplete", // Scale
@@ -137,8 +137,8 @@ public class AncientSets : InitializerBase
             (6, ItemGroups.Pants, Stats.TotalVitality, 2),
             (6, ItemGroups.Armor, Stats.TotalVitality, 2),
             (6, ItemGroups.Helm, Stats.TotalVitality, 2),
-            (6, ItemGroups.Gloves, Stats.TotalVitality, 2),
-            (6, ItemGroups.Boots, Stats.TotalVitality, 2));
+            (6, ItemGroups.Gloves, Stats.TotalVitality, 1),
+            (6, ItemGroups.Boots, Stats.TotalVitality, 1));
 
         var garuda = this.AddAncientSet(
             "Garuda", // Brass
@@ -167,7 +167,7 @@ public class AncientSets : InitializerBase
         this.AddItems(
             cloud,
             (8, ItemGroups.Pants, Stats.TotalVitality, 2),
-            (8, ItemGroups.Helm, Stats.TotalVitality, 2));
+            (8, ItemGroups.Helm, Stats.TotalVitality, 1));
 
         var kantata = this.AddAncientSet(
             "Kantata", // Plate
@@ -198,8 +198,8 @@ public class AncientSets : InitializerBase
         rave.SetGuid(9, 2);
         this.AddItems(
             rave,
-            (9, ItemGroups.Helm, Stats.TotalVitality, 2),
-            (9, ItemGroups.Pants, Stats.TotalVitality, 2),
+            (9, ItemGroups.Helm, Stats.TotalVitality, 1),
+            (9, ItemGroups.Pants, Stats.TotalVitality, 1),
             (9, ItemGroups.Armor, Stats.TotalVitality, 2));
 
         var hyon = this.AddAncientSet(
@@ -258,7 +258,7 @@ public class AncientSets : InitializerBase
             (2, ItemGroups.Pants, Stats.TotalVitality, 1),
             (2, ItemGroups.Gloves, Stats.TotalVitality, 1),
             (25, ItemGroups.Misc1, Stats.TotalStrength, 1), // Pendant of Ice
-            (24, ItemGroups.Misc1, Stats.BaseEnergy, 1)); // Ring of Magic
+            (24, ItemGroups.Misc1, Stats.TotalEnergy, 1)); // Ring of Magic
 
         var barnake = this.AddAncientSet(
             "Barnake", // Pad
@@ -272,7 +272,7 @@ public class AncientSets : InitializerBase
             barnake,
             (2, ItemGroups.Helm, Stats.TotalVitality, 2),
             (2, ItemGroups.Pants, Stats.TotalVitality, 2),
-            (2, ItemGroups.Boots, Stats.TotalVitality, 2));
+            (2, ItemGroups.Boots, Stats.TotalVitality, 1));
 
         var evis = this.AddAncientSet(
             "Evis", // Bone
@@ -305,9 +305,9 @@ public class AncientSets : InitializerBase
         this.AddItems(
             sylion,
             (4, ItemGroups.Armor, Stats.TotalVitality, 2),
-            (4, ItemGroups.Gloves, Stats.TotalVitality, 2),
+            (4, ItemGroups.Gloves, Stats.TotalVitality, 1),
             (4, ItemGroups.Boots, Stats.TotalVitality, 2),
-            (4, ItemGroups.Helm, Stats.TotalVitality, 2));
+            (4, ItemGroups.Helm, Stats.TotalVitality, 1));
 
         var heras = this.AddAncientSet(
             "Heras", // Sphinx
@@ -411,7 +411,7 @@ public class AncientSets : InitializerBase
         this.AddItems(
             drake,
             (10, ItemGroups.Boots, Stats.TotalVitality, 2),
-            (10, ItemGroups.Armor, Stats.TotalVitality, 2),
+            (10, ItemGroups.Armor, Stats.TotalVitality, 1),
             (10, ItemGroups.Helm, Stats.TotalVitality, 2),
             (10, ItemGroups.Pants, Stats.TotalVitality, 2));
 
@@ -432,7 +432,7 @@ public class AncientSets : InitializerBase
             (11, ItemGroups.Gloves, Stats.TotalVitality, 1),
             (11, ItemGroups.Helm, Stats.TotalVitality, 1),
             (11, ItemGroups.Pants, Stats.TotalVitality, 1),
-            (9, ItemGroups.Bows, Stats.TotalStrength, 1)); // Golden Crossbow
+            (9, ItemGroups.Bows, Stats.TotalAgility, 1)); // Golden Crossbow
 
         var fase = this.AddAncientSet(
             "Fase", // Silk
@@ -445,7 +445,7 @@ public class AncientSets : InitializerBase
             fase,
             (11, ItemGroups.Gloves, Stats.TotalVitality, 2),
             (11, ItemGroups.Pants, Stats.TotalVitality, 2),
-            (11, ItemGroups.Boots, Stats.TotalVitality, 2));
+            (11, ItemGroups.Boots, Stats.TotalVitality, 1));
 
         var odin = this.AddAncientSet(
             "Odin", // Wind
@@ -674,6 +674,10 @@ public class AncientSets : InitializerBase
         set.CountDistinct = true;
         set.MinimumItemCount = 2;
         int number = 1;
+        var options = this.Context.CreateNew<ItemOptionDefinition>();
+        options.SetGuid(ItemOptionDefinitionNumbers.AncientOption, setNumber, (byte)number);
+        options.Name = $"{name} (Ancient Set)";
+        set.Options = options;
         foreach (var optionTuple in ancientOptions)
         {
             var option = this.Context.CreateNew<IncreasableItemOption>();
@@ -684,10 +688,11 @@ public class AncientSets : InitializerBase
             option.PowerUpDefinition.TargetAttribute = optionTuple.Attribute.GetPersistent(this.GameConfiguration);
             option.PowerUpDefinition.Boost = this.Context.CreateNew<PowerUpDefinitionValue>();
             option.PowerUpDefinition.Boost.ConstantValue.Value = optionTuple.Value;
-            set.Options.Add(option);
+            options.PossibleOptions.Add(option);
         }
 
         this.GameConfiguration.ItemSetGroups.Add(set);
+        this.GameConfiguration.ItemOptions.Add(options);
         return set;
     }
 

@@ -38,7 +38,9 @@ public abstract class GameConfigurationInitializerBase : InitializerBase
     public override void Initialize()
     {
         this.GameConfiguration.ExperienceRate = 1.0f;
+        this.GameConfiguration.MinimumMonsterLevelForMasterExperience = 95;
         this.GameConfiguration.MaximumLevel = 400;
+        this.GameConfiguration.MaximumMasterLevel = 200;
         this.GameConfiguration.InfoRange = 12;
         this.GameConfiguration.AreaSkillHitsPlayer = false;
         this.GameConfiguration.MaximumInventoryMoney = int.MaxValue;
@@ -52,19 +54,13 @@ public abstract class GameConfigurationInitializerBase : InitializerBase
         this.GameConfiguration.MaximumPartySize = 5;
         this.GameConfiguration.ShouldDropMoney = true;
         this.GameConfiguration.ItemDropDuration = TimeSpan.FromSeconds(60);
+        this.GameConfiguration.MaximumItemOptionLevelDrop = 3;
         this.GameConfiguration.DamagePerOneItemDurability = 2000;
         this.GameConfiguration.DamagePerOnePetDurability = 100000;
         this.GameConfiguration.HitsPerOneItemDurability = 10000;
 
-        // TODO: Instead of saving the table in the database, save the formula.
-        //       The table has been used because we had no formula parser back then.
-        this.GameConfiguration.ExperienceTable =
-            Enumerable.Range(0, this.GameConfiguration.MaximumLevel + 2)
-                .Select(level => CalculateNeededExperience(level))
-                .ToArray();
-        this.GameConfiguration.MasterExperienceTable =
-            Enumerable.Range(0, 201).Select(level => this.CalcNeededMasterExp(level))
-                .ToArray();
+        this.GameConfiguration.ExperienceFormula = "if(level == 0, 0, if(level < 256, 10 * (level + 8) * (level - 1) * (level - 1), (10 * (level + 8) * (level - 1) * (level - 1)) + (1000 * (level - 247) * (level - 256) * (level - 256))))";
+        this.GameConfiguration.MasterExperienceFormula = "(505 * level * level * level) + (35278500 * level) + (228045 * level * level)";
 
         this.AddItemDropGroups();
 
@@ -74,12 +70,12 @@ public abstract class GameConfigurationInitializerBase : InitializerBase
         this.CreateItemOptionTypes();
         this.GameConfiguration.ItemOptions.Add(this.CreateLuckOptionDefinition());
         this.GameConfiguration.ItemOptions.Add(this.CreateOptionDefinition(Stats.DefenseBase, ItemOptionDefinitionNumbers.DefenseOption));
-        this.GameConfiguration.ItemOptions.Add(this.CreateOptionDefinition(Stats.MaximumPhysBaseDmg, ItemOptionDefinitionNumbers.PhysicalAttack));
-        this.GameConfiguration.ItemOptions.Add(this.CreateOptionDefinition(Stats.MaximumWizBaseDmg, ItemOptionDefinitionNumbers.WizardryAttack));
-        //// TODO: ItemSetGroups for set bonus
+        this.GameConfiguration.ItemOptions.Add(this.CreateOptionDefinition(Stats.PhysicalBaseDmg, ItemOptionDefinitionNumbers.PhysicalAttack));
+        this.GameConfiguration.ItemOptions.Add(this.CreateOptionDefinition(Stats.WizardryBaseDmg, ItemOptionDefinitionNumbers.WizardryAttack));
+        this.GameConfiguration.ItemOptions.Add(this.CreateOptionDefinition(Stats.DefenseRatePvm, ItemOptionDefinitionNumbers.DefenseRateOption, 5));
     }
 
-    protected ItemOptionDefinition CreateOptionDefinition(AttributeDefinition attributeDefinition, short number)
+    protected ItemOptionDefinition CreateOptionDefinition(AttributeDefinition attributeDefinition, short number, byte baseValue = 4)
     {
         var definition = this.Context.CreateNew<ItemOptionDefinition>();
         definition.SetGuid(number);
@@ -96,7 +92,7 @@ public abstract class GameConfigurationInitializerBase : InitializerBase
         itemOption.PowerUpDefinition.TargetAttribute =
             this.GameConfiguration.Attributes.First(a => a == attributeDefinition);
         itemOption.PowerUpDefinition.Boost = this.Context.CreateNew<PowerUpDefinitionValue>();
-        itemOption.PowerUpDefinition.Boost.ConstantValue!.Value = 4;
+        itemOption.PowerUpDefinition.Boost.ConstantValue!.Value = baseValue;
         for (short level = 2; level <= this.MaximumOptionLevel; level++)
         {
             var levelDependentOption = this.Context.CreateNew<ItemOptionOfLevel>();
@@ -104,7 +100,7 @@ public abstract class GameConfigurationInitializerBase : InitializerBase
             var powerUpDefinition = this.Context.CreateNew<PowerUpDefinition>();
             powerUpDefinition.TargetAttribute = itemOption.PowerUpDefinition.TargetAttribute;
             powerUpDefinition.Boost = this.Context.CreateNew<PowerUpDefinitionValue>();
-            powerUpDefinition.Boost.ConstantValue!.Value = level * 4;
+            powerUpDefinition.Boost.ConstantValue!.Value = level * baseValue;
             levelDependentOption.PowerUpDefinition = powerUpDefinition;
             itemOption.LevelDependentOptions.Add(levelDependentOption);
         }
@@ -159,11 +155,20 @@ public abstract class GameConfigurationInitializerBase : InitializerBase
             excellentItemDropItemGroup.SetGuid(3);
             excellentItemDropItemGroup.Chance = 0.0001;
             excellentItemDropItemGroup.ItemType = SpecialItemType.Excellent;
+            excellentItemDropItemGroup.ItemLevel = 0;
             excellentItemDropItemGroup.Description =
                 "The common drop item group for random excellent items (0.01 % drop chance)";
             this.GameConfiguration.DropItemGroups.Add(excellentItemDropItemGroup);
             BaseMapInitializer.RegisterDefaultDropItemGroup(excellentItemDropItemGroup);
         }
+
+        var jewelsDropItemGroup = this.Context.CreateNew<DropItemGroup>();
+        jewelsDropItemGroup.SetGuid(4);
+        jewelsDropItemGroup.Chance = 0.001;
+        jewelsDropItemGroup.ItemType = SpecialItemType.RandomItem;
+        jewelsDropItemGroup.Description = "The jewels drop item group (0.1 % drop chance)";
+        this.GameConfiguration.DropItemGroups.Add(jewelsDropItemGroup);
+        BaseMapInitializer.RegisterDefaultDropItemGroup(jewelsDropItemGroup);
     }
 
     private ItemOptionDefinition CreateLuckOptionDefinition()
@@ -217,6 +222,7 @@ public abstract class GameConfigurationInitializerBase : InitializerBase
         foreach (var attribute in attributes)
         {
             var persistentAttribute = this.Context.CreateNew<AttributeDefinition>(attribute.Id, attribute.Designation, attribute.Description);
+            persistentAttribute.MaximumValue = attribute.MaximumValue;
             this.GameConfiguration.Attributes.Add(persistentAttribute);
         }
     }

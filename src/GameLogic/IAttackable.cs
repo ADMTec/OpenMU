@@ -7,16 +7,6 @@ namespace MUnique.OpenMU.GameLogic;
 using MUnique.OpenMU.AttributeSystem;
 
 /// <summary>
-/// Contains information about the last death of the object.
-/// </summary>
-/// <param name="KillerId">The id of the killer.</param>
-/// <param name="KillerName">The name of the killer.</param>
-/// <param name="FinalHit">The hit info of the final/lethal hit.</param>
-/// <param name="SkillNumber">The number of the used skill.</param>
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.NamingRules", "SA1313:Parameter names should begin with lower-case letter", Justification = "The names are affecting the property names of the record. We want upper case there.")]
-public record DeathInformation(ushort KillerId, string KillerName, HitInfo FinalHit, short SkillNumber);
-
-/// <summary>
 /// Interface for an object which is attackable.
 /// </summary>
 public interface IAttackable : IIdentifiable, ILocateable
@@ -64,7 +54,9 @@ public interface IAttackable : IIdentifiable, ILocateable
     /// <param name="attacker">The attacker.</param>
     /// <param name="skill">The skill.</param>
     /// <param name="isCombo">If set to <c>true</c>, the attacker did a combination of skills.</param>
-    ValueTask AttackByAsync(IAttacker attacker, SkillEntry? skill, bool isCombo);
+    /// <param name="damageFactor">The damage factor.</param>
+    /// <returns>Returns information about the damage inflicted.</returns>
+    ValueTask<HitInfo?> AttackByAsync(IAttacker attacker, SkillEntry? skill, bool isCombo, double damageFactor = 1.0);
 
     /// <summary>
     /// Reflects the damage which was done previously with <see cref="AttackByAsync" /> or even <see cref="ReflectDamageAsync" /> to the <paramref name="reflector" />.
@@ -85,3 +77,13 @@ public interface IAttackable : IIdentifiable, ILocateable
     /// </summary>
     ValueTask KillInstantlyAsync();
 }
+
+/// <summary>
+/// Contains information about the last death of the object.
+/// </summary>
+/// <param name="KillerId">The id of the killer.</param>
+/// <param name="KillerName">The name of the killer.</param>
+/// <param name="FinalHit">The hit info of the final/lethal hit.</param>
+/// <param name="SkillNumber">The number of the used skill.</param>
+// [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.NamingRules", "SA1313:Parameter names should begin with lower-case letter", Justification = "The names are affecting the property names of the record. We want upper case there.")]
+public record DeathInformation(ushort KillerId, string KillerName, HitInfo FinalHit, short SkillNumber);

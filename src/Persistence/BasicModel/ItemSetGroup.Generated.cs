@@ -26,27 +26,6 @@ public partial class ItemSetGroup : MUnique.OpenMU.DataModel.Configuration.Items
     public Guid Id { get; set; }
     
     /// <summary>
-    /// Gets the raw collection of <see cref="Options" />.
-    /// </summary>
-    [System.Text.Json.Serialization.JsonPropertyName("options")]
-    public ICollection<IncreasableItemOption> RawOptions { get; } = new List<IncreasableItemOption>();
-    
-    /// <inheritdoc/>
-    [System.Text.Json.Serialization.JsonIgnore]
-    public override ICollection<MUnique.OpenMU.DataModel.Configuration.Items.IncreasableItemOption> Options
-    {
-        get => base.Options ??= new CollectionAdapter<MUnique.OpenMU.DataModel.Configuration.Items.IncreasableItemOption, IncreasableItemOption>(this.RawOptions);
-        protected set
-        {
-            this.Options.Clear();
-            foreach (var item in value)
-            {
-                this.Options.Add(item);
-            }
-        }
-    }
-
-    /// <summary>
     /// Gets the raw collection of <see cref="Items" />.
     /// </summary>
     [System.Text.Json.Serialization.JsonPropertyName("items")]
@@ -67,6 +46,38 @@ public partial class ItemSetGroup : MUnique.OpenMU.DataModel.Configuration.Items
         }
     }
 
+    /// <summary>
+    /// Gets the raw object of <see cref="Options" />.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("options")]
+    public ItemOptionDefinition RawOptions
+    {
+        get => base.Options as ItemOptionDefinition;
+        set => base.Options = value;
+    }
+
+    /// <inheritdoc/>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public override MUnique.OpenMU.DataModel.Configuration.Items.ItemOptionDefinition Options
+    {
+        get => base.Options;
+        set => base.Options = value;
+    }
+
+    /// <inheritdoc />
+    public override MUnique.OpenMU.DataModel.Configuration.Items.ItemSetGroup Clone(MUnique.OpenMU.DataModel.Configuration.GameConfiguration gameConfiguration)
+    {
+        var clone = new ItemSetGroup();
+        clone.AssignValuesOf(this, gameConfiguration);
+        return clone;
+    }
+    
+    /// <inheritdoc />
+    public override void AssignValuesOf(MUnique.OpenMU.DataModel.Configuration.Items.ItemSetGroup other, MUnique.OpenMU.DataModel.Configuration.GameConfiguration gameConfiguration)
+    {
+        base.AssignValuesOf(other, gameConfiguration);
+        this.Id = other.GetId();
+    }
 
     /// <inheritdoc/>
     public override bool Equals(object obj)

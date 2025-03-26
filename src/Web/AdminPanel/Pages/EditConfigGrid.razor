@@ -4,7 +4,9 @@
 
 @if (this.Type is not null)
 {
-    <h1>@CaptionHelper.GetPluralizedTypeCaption(this.Type)</h1>
+  <h1>@CaptionHelper.GetPluralizedTypeCaption(this.Type)</h1>
+  <PageTitle>@CaptionHelper.GetPluralizedTypeCaption(this.Type)</PageTitle>
+    <Breadcrumb Caption=@CaptionHelper.GetPluralizedTypeCaption(this.Type) IsFirstFromRoot="true"></Breadcrumb>
 }
 
 @if (this.ViewModels is null)
@@ -18,7 +20,7 @@
     <QuickGrid Items="@this.ViewModels" Pagination="@_pagination" Theme="none" >
         <PropertyColumn Property="@(c => c.Name)" Sortable="true">
             <HeaderTemplate>
-                <button class="col-title" onclick="@(() => context.Grid.SortByColumnAsync(context))">
+                <button type="button" class="col-title" onclick="@(() => context.Grid.SortByColumnAsync(context))">
                     <div class="col-title-text">@context.Title</div>
                     <div class="sort-indicator" aria-hidden="true"></div>
                 </button>
@@ -32,8 +34,11 @@
             @{
                 var targetUrl = $"edit-config/{this.TypeString}/" + context.Id;
             }
-            <button type="button" class="btn-info" @onclick="@(() => this.NavigationManager.NavigateTo(targetUrl))">Edit</button>
+            <a href="@(targetUrl)" class="btn btn-info">Edit</a>
+            <button type="button" class="btn-danger" @onclick="@(() => this.OnDeleteButtonClickAsync(context))"><span class="oi oi-trash"></span> Delete</button>
         </TemplateColumn>
     </QuickGrid>
 </div>
-<Paginator Value="@_pagination" />
+<Paginator State="@_pagination" />
+<hr />
+<button type="button" class="btn-outline-primary" @onclick="OnCreateButtonClickAsync"><span class="oi oi-plus"></span> Add New</button>

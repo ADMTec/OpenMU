@@ -5,6 +5,7 @@
 namespace MUnique.OpenMU.Persistence;
 
 using System.Collections;
+using System.Threading;
 
 /// <summary>
 /// The context for repository actions.
@@ -19,14 +20,19 @@ public interface IContext : IDisposable
     /// <summary>
     /// Saves the changes of the context.
     /// </summary>
-    /// <returns><c>True</c>, if the saving was successful; <c>false</c>, otherwise.</returns>
-    bool SaveChanges();
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>
+    ///   <c>True</c>, if the saving was successful; <c>false</c>, otherwise.
+    /// </returns>
+    ValueTask<bool> SaveChangesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Saves the changes of the context.
+    /// Suspends the change notifications.
+    /// The notifications are re-enabled when the returned disposable is disposed,
+    /// but the notifications are not triggered for the changes which happened during the suspension.
     /// </summary>
-    /// <returns><c>True</c>, if the saving was successful; <c>false</c>, otherwise.</returns>
-    ValueTask<bool> SaveChangesAsync();
+    /// <returns>A disposable, which must be disposed to re-enable notifications.</returns>
+    IDisposable SuspendChangeNotifications();
 
     /// <summary>
     /// Detaches the specified item from the context, if required.
@@ -35,7 +41,7 @@ public interface IContext : IDisposable
     /// <param name="item">The item which should be detached.</param>
     /// <returns><c>true</c>, if the object was persisted.</returns>
     /// <remarks>
-    /// When calling this method, be sure to clear a back reference property before. Otherwise you might detach more than you intended.
+    /// When calling this method, be sure to clear a back reference property before. Otherwise, you might detach more than you intended.
     /// </remarks>
     bool Detach(object item);
 
@@ -45,7 +51,7 @@ public interface IContext : IDisposable
     /// </summary>
     /// <param name="item">The item which should be attached.</param>
     /// <remarks>
-    /// When calling this method, be sure to clear a previous back reference property before. Otherwise you might attach more than you intended.
+    /// When calling this method, be sure to clear a previous back reference property before. Otherwise, you might attach more than you intended.
     /// </remarks>
     void Attach(object item);
 
@@ -62,6 +68,17 @@ public interface IContext : IDisposable
         where T : class;
 
     /// <summary>
+    /// Creates a new instance of the given type.
+    /// Attention: This operation needs a currently used context in the current thread!.
+    /// </summary>
+    /// <param name="type">The type which should get created.</param>
+    /// <param name="args">The arguments.</param>
+    /// <returns>
+    /// A new instance of <paramref name="type" />.
+    /// </returns>
+    object CreateNew(Type type, params object?[] args);
+
+    /// <summary>
     /// Deletes the specified object.
     /// </summary>
     /// <typeparam name="T">The type of the object.</typeparam>
@@ -75,8 +92,11 @@ public interface IContext : IDisposable
     /// </summary>
     /// <typeparam name="T">The type of the requested object.</typeparam>
     /// <param name="id">The identifier.</param>
-    /// <returns>The object of the specified type by its identifier.</returns>
-    Task<T?> GetByIdAsync<T>(Guid id)
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>
+    /// The object of the specified type by its identifier.
+    /// </returns>
+    Task<T?> GetByIdAsync<T>(Guid id, CancellationToken cancellationToken = default)
         where T : class;
 
     /// <summary>
@@ -84,21 +104,40 @@ public interface IContext : IDisposable
     /// </summary>
     /// <param name="id">The identifier.</param>
     /// <param name="type">The type of the requested object.</param>
-    /// <returns>The object of the specified type by its identifier.</returns>
-    Task<object?> GetByIdAsync(Guid id, Type type);
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>
+    /// The object of the specified type by its identifier.
+    /// </returns>
+    Task<object?> GetByIdAsync(Guid id, Type type, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets all objects of the specified type. Use with caution!.
     /// </summary>
     /// <typeparam name="T">The type of the requested objects.</typeparam>
-    /// <returns>All objects of the specified type.</returns>
-    ValueTask<IEnumerable<T>> GetAsync<T>()
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>
+    /// All objects of the specified type.
+    /// </returns>
+    ValueTask<IEnumerable<T>> GetAsync<T>(CancellationToken cancellationToken = default)
         where T : class;
 
     /// <summary>
     /// Gets all objects of the specified type. Use with caution!.
     /// </summary>
     /// <param name="type">The type.</param>
-    /// <returns>All objects of the specified type.</returns>
-    ValueTask<IEnumerable> GetAsync(Type type);
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>
+    /// All objects of the specified type.
+    /// </returns>
+    ValueTask<IEnumerable> GetAsync(Type type, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Determines whether the specified type is supported by this instance.
+    /// This is usually the case for a type of the object tree of the owner.
+    /// </summary>
+    /// <param name="type">The type.</param>
+    /// <returns>
+    ///   <c>true</c> if the specified type is supported; otherwise, <c>false</c>.
+    /// </returns>
+    bool IsSupporting(Type type);
 }

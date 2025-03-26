@@ -614,7 +614,7 @@ public class ViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Gets the possible socket bonus options.
+    /// Gets the possible fenrir options.
     /// </summary>
     public IEnumerable<IncreasableItemOption> PossibleFenrirOptions
     {
@@ -716,7 +716,7 @@ public class ViewModel : INotifyPropertyChanged
         this.AncientSet = null;
 
         // Reassigning the durability will limit it to the maximum value.
-        this.Durability = Math.Max(this.Item.Durability, 1);
+        this.Durability = this.Item.GetMaximumDurabilityOfOnePiece();
 
         var possibleOptions = this.Definition.PossibleItemOptions.SelectMany(pio => pio.PossibleOptions).ToHashSet();
         var impossibleOptions = this.ItemOptions.Where(iol => iol.ItemOption is null || possibleOptions.Contains(iol.ItemOption)).ToList();

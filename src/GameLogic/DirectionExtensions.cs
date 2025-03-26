@@ -31,7 +31,7 @@ public static class DirectionExtensions
             Direction.NorthWest => new Point((byte)(origin.X - 1), origin.Y),
             Direction.SouthEast => new Point((byte)(origin.X + 1), origin.Y),
             Direction.SouthWest => new Point(origin.X, (byte)(origin.Y - 1)),
-            _ => throw new ArgumentException($"Direction value {direction} is not defined", nameof(direction))
+            _ => throw new ArgumentException($"Direction value {direction} is not defined", nameof(direction)),
         };
     }
 
@@ -43,6 +43,11 @@ public static class DirectionExtensions
     /// <returns>The direction from the origin to the target.</returns>
     public static Direction GetDirectionTo(this Point from, Point to)
     {
+        if (from == to)
+        {
+            return Direction.Undefined;
+        }
+
         double angle = Math.Atan2(to.Y - from.Y, to.X - from.X);
         angle += Math.PI;
         angle /= Math.PI / 4;
@@ -59,7 +64,7 @@ public static class DirectionExtensions
             4 => Direction.SouthEast,
             5 => Direction.East,
             6 => Direction.NorthEast,
-            _ => Direction.Undefined
+            _ => Direction.Undefined,
         };
     }
 }

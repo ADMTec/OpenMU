@@ -237,7 +237,7 @@ public class PowerUpFactoryTest
     public void AncientSetComplete()
     {
         var factory = this.GetPowerUpFactory();
-        var items = this.GetAncientSet(6, 5);
+        var items = this.GetAncientSet(6, 5).ToList();
         var result = factory.GetSetPowerUps(items, this.GetAttributeSystem(), new GameConfiguration());
         Assert.That(result.Count(), Is.EqualTo(6));
         var bonusOptions = items.SelectMany(item => factory.GetPowerUps(item, this.GetAttributeSystem()));
@@ -291,7 +291,7 @@ public class PowerUpFactoryTest
         var bonusTableMock = new Mock<ItemLevelBonusTable>();
         bonusTableMock.Setup(r => r.BonusPerLevel).Returns(new List<LevelBonus>());
         var result = resultMock.Object;
-        result.BaseValueElement = new ConstantElement(PowerUpStrength);
+        result.BaseValue = PowerUpStrength;
         result.TargetAttribute = Stats.MaximumPhysBaseDmg;
         var bonusTable = bonusTableMock.Object;
         result.BonusPerLevelTable = bonusTable;
@@ -318,12 +318,17 @@ public class PowerUpFactoryTest
 
     private IEnumerable<Item> GetDefenseBonusSet(float setBonusDefense, byte minimumLevel, params byte[] levels)
     {
+        var itemOptionDef = new Mock<ItemOptionDefinition>();
+        itemOptionDef.Setup(a => a.PossibleOptions).Returns(new List<IncreasableItemOption>());
+        itemOptionDef.Object.PossibleOptions.Add(this.GetOption(Stats.DefenseBase, setBonusDefense).ItemOption!);
+
         var armorSet = new Mock<ItemSetGroup>();
         armorSet.Setup(a => a.Items).Returns(new List<ItemOfItemSet>());
-        armorSet.Setup(a => a.Options).Returns(new List<IncreasableItemOption>());
+        armorSet.Setup(a => a.Options).Returns(itemOptionDef.Object);
+
         armorSet.Object.MinimumItemCount = levels.Length;
         armorSet.Object.SetLevel = minimumLevel;
-        armorSet.Object.Options.Add(this.GetOption(Stats.DefenseBase, setBonusDefense).ItemOption!);
+        
         foreach (var level in levels)
         {
             var item = this.GetItem();
@@ -338,15 +343,18 @@ public class PowerUpFactoryTest
 
     private IEnumerable<Item> GetAncientSet(int ancientOptionCount, int itemCount)
     {
+        var itemOptionDef = new Mock<ItemOptionDefinition>();
+        itemOptionDef.Setup(a => a.PossibleOptions).Returns(new List<IncreasableItemOption>());
         var ancientSet = new Mock<ItemSetGroup>();
         ancientSet.Setup(a => a.Items).Returns(new List<ItemOfItemSet>());
-        ancientSet.Setup(a => a.Options).Returns(new List<IncreasableItemOption>());
+        ancientSet.Setup(a => a.Options).Returns(itemOptionDef.Object);
+
         ancientSet.Object.MinimumItemCount = 2;
         for (int i = 0; i < ancientOptionCount; i++)
         {
             var setOption = this.GetOption(Stats.DefenseBase, i + 10).ItemOption;
             setOption!.Number = i + 1;
-            ancientSet.Object.Options.Add(setOption);
+            itemOptionDef.Object.PossibleOptions.Add(setOption);
         }
 
         var bonusOption = this.GetOption(Stats.TotalStrength, 5).ItemOption;

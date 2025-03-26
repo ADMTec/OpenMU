@@ -35,11 +35,12 @@ public interface IMapInitializer
     /// <summary>
     /// Initializes the spawn on the map.
     /// </summary>
+    /// <param name="spawnIndex">The spawn index.</param>
     /// <param name="gameMap">The game map on which the spawn should be initialized.</param>
     /// <param name="spawnArea">The spawn area.</param>
     /// <param name="eventStateProvider">The event state provider.</param>
     /// <param name="dropGenerator">The drop generator.</param>
-    ValueTask<NonPlayerCharacter?> InitializeSpawnAsync(GameMap gameMap, MonsterSpawnArea spawnArea, IEventStateProvider? eventStateProvider = null, IDropGenerator? dropGenerator = null);
+    ValueTask<NonPlayerCharacter?> InitializeSpawnAsync(int spawnIndex, GameMap gameMap, MonsterSpawnArea spawnArea, IEventStateProvider? eventStateProvider = null, IDropGenerator? dropGenerator = null);
 
     /// <summary>
     /// Initializes the event NPCs of the previously created game map.

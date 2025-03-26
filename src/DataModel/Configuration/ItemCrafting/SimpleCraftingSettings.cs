@@ -4,10 +4,13 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration.ItemCrafting;
 
+using MUnique.OpenMU.Annotations;
+
 /// <summary>
 /// Crafting settings for the simple item crafting handler.
 /// </summary>
-public class SimpleCraftingSettings
+[Cloneable]
+public partial class SimpleCraftingSettings
 {
     /// <summary>
     /// Gets or sets the price to do the crafting.
@@ -18,6 +21,12 @@ public class SimpleCraftingSettings
     /// Gets or sets the price to do the crafting.
     /// </summary>
     public int MoneyPerFinalSuccessPercentage { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NPC price divisor for the sum of crafting items' prices. For each full division, the percentage gets increased by 1 percent, and the mix price rises.
+    /// </summary>
+    /// <remarks>Used for Chaos Weapon and 1st Level Wing craftings.</remarks>
+    public int NpcPriceDivisor { get; set; }
 
     /// <summary>
     /// Gets or sets the success percent.
@@ -65,6 +74,11 @@ public class SimpleCraftingSettings
     /// Gets or sets the success percentage addition for an ancient item which gets modified.
     /// </summary>
     public int SuccessPercentageAdditionForAncientItem { get; set; }
+
+    /// <summary>
+    /// Gets or sets the success percentage addition for a "380 item" which gets modified.
+    /// </summary>
+    public int SuccessPercentageAdditionForGuardianItem { get; set; }
 
     /// <summary>
     /// Gets or sets the success percentage addition for a socket item which gets modified.

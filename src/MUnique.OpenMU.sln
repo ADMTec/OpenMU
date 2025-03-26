@@ -6,6 +6,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MUnique.OpenMU.GameServer", "GameServer\MUnique.OpenMU.GameServer.csproj", "{8EC9EBEE-56DD-4139-AA02-D154CA8536E6}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MUnique.OpenMU.DataModel", "DataModel\MUnique.OpenMU.DataModel.csproj", "{5282F509-D758-4A42-994C-F71A4C631FDA}"
+	ProjectSection(ProjectDependencies) = postProject
+		{338E0C94-5FA1-4F20-86EC-FCBA34CFB1E2} = {338E0C94-5FA1-4F20-86EC-FCBA34CFB1E2}
+	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MUnique.OpenMU.GameLogic", "GameLogic\MUnique.OpenMU.GameLogic.csproj", "{7DEC119D-79EF-4E43-9A72-DB07A6CAE73E}"
 EndProject
@@ -43,7 +46,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		..\.gitignore = ..\.gitignore
 		..\azure-pipelines.yml = ..\azure-pipelines.yml
 		Directory.Build.props = Directory.Build.props
+		..\.github\workflows\dotnetcore.yml = ..\.github\workflows\dotnetcore.yml
 		..\LICENSE = ..\LICENSE
+		..\.github\workflows\publish.yml = ..\.github\workflows\publish.yml
 		..\QuickStart.md = ..\QuickStart.md
 		..\Readme.md = ..\Readme.md
 		..\release-docker-images-pipeline.yml = ..\release-docker-images-pipeline.yml
@@ -110,8 +115,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MUnique.OpenMU.Persistence.SourceGenerator", "Persistence\SourceGenerator\MUnique.OpenMU.Persistence.SourceGenerator.csproj", "{3CFAFD8C-E881-45BA-98CE-653D33C95419}"
 	ProjectSection(ProjectDependencies) = postProject
 		{5282F509-D758-4A42-994C-F71A4C631FDA} = {5282F509-D758-4A42-994C-F71A4C631FDA}
-		{CB8A2C80-8ECD-44D6-98B7-AB35891B66FD} = {CB8A2C80-8ECD-44D6-98B7-AB35891B66FD}
 		{5AB17B80-021D-4898-9750-0C26B2AF1A39} = {5AB17B80-021D-4898-9750-0C26B2AF1A39}
+		{CB8A2C80-8ECD-44D6-98B7-AB35891B66FD} = {CB8A2C80-8ECD-44D6-98B7-AB35891B66FD}
 		{F4AFDE9B-6690-4D2B-83C6-DA7426479293} = {F4AFDE9B-6690-4D2B-83C6-DA7426479293}
 	EndProjectSection
 EndProject
@@ -151,6 +156,12 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MUnique.OpenMU.ClientErrorLogDecryptor", "ClientErrorLogDecryptor\MUnique.OpenMU.ClientErrorLogDecryptor.csproj", "{54125AC8-D0CB-4EC8-98DD-BE63E69FD3D6}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MUnique.OpenMU.Web.ItemEditor", "Web\ItemEditor\MUnique.OpenMU.Web.ItemEditor.csproj", "{298D1A42-8958-4662-8A05-E6B6F16F7268}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MUnique.OpenMU.SourceGenerators", "SourceGenerators\MUnique.OpenMU.SourceGenerators.csproj", "{338E0C94-5FA1-4F20-86EC-FCBA34CFB1E2}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MUnique.OpenMU.Annotations", "Annotations\MUnique.OpenMU.Annotations.csproj", "{49C1BAD6-13DC-4FB2-AD46-3D824C2CA74E}"
+EndProject
+Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose-all-in-one-traefik", "..\deploy\all-in-one-traefik\docker-compose-all-in-one-traefik.dcproj", "{4430D6A8-54B5-412B-9DBA-07B3E3580AF7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -327,21 +338,31 @@ Global
 		{92E2F054-1AEA-4038-A837-0F943DF0EBB1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{92E2F054-1AEA-4038-A837-0F943DF0EBB1}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0FF7079E-B864-4FDA-9329-337CC13D0C30}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0FF7079E-B864-4FDA-9329-337CC13D0C30}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0FF7079E-B864-4FDA-9329-337CC13D0C30}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0FF7079E-B864-4FDA-9329-337CC13D0C30}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0DFECD55-7AA2-4263-B6FD-EC1C4E6A59B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0DFECD55-7AA2-4263-B6FD-EC1C4E6A59B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{0DFECD55-7AA2-4263-B6FD-EC1C4E6A59B3}.Release|Any CPU.Build.0 = Release|Any CPU
 		{6518D58A-5F07-4341-87AF-FCF3715D2554}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6518D58A-5F07-4341-87AF-FCF3715D2554}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6518D58A-5F07-4341-87AF-FCF3715D2554}.Release|Any CPU.Build.0 = Release|Any CPU
 		{54125AC8-D0CB-4EC8-98DD-BE63E69FD3D6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{54125AC8-D0CB-4EC8-98DD-BE63E69FD3D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{54125AC8-D0CB-4EC8-98DD-BE63E69FD3D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{54125AC8-D0CB-4EC8-98DD-BE63E69FD3D6}.Release|Any CPU.Build.0 = Release|Any CPU
 		{298D1A42-8958-4662-8A05-E6B6F16F7268}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{298D1A42-8958-4662-8A05-E6B6F16F7268}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{298D1A42-8958-4662-8A05-E6B6F16F7268}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{298D1A42-8958-4662-8A05-E6B6F16F7268}.Release|Any CPU.Build.0 = Release|Any CPU
+		{338E0C94-5FA1-4F20-86EC-FCBA34CFB1E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{338E0C94-5FA1-4F20-86EC-FCBA34CFB1E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{338E0C94-5FA1-4F20-86EC-FCBA34CFB1E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{338E0C94-5FA1-4F20-86EC-FCBA34CFB1E2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{49C1BAD6-13DC-4FB2-AD46-3D824C2CA74E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{49C1BAD6-13DC-4FB2-AD46-3D824C2CA74E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{49C1BAD6-13DC-4FB2-AD46-3D824C2CA74E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{49C1BAD6-13DC-4FB2-AD46-3D824C2CA74E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4430D6A8-54B5-412B-9DBA-07B3E3580AF7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4430D6A8-54B5-412B-9DBA-07B3E3580AF7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -396,6 +417,9 @@ Global
 		{6518D58A-5F07-4341-87AF-FCF3715D2554} = {565BED68-B303-4A3D-A8C0-0088D2A50C46}
 		{54125AC8-D0CB-4EC8-98DD-BE63E69FD3D6} = {C814AC11-2CAD-44F2-80DF-B37FD785E80E}
 		{298D1A42-8958-4662-8A05-E6B6F16F7268} = {820453DE-DA7A-454C-A077-BED8F0FA9764}
+		{338E0C94-5FA1-4F20-86EC-FCBA34CFB1E2} = {09EAF85E-358B-4065-8C81-B0B1FF6C0A09}
+		{49C1BAD6-13DC-4FB2-AD46-3D824C2CA74E} = {09EAF85E-358B-4065-8C81-B0B1FF6C0A09}
+		{4430D6A8-54B5-412B-9DBA-07B3E3580AF7} = {565BED68-B303-4A3D-A8C0-0088D2A50C46}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {28C13837-B616-4790-84D6-4BDCB4A8166D}

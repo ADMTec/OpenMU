@@ -8,7 +8,6 @@ using System.Diagnostics;
 using System.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using MUnique.OpenMU.Interfaces;
 using MUnique.OpenMU.Persistence.EntityFramework.Model;
 using Nito.Disposables;
 using Npgsql;
@@ -19,18 +18,18 @@ using Npgsql;
 public class PersistenceContextProvider : IMigratableDatabaseContextProvider
 {
     private readonly ILoggerFactory _loggerFactory;
-    private IConfigurationChangePublisher? _changePublisher;
+    private IConfigurationChangeListener? _changeListener;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PersistenceContextProvider" /> class.
     /// </summary>
     /// <param name="loggerFactory">The logger factory.</param>
-    /// <param name="changePublisher">The change publisher.</param>
-    public PersistenceContextProvider(ILoggerFactory loggerFactory, IConfigurationChangePublisher? changePublisher)
+    /// <param name="changeListener">The change publisher.</param>
+    public PersistenceContextProvider(ILoggerFactory loggerFactory, IConfigurationChangeListener? changeListener)
     {
         this._loggerFactory = loggerFactory;
-        this._changePublisher = changePublisher;
-        this.RepositoryProvider = new CacheAwareRepositoryProvider(loggerFactory, changePublisher);
+        this._changeListener = changeListener;
+        this.RepositoryProvider = new CacheAwareRepositoryProvider(loggerFactory, changeListener);
     }
 
     /// <summary>
@@ -40,6 +39,9 @@ public class PersistenceContextProvider : IMigratableDatabaseContextProvider
     /// The repository provider.
     /// </value>
     internal CacheAwareRepositoryProvider RepositoryProvider { get; private set; }
+
+    /// <inheritdoc />
+    IRepositoryProvider IPersistenceContextProvider.RepositoryProvider => this.RepositoryProvider;
 
     /// <inheritdoc />
     public async Task<bool> IsDatabaseUpToDateAsync(CancellationToken cancellationToken = default)
@@ -130,14 +132,31 @@ public class PersistenceContextProvider : IMigratableDatabaseContextProvider
         }
     }
 
+    /// <inheritdoc />
+    public async Task<bool> ShouldDoAutoSchemaUpdateAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var installationContext = new EntityDataContext();
+            return await installationContext.Database.SqlQueryRaw<bool>(
+                """
+                   SELECT "AutoUpdateSchema" as "Value" FROM config."SystemConfiguration"
+                   """).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Recreates the database by deleting and creating it again.
     /// </summary>
     /// <returns>The disposable which should be disposed when the data creation process is finished.</returns>
     public async Task<IDisposable> ReCreateDatabaseAsync()
     {
-        var changePublisher = this._changePublisher;
-        this._changePublisher = null;
+        var changePublisher = this._changeListener;
+        this._changeListener = null;
         try
         {
             try
@@ -153,24 +172,32 @@ public class PersistenceContextProvider : IMigratableDatabaseContextProvider
             await this.ApplyAllPendingUpdatesAsync().ConfigureAwait(false);
 
             // We create a new repository provider, so that the previously loaded data is not effective anymore.
-            this.RepositoryProvider = new CacheAwareRepositoryProvider(this._loggerFactory, changePublisher);
+            this.ResetCache();
         }
         catch
         {
-            this._changePublisher = changePublisher;
+            this._changeListener = changePublisher;
         }
 
         return new Disposable(() =>
         {
-            this._changePublisher = changePublisher;
+            this._changeListener = changePublisher;
         });
+    }
+
+    /// <summary>
+    /// Resets the cache of this instance.
+    /// </summary>
+    public void ResetCache()
+    {
+        this.RepositoryProvider = new CacheAwareRepositoryProvider(this._loggerFactory, this._changeListener);
     }
 
     /// <inheritdoc />
     public IContext CreateNewContext()
     {
-        var repositoryProvider = new NonCachingRepositoryProvider(this._loggerFactory, null, this._changePublisher, this.RepositoryProvider.ContextStack);
-        return new EntityFrameworkContext(new EntityDataContext(), this._loggerFactory, repositoryProvider, true, this._changePublisher);
+        var repositoryProvider = new NonCachingRepositoryProvider(this._loggerFactory, null, this._changeListener, this.RepositoryProvider.ContextStack);
+        return new EntityFrameworkContext(new EntityDataContext(), this._loggerFactory, repositoryProvider, true, this._changeListener);
     }
 
     /// <inheritdoc />
@@ -179,7 +206,7 @@ public class PersistenceContextProvider : IMigratableDatabaseContextProvider
         return new CachingEntityFrameworkContext(
             new EntityDataContext { CurrentGameConfiguration = gameConfiguration as GameConfiguration },
             this.RepositoryProvider,
-            this._changePublisher,
+            this._changeListener,
             this._loggerFactory.CreateLogger<CachingEntityFrameworkContext>());
     }
 
@@ -213,12 +240,11 @@ public class PersistenceContextProvider : IMigratableDatabaseContextProvider
         return new GuildServerContext(new GuildContext(), this.RepositoryProvider, this._loggerFactory.CreateLogger<GuildServerContext>());
     }
 
-    /// <inheritdoc />
-    public IContext CreateNewTypedContext<T>(bool useCache, DataModel.Configuration.GameConfiguration? gameConfiguration = null)
+    public IContext CreateNewTypedContext(Type editType, bool useCache, DataModel.Configuration.GameConfiguration? gameConfiguration = null)
     {
-        if (!typeof(T).IsConfigurationType() && gameConfiguration is null)
+        if (!editType.IsConfigurationType() && gameConfiguration is null)
         {
-            Debug.WriteLine($"Non-configuration type {typeof(T)} without game configuration");
+            Debug.WriteLine($"Non-configuration type {editType} without game configuration");
         }
 
         if (useCache && gameConfiguration is null)
@@ -226,13 +252,13 @@ public class PersistenceContextProvider : IMigratableDatabaseContextProvider
             throw new ArgumentNullException(nameof(gameConfiguration), "When cache should be used, the game configuration must be provided.");
         }
 
-        var dbContext = new TypedContext<T> { CurrentGameConfiguration = gameConfiguration as GameConfiguration };
+        var dbContext = new TypedContext(editType) { CurrentGameConfiguration = gameConfiguration as GameConfiguration };
         if (useCache)
         {
-            return new CachingEntityFrameworkContext(dbContext, this.RepositoryProvider, this._changePublisher, this._loggerFactory.CreateLogger<CachingEntityFrameworkContext>());
+            return new CachingEntityFrameworkContext(dbContext, this.RepositoryProvider, this._changeListener, this._loggerFactory.CreateLogger<CachingEntityFrameworkContext>());
         }
 
-        var repositoryProvider = new NonCachingRepositoryProvider(this._loggerFactory, null, this._changePublisher, this.RepositoryProvider.ContextStack);
-        return new EntityFrameworkContext(dbContext, this._loggerFactory, repositoryProvider, true, this._changePublisher);
+        var repositoryProvider = new NonCachingRepositoryProvider(this._loggerFactory, null, this._changeListener, this.RepositoryProvider.ContextStack);
+        return new EntityFrameworkContext(dbContext, this._loggerFactory, repositoryProvider, true, this._changeListener);
     }
 }

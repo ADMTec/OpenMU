@@ -142,6 +142,38 @@ public partial class Skill : MUnique.OpenMU.DataModel.Configuration.Skill, IIden
         set => base.MasterDefinition = value;
     }
 
+    /// <summary>
+    /// Gets the raw object of <see cref="AreaSkillSettings" />.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("areaSkillSettings")]
+    public AreaSkillSettings RawAreaSkillSettings
+    {
+        get => base.AreaSkillSettings as AreaSkillSettings;
+        set => base.AreaSkillSettings = value;
+    }
+
+    /// <inheritdoc/>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public override MUnique.OpenMU.DataModel.Configuration.AreaSkillSettings AreaSkillSettings
+    {
+        get => base.AreaSkillSettings;
+        set => base.AreaSkillSettings = value;
+    }
+
+    /// <inheritdoc />
+    public override MUnique.OpenMU.DataModel.Configuration.Skill Clone(MUnique.OpenMU.DataModel.Configuration.GameConfiguration gameConfiguration)
+    {
+        var clone = new Skill();
+        clone.AssignValuesOf(this, gameConfiguration);
+        return clone;
+    }
+    
+    /// <inheritdoc />
+    public override void AssignValuesOf(MUnique.OpenMU.DataModel.Configuration.Skill other, MUnique.OpenMU.DataModel.Configuration.GameConfiguration gameConfiguration)
+    {
+        base.AssignValuesOf(other, gameConfiguration);
+        this.Id = other.GetId();
+    }
 
     /// <inheritdoc/>
     public override bool Equals(object obj)

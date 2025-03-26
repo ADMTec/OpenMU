@@ -114,16 +114,20 @@ public abstract class InitializerBase : IInitializer
     }
 
     /// <summary>
-    /// Creates the <see cref="ItemBasePowerUpDefinition"/>.
+    /// Creates the <see cref="ItemBasePowerUpDefinition" />.
     /// </summary>
     /// <param name="attributeDefinition">The attribute definition.</param>
     /// <param name="value">The value.</param>
-    /// <returns>The created <see cref="ItemBasePowerUpDefinition"/>.</returns>
-    protected ItemBasePowerUpDefinition CreateItemBasePowerUpDefinition(AttributeDefinition attributeDefinition, float value)
+    /// <param name="aggregateType">Type of the aggregate.</param>
+    /// <returns>
+    /// The created <see cref="ItemBasePowerUpDefinition" />.
+    /// </returns>
+    protected ItemBasePowerUpDefinition CreateItemBasePowerUpDefinition(AttributeDefinition attributeDefinition, float value, AggregateType aggregateType)
     {
         var powerUpDefinition = this.Context.CreateNew<ItemBasePowerUpDefinition>();
         powerUpDefinition.TargetAttribute = attributeDefinition.GetPersistent(this.GameConfiguration);
         powerUpDefinition.BaseValue = value;
+        powerUpDefinition.AggregateType = aggregateType;
         return powerUpDefinition;
     }
 
@@ -176,6 +180,7 @@ public abstract class InitializerBase : IInitializer
         itemOption.Number = number;
 
         itemOption.PowerUpDefinition = this.CreatePowerUpDefinition(attributeDefinition, value, aggregateType);
+        float baseValue = aggregateType == AggregateType.Multiplicate ? 1.0f : 0.0f;
 
         for (int level = 1; level <= this.MaximumOptionLevel; level++)
         {
@@ -183,7 +188,7 @@ public abstract class InitializerBase : IInitializer
             optionOfLevel.Level = level;
             optionOfLevel.PowerUpDefinition = this.CreatePowerUpDefinition(
                 itemOption.PowerUpDefinition.TargetAttribute!,
-                level * valueIncrementPerLevel,
+                baseValue + (level * valueIncrementPerLevel),
                 aggregateType);
             itemOption.LevelDependentOptions.Add(optionOfLevel);
         }

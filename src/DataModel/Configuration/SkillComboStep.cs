@@ -4,11 +4,14 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration;
 
+using MUnique.OpenMU.Annotations;
+
 /// <summary>
 /// Definition for one step for one skill of a combo sequence.
 /// There can be multiple steps with the same <see cref="Order"/> but different skills.
 /// </summary>
-public class SkillComboStep
+[Cloneable]
+public partial class SkillComboStep
 {
     /// <summary>
     /// Gets or sets the order for the step in the sequence.
@@ -24,4 +27,10 @@ public class SkillComboStep
     /// Gets or sets the skill of this step.
     /// </summary>
     public virtual Skill? Skill { get; set; }
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        return $"{this.Order} - {this.Skill}";
+    }
 }

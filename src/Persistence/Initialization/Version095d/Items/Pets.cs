@@ -1,4 +1,4 @@
-﻿// <copyright file="Pets.cs" company="MUnique">
+// <copyright file="Pets.cs" company="MUnique">
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
@@ -30,15 +30,15 @@ public class Pets : InitializerBase
     /// <inheritdoc />
     public override void Initialize()
     {
-        this.CreatePet(0, 0, "Guardian Angel", 23, true, (Stats.DamageReceiveDecrement, 0.2f), (Stats.MaximumHealth, 50f));
-        this.CreatePet(1, 0, "Imp", 28, true, (Stats.AttackDamageIncrease, 0.3f));
+        this.CreatePet(0, 0, "Guardian Angel", 23, true, (Stats.DamageReceiveDecrement, 0.8f, AggregateType.Multiplicate), (Stats.MaximumHealth, 50f, AggregateType.AddRaw));
+        this.CreatePet(1, 0, "Imp", 28, true, (Stats.AttackDamageIncrease, 1.3f, AggregateType.Multiplicate));
         this.CreatePet(2, 0, "Horn of Uniria", 25, true);
 
-        var dinorant = this.CreatePet(3, SkillNumber.FireBreath, "Horn of Dinorant", 110, false, (Stats.DamageReceiveDecrement, 0.1f), (Stats.AttackDamageIncrease, 0.15f), (Stats.CanFly, 1.0f));
+        var dinorant = this.CreatePet(3, SkillNumber.FireBreath, "Horn of Dinorant", 110, false, (Stats.DamageReceiveDecrement, 0.9f, AggregateType.Multiplicate), (Stats.AttackDamageIncrease, 1.15f, AggregateType.Multiplicate), (Stats.CanFly, 1.0f, AggregateType.AddRaw));
         this.AddDinorantOptions(dinorant);
     }
 
-    private ItemDefinition CreatePet(byte number, SkillNumber skillNumber, string name, int dropLevelAndLevelRequirement, bool dropsFromMonsters, params (AttributeDefinition, float)[] basePowerUps)
+    private ItemDefinition CreatePet(byte number, SkillNumber skillNumber, string name, int dropLevelAndLevelRequirement, bool dropsFromMonsters, params (AttributeDefinition, float, AggregateType)[] basePowerUps)
     {
         var pet = this.Context.CreateNew<ItemDefinition>();
         this.GameConfiguration.Items.Add(pet);
@@ -82,13 +82,13 @@ public class Pets : InitializerBase
         this.GameConfiguration.ItemOptions.Add(dinoOptionDefinition);
 
         dinoOptionDefinition.Name = "Dinorant Options";
-        dinoOptionDefinition.AddChance = 0.1f;
+        dinoOptionDefinition.AddChance = 0.3f;
         dinoOptionDefinition.AddsRandomly = true;
-        dinoOptionDefinition.MaximumOptionsPerItem = 1;
+        dinoOptionDefinition.MaximumOptionsPerItem = 1;     // There is second rollout for an additional bonus option to the first
 
-        dinoOptionDefinition.PossibleOptions.Add(this.CreateOption(ItemOptionTypes.Excellent, 1, Stats.DamageReceiveDecrement, 0.95f, AggregateType.Multiplicate));
-        dinoOptionDefinition.PossibleOptions.Add(this.CreateOption(ItemOptionTypes.Excellent, 2, Stats.MaximumAbility, 50f, AggregateType.AddFinal));
-        dinoOptionDefinition.PossibleOptions.Add(this.CreateOption(ItemOptionTypes.Excellent, 4, Stats.AttackSpeed, 5f, AggregateType.AddFinal));
+        dinoOptionDefinition.PossibleOptions.Add(this.CreateOption(ItemOptionTypes.Option, 4, Stats.DamageReceiveDecrement, 0.95f, AggregateType.Multiplicate));
+        dinoOptionDefinition.PossibleOptions.Add(this.CreateOption(ItemOptionTypes.Option, 4, Stats.MaximumAbility, 50f, AggregateType.AddFinal));
+        dinoOptionDefinition.PossibleOptions.Add(this.CreateOption(ItemOptionTypes.Option, 4, Stats.AttackSpeedAny, 5f, AggregateType.AddFinal));
 
         dinorant.PossibleItemOptions.Add(dinoOptionDefinition);
     }

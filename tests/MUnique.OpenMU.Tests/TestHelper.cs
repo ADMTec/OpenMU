@@ -42,8 +42,8 @@ public static class TestHelper
         gameConfig.Object.RecoveryInterval = int.MaxValue;
         gameConfig.Object.Maps.Add(map.Object);
 
-        var mapInitializer = new MapInitializer(gameConfig.Object, new NullLogger<MapInitializer>(), NullDropGenerator.Instance);
-        var gameContext = new GameContext(gameConfig.Object, new InMemoryPersistenceContextProvider(), mapInitializer, new NullLoggerFactory(), new PlugInManager(null, new NullLoggerFactory(), null), NullDropGenerator.Instance);
+        var mapInitializer = new MapInitializer(gameConfig.Object, new NullLogger<MapInitializer>(), NullDropGenerator.Instance, null);
+        var gameContext = new GameContext(gameConfig.Object, new InMemoryPersistenceContextProvider(), mapInitializer, new NullLoggerFactory(), new PlugInManager(null, new NullLoggerFactory(), null, null), NullDropGenerator.Instance, new ConfigurationChangeMediator());
         mapInitializer.PlugInManager = gameContext.PlugInManager;
         mapInitializer.PathFinderPool = gameContext.PathFinderPool;
         return await CreatePlayerAsync(gameContext).ConfigureAwait(false);
@@ -121,10 +121,12 @@ public static class TestHelper
 
         foreach (var attributeDef in character.CharacterClass.StatAttributes)
         {
-            character.Attributes.Add(new StatAttribute(attributeDef.Attribute, attributeDef.BaseValue));
+            character.Attributes.Add(new StatAttribute(attributeDef.Attribute!, attributeDef.BaseValue));
         }
 
-        var player = new TestPlayer(gameContext) { Account = new Account() };
+        var accountMock = new Mock<Account>();
+        accountMock.Setup(mock => mock.Attributes).Returns(new List<StatAttribute>());
+        var player = new TestPlayer(gameContext) { Account = accountMock.Object };
         await player.PlayerState.TryAdvanceToAsync(PlayerState.LoginScreen).ConfigureAwait(false);
         await player.PlayerState.TryAdvanceToAsync(PlayerState.Authenticated).ConfigureAwait(false);
         await player.PlayerState.TryAdvanceToAsync(PlayerState.CharacterSelection).ConfigureAwait(false);

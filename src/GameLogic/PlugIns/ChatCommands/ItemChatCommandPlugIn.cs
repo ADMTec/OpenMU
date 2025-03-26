@@ -6,6 +6,7 @@ namespace MUnique.OpenMU.GameLogic.PlugIns.ChatCommands;
 
 using System.Runtime.InteropServices;
 using MUnique.OpenMU.DataModel.Configuration.Items;
+using MUnique.OpenMU.GameLogic.Attributes;
 using MUnique.OpenMU.GameLogic.PlugIns.ChatCommands.Arguments;
 using MUnique.OpenMU.PlugIns;
 
@@ -43,7 +44,7 @@ public class ItemChatCommandPlugIn : ChatCommandPlugInBase<ItemChatCommandArgs>
     {
         var item = new TemporaryItem();
         item.Definition = GetItemDefination(gameMaster, arguments);
-        item.Durability = item.Definition.Durability;
+        item.Durability = item.IsStackable() ? 1 : item.Definition.Durability;
         item.HasSkill = item.Definition.Skill != null && arguments.Skill;
         item.Level = GetItemLevel(item.Definition, arguments);
         item.SocketCount = item.Definition.MaximumSockets;
@@ -77,13 +78,41 @@ public class ItemChatCommandPlugIn : ChatCommandPlugInBase<ItemChatCommandArgs>
     {
         if (item.Definition != null && arguments.Opt > default(byte))
         {
-            var itemOption = item.Definition.PossibleItemOptions
+            var allOptions = item.Definition.PossibleItemOptions
                 .SelectMany(o => o.PossibleOptions)
-                .First(o => o.OptionType == ItemOptionTypes.Option);
+                .Where(o => o.OptionType == ItemOptionTypes.Option);
+            IncreasableItemOption itemOption;
 
-            var level = arguments.Opt;
-            var optionLink = new ItemOptionLink { ItemOption = itemOption, Level = level };
-            item.ItemOptions.Add(optionLink);
+            if (item.Definition.Skill?.Number == 49) // Dinorant
+            {
+                if ((arguments.Opt & 1) > 0)
+                {
+                    itemOption = allOptions.First(o => o.PowerUpDefinition!.TargetAttribute == Stats.DamageReceiveDecrement);
+                    var dinoOptionLink = new ItemOptionLink { ItemOption = itemOption, Level = 1 };
+                    item.ItemOptions.Add(dinoOptionLink);
+                }
+
+                if ((arguments.Opt & 2) > 0)
+                {
+                    itemOption = allOptions.First(o => o.PowerUpDefinition!.TargetAttribute == Stats.MaximumAbility);
+                    var dinoOptionLink = new ItemOptionLink { ItemOption = itemOption, Level = 2 };
+                    item.ItemOptions.Add(dinoOptionLink);
+                }
+
+                if ((arguments.Opt & 4) > 0)
+                {
+                    itemOption = allOptions.First(o => o.PowerUpDefinition!.TargetAttribute == Stats.AttackSpeedAny);
+                    var dinoOptionLink = new ItemOptionLink { ItemOption = itemOption, Level = 4 };
+                    item.ItemOptions.Add(dinoOptionLink);
+                }
+            }
+            else
+            {
+                itemOption = allOptions.First();
+                var level = arguments.Opt;
+                var optionLink = new ItemOptionLink { ItemOption = itemOption, Level = level };
+                item.ItemOptions.Add(optionLink);
+            }
         }
     }
 
@@ -109,7 +138,7 @@ public class ItemChatCommandPlugIn : ChatCommandPlugInBase<ItemChatCommandArgs>
             var excellentOptions = item.Definition.PossibleItemOptions
                 .SelectMany(o => o.PossibleOptions)
                 .Where(o => o.OptionType == ItemOptionTypes.Excellent)
-                .Where(o => (o.Number & arguments.ExcellentNumber) > default(byte))
+                .Where(o => ((1 << (o.Number - 1)) & arguments.ExcellentNumber) > default(byte))
                 .ToList();
 
             ushort appliedOptions = default;

@@ -14,29 +14,35 @@ using MUnique.OpenMU.PlugIns;
 /// Consume handler for upgrading items up to level 6 using the Jewel of Bless.
 /// </summary>
 [Guid("E95A0292-B3B4-4E8C-AC5A-7F3DB4F01A37")]
-[PlugIn(nameof(AlcoholConsumeHandlerPlugIn), "Plugin which handles the jewel of bless consumption.")]
-public class BlessJewelConsumeHandlerPlugIn : ItemModifyConsumeHandlerPlugIn
+[PlugIn(nameof(BlessJewelConsumeHandlerPlugIn), "Plugin which handles the jewel of bless consumption.")]
+public class BlessJewelConsumeHandlerPlugIn : UpgradeItemLevelJewelConsumeHandlerPlugIn<BlessJewelConsumeHandlerPlugInConfiguration>
 {
     /// <inheritdoc />
     public override ItemIdentifier Key => ItemConstants.JewelOfBless;
 
+    /// <inheritdoc />
+    public override object CreateDefaultConfig()
+    {
+        return new BlessJewelConsumeHandlerPlugInConfiguration
+        {
+            MaximumLevel = 5,
+            MinimumLevel = 0,
+            SuccessRatePercentage = 100,
+            SuccessRateBonusWithLuckPercentage = 0,
+            ResetToLevel0WhenFailMinLevel = 0,
+        };
+    }
+
     /// <inheritdoc/>
     protected override bool ModifyItem(Item item, IContext persistenceContext)
     {
-        if (!item.CanLevelBeUpgraded())
+        if (this.Configuration?.RepairTargetItems.Contains(item.Definition!) is true
+            && item.Durability < item.GetMaximumDurabilityOfOnePiece())
         {
-            return false;
+            item.Durability = item.GetMaximumDurabilityOfOnePiece();
+            return true;
         }
 
-        byte level = item.Level;
-        if (level > 5)
-        {
-            // Webzen's server lacks of such a check... ;)
-            return false;
-        }
-
-        level++;
-        item.Level = level;
-        return true;
+        return base.ModifyItem(item, persistenceContext);
     }
 }

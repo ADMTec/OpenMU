@@ -70,8 +70,11 @@ public class SkillListViewPlugIn : ISkillListViewPlugIn
         }
 
         var skillIndex = this.SkillList.IndexOf(skill);
-        await this._player.Connection.SendSkillRemovedAsync((byte)skillIndex, (ushort)skill.Number).ConfigureAwait(false);
-        this.SkillList[skillIndex] = null;
+        if (skillIndex >= 0)
+        {
+            await this._player.Connection.SendSkillRemovedAsync((byte)skillIndex, (ushort)skill.Number).ConfigureAwait(false);
+            this.SkillList[skillIndex] = null;
+        }
     }
 
     /// <inheritdoc/>
@@ -134,11 +137,10 @@ public class SkillListViewPlugIn : ISkillListViewPlugIn
     {
         this.SkillList.Clear();
         var skills = this._player.SkillList!.Skills.ToList();
-        if (this._player.SelectedCharacter!.CharacterClass!.IsMasterClass)
-        {
-            var replacedSkills = skills.Select(entry => entry.Skill?.MasterDefinition?.ReplacedSkill).Where(skill => skill != null);
-            skills.RemoveAll(s => replacedSkills.Contains(s.Skill));
-        }
+
+        var replacedSkills = skills.Select(entry => entry.Skill?.MasterDefinition?.ReplacedSkill).Where(skill => skill != null);
+        skills.RemoveAll(s => replacedSkills.Contains(s.Skill));
+        skills.RemoveAll(s => s.Skill?.SkillType == SkillType.PassiveBoost);
 
         skills.RemoveAll(s => s.Skill?.Number == ForceWaveSkillId);
 

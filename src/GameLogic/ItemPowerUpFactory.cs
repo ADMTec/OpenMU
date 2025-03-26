@@ -8,6 +8,7 @@ using MUnique.OpenMU.AttributeSystem;
 using MUnique.OpenMU.DataModel.Attributes;
 using MUnique.OpenMU.DataModel.Configuration.Items;
 using MUnique.OpenMU.GameLogic.Attributes;
+using MUnique.OpenMU.Persistence;
 
 /// <summary>
 /// The implementation of the item power up factory.
@@ -30,7 +31,8 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
     {
         if (item.Definition is null)
         {
-            throw new ArgumentException($"Item of slot {item.ItemSlot} got no Definition.", nameof(item));
+            this._logger.LogWarning("Item of slot {itemSlot} ({itemId}) has no definition.", item.ItemSlot, item.GetId());
+            yield break;
         }
 
         if (item.Durability <= 0)
@@ -77,17 +79,14 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
             .Distinct();
 
         var result = Enumerable.Empty<PowerUpDefinition>();
-        foreach (var group in itemGroups)
+        var alwaysGroups = activeItems.SelectMany(i => i.Definition!.PossibleItemSetGroups).Where(i => i.AlwaysApplies).Distinct();
+
+        foreach (var group in alwaysGroups.Concat(itemGroups).Distinct())
         {
-            if (group.AlwaysApplies)
-            {
-                result = result.Concat(group.Options.Select(o => o.PowerUpDefinition ?? throw Error.NotInitializedProperty(o, nameof(o.PowerUpDefinition))));
-
-                continue;
-            }
-
-            var itemsOfGroup = activeItems.Where(i => i.ItemSetGroups.Any(ios => ios.ItemSetGroup == group)
-                                                      && (group.SetLevel == 0 || i.Level >= group.SetLevel));
+            var itemsOfGroup = activeItems.Where(i =>
+                ((group.AlwaysApplies && i.Definition!.PossibleItemSetGroups.Contains(group))
+                 || i.ItemSetGroups.Any(ios => ios.ItemSetGroup == group))
+                && (group.SetLevel == 0 || i.Level >= group.SetLevel));
             var setMustBeComplete = group.MinimumItemCount == group.Items.Count;
             if (group.SetLevel > 0 && setMustBeComplete && itemsOfGroup.All(i => i.Level > group.SetLevel))
             {
@@ -96,19 +95,27 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
                 continue;
             }
 
+            if (group.Options is not { } options)
+            {
+                this._logger.LogWarning("Options of set {group} is not initialized", group);
+                continue;
+            }
+
             var itemCount = group.CountDistinct ? itemsOfGroup.Select(item => item.Definition).Distinct().Count() : itemsOfGroup.Count();
             var setIsComplete = itemCount == group.Items.Count;
             if (setIsComplete)
             {
                 // Take all options when the set is complete
-                result = result.Concat(group.Options.Select(o => o.PowerUpDefinition ?? throw Error.NotInitializedProperty(o, nameof(o.PowerUpDefinition))));
+                result = result.Concat(
+                    options.PossibleOptions
+                        .Select(o => o.PowerUpDefinition ?? throw Error.NotInitializedProperty(o, nameof(o.PowerUpDefinition))));
                 continue;
             }
 
             if (itemCount >= group.MinimumItemCount)
             {
                 // Take the first n-1 options
-                result = result.Concat(group.Options.OrderBy(o => o.Number)
+                result = result.Concat(options.PossibleOptions.OrderBy(o => o.Number)
                     .Take(itemCount - 1)
                     .Select(o => o.PowerUpDefinition ?? throw Error.NotInitializedProperty(o, nameof(o.PowerUpDefinition))));
             }
@@ -133,7 +140,15 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
             var remainingOptions = activeItemOptions.ToList<ItemOption>();
             while (this.AreRequiredOptionsFound(combinationBonus, remainingOptions))
             {
-                yield return combinationBonus.Bonus ?? throw Error.NotInitializedProperty(combinationBonus, nameof(combinationBonus.Bonus));
+                if (combinationBonus.Bonus is not null)
+                {
+                    yield return combinationBonus.Bonus;
+                }
+                else
+                {
+                    this._logger.LogWarning("Bonus of ItemOptionCombinationBonus '{combinationBonusName}' is not initialized, id: {id}", combinationBonus.Description, combinationBonus.GetId());
+                }
+
                 if (!combinationBonus.AppliesMultipleTimes)
                 {
                     break;
@@ -148,6 +163,7 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
         foreach (var requirement in bonus.Requirements)
         {
             var matches = itemOptions
+                .Where(o => o.OptionType is not null)
                 .Where(o => o.OptionType == requirement.OptionType && o.SubOptionType == requirement.SubOptionType)
                 .Take(requirement.MinimumCount)
                 .ToList();
@@ -168,13 +184,20 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
         attribute.ThrowNotInitializedProperty(attribute.BaseValueElement is null, nameof(attribute.BaseValueElement));
         attribute.ThrowNotInitializedProperty(attribute.TargetAttribute is null, nameof(attribute.TargetAttribute));
 
-        yield return new PowerUpWrapper(attribute.BaseValueElement, attribute.TargetAttribute, attributeHolder);
+        var levelBonusElmt = (attribute.BonusPerLevelTable?.BonusPerLevel ?? Enumerable.Empty<LevelBonus>())
+            .FirstOrDefault(bonus => bonus.Level == item.Level)?
+            .GetAdditionalValueElement(attribute.AggregateType);
 
-        var levelBonus = (attribute.BonusPerLevelTable?.BonusPerLevel ?? Enumerable.Empty<LevelBonus>()).FirstOrDefault(bonus => bonus.Level == item.Level);
-        if (levelBonus != null)
+        if (levelBonusElmt is null)
         {
-            levelBonus.ThrowNotInitializedProperty(levelBonus.AdditionalValueElement is null, nameof(levelBonus.AdditionalValueElement));
-            yield return new PowerUpWrapper(levelBonus.AdditionalValueElement, attribute.TargetAttribute, attributeHolder);
+            yield return new PowerUpWrapper(attribute.BaseValueElement, attribute.TargetAttribute, attributeHolder);
+        }
+        else
+        {
+            yield return new PowerUpWrapper(
+                new CombinedElement(attribute.BaseValueElement, levelBonusElmt),
+                attribute.TargetAttribute,
+                attributeHolder);
         }
     }
 
@@ -188,13 +211,25 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
 
         foreach (var optionLink in options)
         {
-            var option = optionLink.ItemOption ?? throw Error.NotInitializedProperty(optionLink, nameof(optionLink.ItemOption));
+            var option = optionLink.ItemOption;
+            if (option is null)
+            {
+                this._logger.LogWarning("Item {item} (id {itemId}) has ItemOptionLink ({optionLinkId}) without option.", item, item.GetId(), optionLink.GetId());
+                continue;
+            }
+
             var level = option.LevelType == LevelType.ItemLevel ? item.Level : optionLink.Level;
 
             var optionOfLevel = option.LevelDependentOptions?.FirstOrDefault(l => l.Level == level);
-            if (optionOfLevel is null && level > 1)
+            if (optionOfLevel is null && level > 1 && item.Definition!.Skill?.Number != 49) // Dinorant options are an exception
             {
-                this._logger.LogWarning($"Item has {nameof(IncreasableItemOption)} with level > 1, but no definition in {nameof(IncreasableItemOption.LevelDependentOptions)}");
+                this._logger.LogWarning("Item {item} (id {itemId}) has IncreasableItemOption ({option}, id {optionId}) with level {level}, but no definition in LevelDependentOptions.", item, item.GetId(), option, option.GetId(), level);
+                continue;
+            }
+
+            if (optionOfLevel?.RequiredItemLevel > item.Level)
+            {
+                // Some options (like harmony) although on the item can be inactive.
                 continue;
             }
 
@@ -232,15 +267,14 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
         var baseDropLevel = item.Definition!.DropLevel;
         var ancientDropLevel = item.Definition!.CalculateDropLevel(true, false, 0);
 
-        if (InventoryConstants.IsDefenseItemSlot(item.ItemSlot))
+        if (InventoryConstants.IsDefenseItemSlot(item.ItemSlot) && !item.IsJewelry())
         {
             var baseDefense = (int)(item.Definition?.BasePowerUpAttributes.FirstOrDefault(a => a.TargetAttribute == Stats.DefenseBase)?.BaseValue ?? 0);
             var additionalDefense = (baseDefense * 12 / baseDropLevel) + (baseDropLevel / 5) + 4;
             yield return new PowerUpWrapper(new SimpleElement(additionalDefense, AggregateType.AddRaw), Stats.DefenseBase, attributeHolder);
-
             if (itemIsAncient)
             {
-                var ancientDefenseBonus = (baseDefense * 3 / ancientDropLevel) + (ancientDropLevel / 30) + 2;
+                var ancientDefenseBonus = 2 + ((baseDefense + additionalDefense) * 3 / ancientDropLevel) + (ancientDropLevel / 30);
                 yield return new PowerUpWrapper(new SimpleElement(ancientDefenseBonus, AggregateType.AddRaw), Stats.DefenseBase, attributeHolder);
             }
         }
@@ -253,7 +287,7 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
             if (itemIsAncient)
             {
                 var baseDefense = (int)(item.Definition?.BasePowerUpAttributes.FirstOrDefault(a => a.TargetAttribute == Stats.DefenseBase)?.BaseValue ?? 0);
-                var ancientDefenseBonus = (baseDefense * 20 / ancientDropLevel) + 2;
+                var ancientDefenseBonus = 2 + ((baseDefense + item.Level) * 20 / ancientDropLevel);
                 yield return new PowerUpWrapper(new SimpleElement(ancientDefenseBonus, AggregateType.AddRaw), Stats.DefenseBase, attributeHolder);
             }
         }
@@ -273,23 +307,34 @@ public class ItemPowerUpFactory : IItemPowerUpFactory
 
         if (item.IsWizardryWeapon(out var staffRise))
         {
-            var additionalRise = ((int)staffRise * 25 / baseDropLevel) + 5;
+            var additionalRise = (((int)staffRise * 2 * 25 / baseDropLevel) + 5) / 2;
             yield return new PowerUpWrapper(new SimpleElement(additionalRise, AggregateType.AddRaw), Stats.StaffRise, attributeHolder);
             if (itemIsAncient)
             {
-                var ancientRiseBonus = 5 + (ancientDropLevel / 60);
+                var ancientRiseBonus = (2 + (ancientDropLevel / 60)) / 2;
                 yield return new PowerUpWrapper(new SimpleElement(ancientRiseBonus, AggregateType.AddRaw), Stats.StaffRise, attributeHolder);
             }
         }
 
         if (item.IsScepter(out var scepterRise))
         {
-            var additionalRise = ((int)scepterRise * 25 / baseDropLevel) + 5;
+            var additionalRise = (((int)scepterRise * 2 * 25 / baseDropLevel) + 5) / 2;
             yield return new PowerUpWrapper(new SimpleElement(additionalRise, AggregateType.AddRaw), Stats.ScepterRise, attributeHolder);
             if (itemIsAncient)
             {
-                var ancientRiseBonus = 5 + (ancientDropLevel / 60);
+                var ancientRiseBonus = (2 + (ancientDropLevel / 60)) / 2;
                 yield return new PowerUpWrapper(new SimpleElement(ancientRiseBonus, AggregateType.AddRaw), Stats.ScepterRise, attributeHolder);
+            }
+        }
+
+        if (item.IsBook(out var curseRise))
+        {
+            var additionalRise = (((int)curseRise * 2 * 25 / baseDropLevel) + 5) / 2;
+            yield return new PowerUpWrapper(new SimpleElement(additionalRise, AggregateType.AddRaw), Stats.BookRise, attributeHolder);
+            if (itemIsAncient)
+            {
+                var ancientRiseBonus = (2 + (ancientDropLevel / 60)) / 2;
+                yield return new PowerUpWrapper(new SimpleElement(ancientRiseBonus, AggregateType.AddRaw), Stats.BookRise, attributeHolder);
             }
         }
     }

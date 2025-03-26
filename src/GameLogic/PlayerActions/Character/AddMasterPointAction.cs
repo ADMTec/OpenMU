@@ -1,4 +1,4 @@
-﻿// <copyright file="AddMasterPointAction.cs" company="MUnique">
+// <copyright file="AddMasterPointAction.cs" company="MUnique">
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
@@ -79,6 +79,18 @@ public class AddMasterPointAction
         {
             player.Logger.LogDebug("Adding {0} points to skill, skillId: {1}, player {2}", requiredPoints, learnedSkill.Skill.Number, player);
             learnedSkill.Level += requiredPoints;
+            learnedSkill.PowerUpDuration = null;
+            learnedSkill.PowerUps = null;
+
+            var currentSkill = learnedSkill;
+            while (player.SkillList!.Skills.FirstOrDefault(s => s.Skill?.MasterDefinition?.ReplacedSkill == currentSkill.Skill) is { } childSkill)
+            {
+                // Because the learned skill might have been replaced by a child skill (active), we also need to nullify the child's powerups to force an update
+                childSkill.PowerUpDuration = null;
+                childSkill.PowerUps = null;
+                currentSkill = childSkill;
+            }
+
             player.SelectedCharacter.MasterLevelUpPoints -= requiredPoints;
             await player.InvokeViewPlugInAsync<IMasterSkillLevelChangedPlugIn>(p => p.MasterSkillLevelChangedAsync(learnedSkill)).ConfigureAwait(false);
         }
@@ -124,11 +136,11 @@ public class AddMasterPointAction
             return true;
         }
 
-        var learnedRequiredSkill = character.LearnedSkills
-            .Where(l => l.Skill?.MasterDefinition?.Root != null)
-            .FirstOrDefault(l => l.Skill!.MasterDefinition!.Root!.Id == definition.Root?.Id
-                                 && l.Skill.MasterDefinition.Rank == definition.Rank - 1);
-        return learnedRequiredSkill?.Level >= MinimumSkillLevelOfRequiredSkill;
+        var learnedRequiredSkills = character.LearnedSkills
+            .Where(l => l.Skill?.MasterDefinition?.Root != null
+                && l.Skill.MasterDefinition.Root.Id == definition.Root?.Id
+                && l.Skill.MasterDefinition.Rank == definition.Rank - 1);
+        return learnedRequiredSkills?.Any(lrs => lrs.Level >= MinimumSkillLevelOfRequiredSkill) ?? false;
     }
 
     private bool CheckRequiredSkill(MasterSkillDefinition definition, Player player)

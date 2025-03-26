@@ -4,6 +4,8 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration;
 
+using MUnique.OpenMU.Annotations;
+
 /// <summary>
 /// Defines the kind of targets for the <see cref="MiniGameChangeEvent"/>.
 /// </summary>
@@ -30,7 +32,8 @@ public enum KillTarget
 /// Defines what the player needs to do to reach it,
 /// and what happens when the requirements are fulfilled.
 /// </summary>
-public class MiniGameChangeEvent
+[Cloneable]
+public partial class MiniGameChangeEvent
 {
     /// <summary>
     /// Gets or sets the index to define the order of the event.
@@ -87,4 +90,10 @@ public class MiniGameChangeEvent
     /// </summary>
     [MemberOfAggregate]
     public virtual ICollection<MiniGameTerrainChange> TerrainChanges { get; protected set; } = null!;
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        return $"{this.Index}: {this.Description}";
+    }
 }

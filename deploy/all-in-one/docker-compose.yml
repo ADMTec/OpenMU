@@ -7,7 +7,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
       - ./.htpasswd:/etc/nginx/.htpasswd
     depends_on:
       - openmu-startup
@@ -16,14 +16,19 @@ services:
     image: munique/openmu
     container_name: openmu-startup
     ports:
-      - "80"
+      - "8080"
       - "55901:55901"
       - "55902:55902"
       - "55903:55903"
+      - "55904:55904"
+      - "55905:55905"
+      - "55906:55906"
       - "44405:44405"
+      - "44406:44406"
       - "55980:55980"
     environment:
       DB_HOST: database
+      ASPNETCORE_URLS: http://+:8080
     working_dir: /app/
     volumes:
       - ./.htpasswd:/etc/nginx/.htpasswd

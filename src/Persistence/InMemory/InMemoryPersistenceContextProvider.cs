@@ -28,6 +28,9 @@ public class InMemoryPersistenceContextProvider : IMigratableDatabaseContextProv
         this._changePublisher = changePublisher;
     }
 
+    /// <inheritdoc />
+    public IRepositoryProvider RepositoryProvider => this._repositoryProvider;
+
     /// <inheritdoc/>
     public IContext CreateNewContext()
     {
@@ -71,7 +74,7 @@ public class InMemoryPersistenceContextProvider : IMigratableDatabaseContextProv
     }
 
     /// <inheritdoc />
-    public IContext CreateNewTypedContext<T>(bool useCache, GameConfiguration? gameConfiguration = null)
+    public IContext CreateNewTypedContext(Type editType, bool useCache, GameConfiguration? gameConfiguration = null)
     {
         var context = new InMemoryContext(this._repositoryProvider);
         if (this._changePublisher is { })
@@ -82,9 +85,9 @@ public class InMemoryPersistenceContextProvider : IMigratableDatabaseContextProv
             {
                 try
                 {
-                    foreach (var obj in await context.GetAsync(typeof(T)).ConfigureAwait(false))
+                    foreach (var obj in await context.GetAsync(editType, default).ConfigureAwait(false))
                     {
-                        await this._changePublisher.ConfigurationChangedAsync(typeof(T), obj.GetId(), obj).ConfigureAwait(false);
+                        await this._changePublisher.ConfigurationChangedAsync(editType, obj.GetId(), obj).ConfigureAwait(false);
                     }
                 }
                 catch
@@ -94,7 +97,6 @@ public class InMemoryPersistenceContextProvider : IMigratableDatabaseContextProv
             }
 
             context.SavedChanges += OnContextOnSavedChanges;
-
         }
 
         return context;
@@ -132,9 +134,21 @@ public class InMemoryPersistenceContextProvider : IMigratableDatabaseContextProv
     }
 
     /// <inheritdoc />
+    public Task<bool> ShouldDoAutoSchemaUpdateAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(true);
+    }
+
+    /// <inheritdoc />
     public Task<IDisposable> ReCreateDatabaseAsync()
     {
         this._repositoryProvider = new();
         return Task.FromResult<IDisposable>(new Disposable(() => { }));
+    }
+
+    /// <inheritdoc />
+    public void ResetCache()
+    {
+        // do nothing here
     }
 }

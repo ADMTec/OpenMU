@@ -21,7 +21,7 @@ public class PlugInManagerTest
     [Test]
     public void RegisteringPlugInCreatesProxy()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         manager.RegisterPlugIn<IExamplePlugIn, ExamplePlugIn>();
 
         var point = manager.GetPlugInPoint<IExamplePlugIn>();
@@ -35,7 +35,7 @@ public class PlugInManagerTest
     [Test]
     public async ValueTask RegisteredPlugInsActiveByDefaultAsync()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         var plugIn = new ExamplePlugIn();
         manager.RegisterPlugInAtPlugInPoint<IExamplePlugIn>(plugIn);
 
@@ -54,7 +54,7 @@ public class PlugInManagerTest
     [Test]
     public async ValueTask DeactivatingPlugInsAsync()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         var plugIn = new ExamplePlugIn();
         manager.RegisterPlugInAtPlugInPoint<IExamplePlugIn>(plugIn);
         manager.DeactivatePlugIn<ExamplePlugIn>();
@@ -74,7 +74,7 @@ public class PlugInManagerTest
     [Test]
     public async ValueTask DeactivatingDeactivatedPlugInAsync()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         var plugIn = new ExamplePlugIn();
         manager.RegisterPlugInAtPlugInPoint<IExamplePlugIn>(plugIn);
         manager.DeactivatePlugIn<ExamplePlugIn>();
@@ -95,7 +95,7 @@ public class PlugInManagerTest
     [Test]
     public async ValueTask ActivatingActivatedPlugInAsync()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         var plugIn = new ExamplePlugIn();
         manager.RegisterPlugInAtPlugInPoint<IExamplePlugIn>(plugIn);
         manager.ActivatePlugIn<ExamplePlugIn>();
@@ -116,7 +116,7 @@ public class PlugInManagerTest
     [Test]
     public async ValueTask DeactivatingOnePlugInDoesntAffectOthersAsync()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         var plugIn = new ExamplePlugIn();
         manager.RegisterPlugInAtPlugInPoint<IExamplePlugIn>(plugIn);
         manager.RegisterPlugIn<IExamplePlugIn, ExamplePlugIn.NestedPlugIn>();
@@ -146,7 +146,7 @@ public class PlugInManagerTest
             TypeId = typeof(ExamplePlugIn).GUID,
             IsActive = active,
         };
-        var manager = new PlugInManager(new List<PlugInConfiguration> { configuration }, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(new List<PlugInConfiguration> { configuration }, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         var player = await TestHelper.CreatePlayerAsync().ConfigureAwait(false);
         var command = "test";
         var args = new MyEventArgs();
@@ -154,51 +154,6 @@ public class PlugInManagerTest
         var point = manager.GetPlugInPoint<IExamplePlugIn>();
         point!.DoStuff(player, command, args);
         Assert.That(args.WasExecuted, Is.EqualTo(active));
-    }
-
-    /// <summary>
-    /// Tests if a custom plugin gets created and executed.
-    /// </summary>
-    [Test]
-    public async ValueTask CustomPlugInByConfigurationAsync()
-    {
-        var configuration = new PlugInConfiguration
-        {
-            TypeId = new Guid("4EC93343-DE05-4449-B312-04005547266C"),
-            IsActive = true,
-            CustomPlugInSource = @"
-                    namespace test
-                    {
-                        using System.Runtime.InteropServices;
-                        using MUnique.OpenMU.GameLogic;
-                        using MUnique.OpenMU.PlugIns;
-                        using MUnique.OpenMU.PlugIns.Tests;
-
-                        [Guid(""4EC93343-DE05-4449-B312-04005547266C"")]
-                        [PlugIn(""foo"", ""Just an example example plugin."")]
-                        internal class ExamplePlugIn : IExamplePlugIn
-                        {
-                            /// <summary>
-                            /// Gets a value indicating whether the plugin instance was executed in the test.
-                            /// </summary>
-                            public bool WasExecuted { get; private set; }
-
-                            public void DoStuff(Player player, string text, MyEventArgs args)
-                            {
-                                this.WasExecuted = true;
-                                args.Text = ""CustomPlugIn"";
-                            }
-                        }
-                    }",
-        };
-        var manager = new PlugInManager(new List<PlugInConfiguration> { configuration }, new NullLoggerFactory(), this.CreateServiceProvider());
-        var player = await TestHelper.CreatePlayerAsync().ConfigureAwait(false);
-        var command = "test";
-        var args = new MyEventArgs();
-
-        var point = manager.GetPlugInPoint<IExamplePlugIn>();
-        point!.DoStuff(player, command, args);
-        Assert.That(args.Text, Is.EqualTo("CustomPlugIn"));
     }
 
     /// <summary>
@@ -213,7 +168,7 @@ public class PlugInManagerTest
             IsActive = true,
             ExternalAssemblyName = "DoesNotExist.dll",
         };
-        _ = new PlugInManager(new List<PlugInConfiguration> { configuration }, new NullLoggerFactory(), this.CreateServiceProvider());
+        _ = new PlugInManager(new List<PlugInConfiguration> { configuration }, new NullLoggerFactory(), this.CreateServiceProvider(), null);
     }
 
     /// <summary>
@@ -227,7 +182,7 @@ public class PlugInManagerTest
             TypeId = new Guid("A9BDA3E2-4EB6-45C3-B234-37C1819C0CB6"),
             IsActive = true,
         };
-        _ = new PlugInManager(new List<PlugInConfiguration> { configuration }, new NullLoggerFactory(), this.CreateServiceProvider());
+        _ = new PlugInManager(new List<PlugInConfiguration> { configuration }, new NullLoggerFactory(), this.CreateServiceProvider(), null);
     }
 
     /// <summary>
@@ -236,7 +191,7 @@ public class PlugInManagerTest
     [Test]
     public void ActivatingUnknownPlugInDoesNotThrowError()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         manager.ActivatePlugIn(new Guid("4C38A813-F9BF-428A-8EA1-A6C90A87E583"));
     }
 
@@ -246,7 +201,7 @@ public class PlugInManagerTest
     [Test]
     public void DeactivatingUnknownPlugInDoesNotThrowError()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         manager.ActivatePlugIn(new Guid("4C38A813-F9BF-428A-8EA1-A6C90A87E583"));
     }
 
@@ -256,7 +211,7 @@ public class PlugInManagerTest
     [Test]
     public async ValueTask ActivatingPlugInsAsync()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         var plugIn = new ExamplePlugIn();
         manager.RegisterPlugInAtPlugInPoint<IExamplePlugIn>(plugIn);
         manager.DeactivatePlugIn<ExamplePlugIn>();
@@ -277,7 +232,7 @@ public class PlugInManagerTest
     [Test]
     public void AutoDiscovery()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         manager.DiscoverAndRegisterPlugIns();
         var examplePlugInPoint = manager.GetPlugInPoint<IExamplePlugIn>();
         Assert.That(examplePlugInPoint, Is.InstanceOf<IExamplePlugIn>());
@@ -289,7 +244,7 @@ public class PlugInManagerTest
     [Test]
     public void RegisteringPlugInWithoutGuidThrowsError()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         Assert.Throws<ArgumentException>(() => manager.RegisterPlugIn<IExamplePlugIn, ExamplePlugIn.NestedWithoutGuid>());
     }
 
@@ -299,7 +254,7 @@ public class PlugInManagerTest
     [Test]
     public void StrategyProviderCreatedForRegisteredStrategyPlugIn()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         manager.RegisterPlugIn<IExampleStrategyPlugIn, ExampleStrategyPlugIn>();
 
         var strategyProvider = manager.GetStrategyProvider<string, IExampleStrategyPlugIn>();
@@ -312,7 +267,7 @@ public class PlugInManagerTest
     [Test]
     public void StrategyProviderNotCreatedWithoutRegisteredStrategyPlugIn()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
 
         var strategyProvider = manager.GetStrategyProvider<string, IExampleStrategyPlugIn>();
         Assert.That(strategyProvider, Is.Null);
@@ -324,7 +279,7 @@ public class PlugInManagerTest
     [Test]
     public void RegisteredStrategyPlugInAvailable()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         manager.RegisterPlugIn<IExampleStrategyPlugIn, ExampleStrategyPlugIn>();
 
         var strategy = manager.GetStrategy<IExampleStrategyPlugIn>(ExampleStrategyPlugIn.CommandKey);
@@ -338,7 +293,7 @@ public class PlugInManagerTest
     [Test]
     public void DeactivatedStrategyPlugInNotAvailable()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         manager.RegisterPlugIn<IExampleStrategyPlugIn, ExampleStrategyPlugIn>();
         manager.DeactivatePlugIn<ExampleStrategyPlugIn>();
         var strategy = manager.GetStrategy<IExampleStrategyPlugIn>(ExampleStrategyPlugIn.CommandKey);
@@ -351,7 +306,7 @@ public class PlugInManagerTest
     [Test]
     public void RegisteringRegisteredStrategyPlugInDoesntThrowError()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         manager.RegisterPlugIn<IExampleStrategyPlugIn, ExampleStrategyPlugIn>();
         manager.RegisterPlugIn<IExampleStrategyPlugIn, ExampleStrategyPlugIn>();
     }
@@ -362,7 +317,7 @@ public class PlugInManagerTest
     [Test]
     public void NoPlugInPointForStrategyPlugIn()
     {
-        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider());
+        var manager = new PlugInManager(null, new NullLoggerFactory(), this.CreateServiceProvider(), null);
         manager.RegisterPlugIn<IExampleStrategyPlugIn, ExampleStrategyPlugIn>();
         Assert.That(manager.GetPlugInPoint<IExampleStrategyPlugIn>(), Is.Null);
     }

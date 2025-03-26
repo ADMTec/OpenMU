@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration;
 
+using MUnique.OpenMU.Annotations;
 using MUnique.OpenMU.Interfaces;
 using MUnique.OpenMU.Network.PlugIns;
 
@@ -11,7 +12,8 @@ using MUnique.OpenMU.Network.PlugIns;
 /// Defines a game client.
 /// </summary>
 [AggregateRoot]
-public class GameClientDefinition : IGameClientVersion
+[Cloneable]
+public partial class GameClientDefinition : IGameClientVersion
 {
     /// <summary>
     /// Gets or sets the season.
@@ -48,4 +50,10 @@ public class GameClientDefinition : IGameClientVersion
     /// Gets or sets the description.
     /// </summary>
     public string Description { get; set; } = string.Empty;
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        return this.Description;
+    }
 }

@@ -47,15 +47,17 @@ public class PersistentObjectsLookupController : ILookupController
                 return Enumerable.Empty<T>();
             }
 
+            var owner = await this._gameConfigurationSource.GetOwnerAsync();
             IEnumerable<T> values;
-            if (this._gameConfigurationSource.IsSupporting(typeof(T)))
+            if (this._gameConfigurationSource.IsSupporting(typeof(T))
+                && persistenceContext?.IsSupporting(typeof(T)) is not true)
             {
                 values = this._gameConfigurationSource.GetAll<T>();
             }
             else
             {
                 using var context = persistenceContext is null
-                    ? this._contextProvider.CreateNewContext(await this._gameConfigurationSource.GetOwnerAsync(Guid.Empty))
+                    ? this._contextProvider.CreateNewContext(owner)
                     : null;
                 var effectiveContext = persistenceContext ?? context;
                 if (effectiveContext is null)

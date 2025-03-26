@@ -8,6 +8,7 @@ using System.Collections.Concurrent;
 using System.ComponentModel.Design;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -32,7 +33,7 @@ public class PlugInManager
     /// <param name="configurations">The configurations.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="serviceProvider">The service provider.</param>
-    public PlugInManager(ICollection<PlugInConfiguration>? configurations, ILoggerFactory loggerFactory, IServiceProvider? serviceProvider)
+    public PlugInManager(ICollection<PlugInConfiguration>? configurations, ILoggerFactory loggerFactory, IServiceProvider? serviceProvider, ReferenceHandler? customConfigReferenceHandler)
     {
         _ = typeof(Nito.AsyncEx.AsyncReaderWriterLock); // Ensure Nito.AsyncEx.Coordination is loaded so it will be available in proxy generation.
 
@@ -40,6 +41,8 @@ public class PlugInManager
         this._serviceContainer = new ServiceContainer(serviceProvider);
         this._serviceContainer.AddService(typeof(PlugInManager), this);
         this._serviceContainer.AddService(typeof(ILoggerFactory), loggerFactory);
+
+        this.CustomConfigReferenceHandler = customConfigReferenceHandler;
 
         if (configurations is not null)
         {
@@ -74,6 +77,11 @@ public class PlugInManager
     /// The known plug in types.
     /// </value>
     public IEnumerable<Type> KnownPlugInTypes => this._knownPlugIns.Values;
+
+    /// <summary>
+    /// Gets the reference handler for references in custom plugin configurations.
+    /// </summary>
+    public ReferenceHandler? CustomConfigReferenceHandler { get; }
 
     /// <summary>
     /// Discovers and registers all plug ins of all loaded assemblies.
@@ -412,8 +420,10 @@ public class PlugInManager
             }
             else if (!string.IsNullOrEmpty(configuration.CustomPlugInSource))
             {
+                this._logger.LogWarning($"Custom plugin source found at plugin configuration: {configuration}");
+                /* TODO: Implement code signing, if we really need this feature.
                 Assembly customPlugInAssembly = this.CompileCustomPlugInAssembly(configuration);
-                this.DiscoverAndRegisterPlugIns(customPlugInAssembly);
+                this.DiscoverAndRegisterPlugIns(customPlugInAssembly);*/
             }
             else
             {
@@ -531,7 +541,7 @@ public class PlugInManager
                 foreach (var plugInInterface in plugInInterfaces)
                 {
                     var genericMethod = this.GetType().GetMethods().FirstOrDefault(mi => mi.IsGenericMethod && mi.Name == nameof(this.RegisterPlugIn))?.MakeGenericMethod(plugInInterface, plugIn);
-                    genericMethod?.Invoke(this, Array.Empty<object>());
+                    genericMethod?.Invoke(this, []);
                 }
             }
             catch (Exception e)

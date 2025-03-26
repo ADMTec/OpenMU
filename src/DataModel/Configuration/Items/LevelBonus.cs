@@ -4,13 +4,18 @@
 
 namespace MUnique.OpenMU.DataModel.Configuration.Items;
 
+using MUnique.OpenMU.Annotations;
 using MUnique.OpenMU.AttributeSystem;
 
 /// <summary>
 /// Defines a constant bonus, depending on item level.
 /// </summary>
-public class LevelBonus
+[Cloneable]
+public partial class LevelBonus
 {
+    private float _additionalValue;
+    private ConstantElement? _additionalValueElement;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="LevelBonus"/> class.
     /// </summary>
@@ -35,18 +40,26 @@ public class LevelBonus
     public int Level { get; set; }
 
     /// <summary>
-    /// Gets or sets the additional value element to the base value.
-    /// </summary>
-    [Transient]
-    public ConstantElement? AdditionalValueElement { get; set; }
-
-    /// <summary>
     /// Gets or sets the additional value to the base value.
     /// </summary>
     public float AdditionalValue
     {
-        get => this.AdditionalValueElement?.Value ?? 0;
-        set => this.AdditionalValueElement = Equals(value, 0f) ? null : new ConstantElement(value);
+        get => this._additionalValue;
+        set
+        {
+            this._additionalValue = value;
+            this._additionalValueElement = null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the element which represents the <see cref="AdditionalValue"/>.
+    /// </summary>
+    /// <param name="aggregateType">Type of the aggregate.</param>
+    /// <returns>The element which represents the <see cref="AdditionalValue"/>.</returns>
+    public IElement GetAdditionalValueElement(AggregateType aggregateType)
+    {
+        return this._additionalValueElement ??= new ConstantElement(this.AdditionalValue, aggregateType);
     }
 
     /// <inheritdoc />

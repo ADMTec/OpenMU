@@ -4,9 +4,9 @@
 
 namespace MUnique.OpenMU.GameLogic;
 
-using Nito.Disposables.Internals;
 using MUnique.OpenMU.DataModel.Configuration.Quests;
 using MUnique.OpenMU.GameLogic.Attributes;
+using Nito.Disposables.Internals;
 
 /// <summary>
 /// Extensions for <see cref="Character"/>.
@@ -30,7 +30,7 @@ public static class CharacterExtensions
         {
             FruitCalculationStrategy.DarkLord => FruitPointsPerLevelDarkLord[index],
             FruitCalculationStrategy.MagicGladiator => FruitPointsPerLevelMagicGladiator[index],
-            _ => FruitPointsPerLevel[index]
+            _ => FruitPointsPerLevel[index],
         };
     }
 
@@ -52,9 +52,17 @@ public static class CharacterExtensions
                 i.ItemSlot <= InventoryConstants.LastEquippableItemSlotIndex
                 && i.ItemSlot >= InventoryConstants.FirstEquippableItemSlotIndex
                 && i.ItemSetGroups.Any(group => group.AncientSetDiscriminator > 0))
-            .Select(i => new { Item = i.Definition, Set = i.ItemSetGroups.First(s => s.AncientSetDiscriminator > 0) });
-        var ancientSets = equippedAncientSetItems.Select(i => i.Set).Distinct();
-        return ancientSets.Any(set => set.ItemSetGroup?.Items.All(setItem => equippedAncientSetItems.Any(i => i.Item == setItem.ItemDefinition && i.Set == set)) ?? false);
+            .Select(i =>
+                new
+                {
+                    Item = i.Definition,
+                    Set = i.ItemSetGroups.First(s => s.AncientSetDiscriminator > 0),
+                });
+        var ancientSets = equippedAncientSetItems.Select(i => i.Set.ItemSetGroup).WhereNotNull().Distinct();
+        return ancientSets.Any(set =>
+            set.Items.All(setItem => equippedAncientSetItems.Any(i =>
+                object.Equals(i.Item, setItem.ItemDefinition)
+                && object.Equals(i.Set.ItemSetGroup, set))));
     }
 
     /// <summary>
@@ -67,6 +75,19 @@ public static class CharacterExtensions
     public static bool CanIncreaseStats(this Character character)
     {
         return character.CharacterStatus == CharacterStatus.GameMaster || character.LevelUpPoints > 0;
+    }
+
+    /// <summary>
+    /// Determines whether the character is able to increase StatAttributes.
+    /// </summary>
+    /// <param name="character">The character.</param>
+    /// <param name="amount">The amount of points which should be added.</param>
+    /// <returns>
+    ///   <c>true</c> if the character can increase StatAttributes; otherwise, <c>false</c>.
+    /// </returns>
+    public static bool CanIncreaseStats(this Character character, ushort amount)
+    {
+        return character.CharacterStatus == CharacterStatus.GameMaster || character.LevelUpPoints >= amount;
     }
 
     /// <summary>

@@ -45,7 +45,7 @@ public class PeriodicSaveProgressPlugIn : IPeriodicTaskPlugIn, ISupportCustomCon
                 {
                     if (player.PlayerState.CurrentState == PlayerState.EnteredWorld)
                     {
-                        await player.PersistenceContext.SaveChangesAsync().ConfigureAwait(false);
+                        await player.SaveProgressAsync().ConfigureAwait(false);
                     }
                     else
                     {
@@ -64,6 +64,12 @@ public class PeriodicSaveProgressPlugIn : IPeriodicTaskPlugIn, ISupportCustomCon
         {
             logger.LogError(ex, "Unexpected error when saving player data periodically: {ex}", ex);
         }
+    }
+
+    /// <inheritdoc />
+    public void ForceStart()
+    {
+        this._nextRunUtc = DateTime.UtcNow;
     }
 
     /// <inheritdoc />

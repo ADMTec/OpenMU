@@ -14,15 +14,16 @@
     <base href="~/" />
     
     <link href="MUnique.OpenMU.GameServer.Host.styles.css" rel="stylesheet" />
+    <link href="_content/MUnique.OpenMU.Web.Map/css/site.css" rel="stylesheet" />
     @foreach (var stylesheetSrc in Web.Map.Exports.Stylesheets)
     {
         <link href="@stylesheetSrc" rel="stylesheet" />
     }
 
-    <component type="typeof(HeadOutlet)" render-mode="ServerPrerendered" />
+    <component type="typeof(HeadOutlet)" render-mode="Server" />
 </head>
 <body>
-    @RenderBody()
+    <app>@RenderBody()</app>
 
     <div id="blazor-error-ui">
         <environment include="Staging,Production">

@@ -1,4 +1,4 @@
-﻿// <copyright file="SocketSystem.cs" company="MUnique">
+// <copyright file="SocketSystem.cs" company="MUnique">
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
@@ -279,7 +279,7 @@ public class SocketSystem : InitializerBase
         definition.MaximumOptionsPerItem = 1;
 
         definition.PossibleOptions.Add(this.CreateRelatedSocketOption(0, SocketSubOptionType.Fire, Stats.MaximumPhysBaseDmg, Stats.Level, 1f / 20f, 1f / 19f, 1f / 18f, 1f / 17f, 1f / 14f));
-        definition.PossibleOptions.Add(this.CreateSocketOption(1, SocketSubOptionType.Fire, Stats.AttackSpeed, AggregateType.AddRaw, 7, 8, 9, 10, 11));
+        definition.PossibleOptions.Add(this.CreateSocketOption(1, SocketSubOptionType.Fire, Stats.AttackSpeedAny, AggregateType.AddRaw, 7, 8, 9, 10, 11));
         definition.PossibleOptions.Add(this.CreateSocketOption(2, SocketSubOptionType.Fire, Stats.BaseMaxDamageBonus, AggregateType.AddRaw, 30, 32, 35, 40, 50));
         definition.PossibleOptions.Add(this.CreateSocketOption(3, SocketSubOptionType.Fire, Stats.BaseMinDamageBonus, AggregateType.AddRaw, 20, 22, 25, 30, 35));
         definition.PossibleOptions.Add(this.CreateSocketOption(4, SocketSubOptionType.Fire, Stats.BaseDamageBonus, AggregateType.AddRaw, 20, 22, 25, 30, 35));
@@ -543,7 +543,6 @@ public class SocketSystem : InitializerBase
         randomExcItem.MaximumItemLevel = 15;
         randomExcItem.NpcPriceDivisor = 2_000_000;
         randomExcItem.RequiredItemOptions.Add(this.GameConfiguration.ItemOptionTypes.First(o => o == ItemOptionTypes.Excellent));
-        randomExcItem.RequiredItemOptions.Add(this.GameConfiguration.ItemOptionTypes.First(o => o == ItemOptionTypes.Option));
         craftingSettings.RequiredItems.Add(randomExcItem);
 
         var randomAncientItem = this.Context.CreateNew<ItemCraftingRequiredItem>();
@@ -553,7 +552,6 @@ public class SocketSystem : InitializerBase
         randomAncientItem.MaximumItemLevel = 15;
         randomAncientItem.NpcPriceDivisor = 2_000_000;
         randomAncientItem.RequiredItemOptions.Add(this.GameConfiguration.ItemOptionTypes.First(o => o == ItemOptionTypes.AncientBonus));
-        randomAncientItem.RequiredItemOptions.Add(this.GameConfiguration.ItemOptionTypes.First(o => o == ItemOptionTypes.Option));
         craftingSettings.RequiredItems.Add(randomAncientItem);
 
         var chaos = this.Context.CreateNew<ItemCraftingRequiredItem>();

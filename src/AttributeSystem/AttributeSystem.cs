@@ -4,10 +4,12 @@
 
 namespace MUnique.OpenMU.AttributeSystem;
 
+using System.Collections;
+
 /// <summary>
 /// The attribute system which holds all attributes of a character.
 /// </summary>
-public class AttributeSystem : IAttributeSystem
+public class AttributeSystem : IAttributeSystem, IEnumerable<IAttribute>
 {
     private readonly IDictionary<AttributeDefinition, IAttribute> _attributes = new Dictionary<AttributeDefinition, IAttribute>();
 
@@ -16,7 +18,7 @@ public class AttributeSystem : IAttributeSystem
     /// </summary>
     /// <param name="statAttributes">The stat attributes. These attributes are added just as-is and are not wrapped by a <see cref="ComposableAttribute"/>.</param>
     /// <param name="baseAttributes">The initial base attributes. These attributes contain the base values which will be wrapped by a <see cref="ComposableAttribute"/>, so additional elements can contribute to the attributes value. Instead of providing them here, you could also add them to the system by calling <see cref="AddElement"/> later.</param>
-    /// <param name="attributeRelationships">The initial attribute relationships. Instead of providing them here, you could also add them to the system by calling <see cref="AddAttributeRelationship(AttributeRelationship, IAttributeSystem)"/> later.</param>
+    /// <param name="attributeRelationships">The initial attribute relationships. Instead of providing them here, you could also add them to the system by calling <see cref="AddAttributeRelationship(AttributeRelationship, IAttributeSystem, AggregateType)"/> later.</param>
     public AttributeSystem(IEnumerable<IAttribute> statAttributes, IEnumerable<IAttribute> baseAttributes, IEnumerable<AttributeRelationship> attributeRelationships)
     {
         foreach (var statAttribute in statAttributes)
@@ -44,11 +46,11 @@ public class AttributeSystem : IAttributeSystem
     }
 
     /// <inheritdoc/>
-    public void AddAttributeRelationship(AttributeRelationship relationship, IAttributeSystem sourceAttributeHolder)
+    public void AddAttributeRelationship(AttributeRelationship relationship, IAttributeSystem sourceAttributeHolder, AggregateType aggregateType)
     {
         if (this.GetOrCreateAttribute(relationship.GetTargetAttribute()) is IComposableAttribute targetAttribute)
         {
-            var relatedElement = this.CreateRelatedAttribute(relationship, sourceAttributeHolder);
+            var relatedElement = this.CreateRelatedAttribute(relationship, sourceAttributeHolder, aggregateType);
             targetAttribute.AddElement(relatedElement);
         }
     }
@@ -57,12 +59,18 @@ public class AttributeSystem : IAttributeSystem
     /// Creates the related attribute.
     /// </summary>
     /// <param name="relationship">The relationship.</param>
-    /// <param name="sourceAttributeHolder">The source attribute holder. May be the attribute system of another player.</param>
-    /// <returns>The newly created relationship element.</returns>
-    public IElement CreateRelatedAttribute(AttributeRelationship relationship, IAttributeSystem sourceAttributeHolder)
+    /// <param name="sourceAttributeHolder">The source attribute holder. This may be the attribute system of another player.</param>
+    /// <param name="aggregateType">Type of the aggregate.</param>
+    /// <returns>
+    /// The newly created relationship element.
+    /// </returns>
+    public IElement CreateRelatedAttribute(AttributeRelationship relationship, IAttributeSystem sourceAttributeHolder, AggregateType aggregateType)
     {
         var inputElements = new[] { sourceAttributeHolder.GetOrCreateAttribute(relationship.GetInputAttribute()) };
-        return new AttributeRelationshipElement(inputElements, relationship.GetOperandElement(sourceAttributeHolder), relationship.InputOperator);
+        return new AttributeRelationshipElement(inputElements, relationship.GetOperandElement(sourceAttributeHolder), relationship.InputOperator)
+        {
+            AggregateType = aggregateType,
+        };
     }
 
     /// <summary>
@@ -105,6 +113,11 @@ public class AttributeSystem : IAttributeSystem
         var element = this.GetAttribute(attributeDefinition);
         if (element != null)
         {
+            if (attributeDefinition?.MaximumValue is { } maximumValue && element.Value > maximumValue)
+            {
+                return maximumValue;
+            }
+
             return element.Value;
         }
 
@@ -118,6 +131,7 @@ public class AttributeSystem : IAttributeSystem
         {
             attribute = new ComposableAttribute(targetAttribute);
             this._attributes.Add(targetAttribute, attribute);
+            this.OnAttributeAdded(attribute);
         }
 
         if (attribute is IComposableAttribute composableAttribute)
@@ -169,6 +183,18 @@ public class AttributeSystem : IAttributeSystem
         return stringBuilder.ToString();
     }
 
+    /// <inheritdoc />
+    public IEnumerator<IAttribute> GetEnumerator()
+    {
+        return this._attributes.Values.GetEnumerator();
+    }
+
+    /// <inheritdoc />
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return this.GetEnumerator();
+    }
+
     /// <summary>
     /// Gets or creates the element with the specified attribute.
     /// </summary>
@@ -182,9 +208,28 @@ public class AttributeSystem : IAttributeSystem
             var composableAttribute = new ComposableAttribute(attributeDefinition);
             element = composableAttribute;
             this._attributes.Add(attributeDefinition, composableAttribute);
+            this.OnAttributeAdded(composableAttribute);
         }
 
         return element;
+    }
+
+    /// <summary>
+    /// Called when an attribute was added to the system after the initial construction.
+    /// </summary>
+    /// <param name="attribute">The attribute.</param>
+    protected virtual void OnAttributeAdded(IAttribute attribute)
+    {
+        // can be overwritten.
+    }
+
+    /// <summary>
+    /// Called when an attribute was removed from the system.
+    /// </summary>
+    /// <param name="attribute">The attribute.</param>
+    protected virtual void OnAttributeRemoved(IAttribute attribute)
+    {
+        // can be overwritten.
     }
 
     /// <summary>
@@ -193,7 +238,7 @@ public class AttributeSystem : IAttributeSystem
     /// <param name="combination">The combination.</param>
     private void AddAttributeRelationship(AttributeRelationship combination)
     {
-        this.AddAttributeRelationship(combination, this);
+        this.AddAttributeRelationship(combination, this, combination.AggregateType);
     }
 
     private IElement? GetAttribute(AttributeDefinition? attributeDefinition)

@@ -1,4 +1,4 @@
-﻿// <copyright file="BaseRepositoryManager.cs" company="MUnique">
+﻿// <copyright file="BaseRepositoryProvider.cs" company="MUnique">
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
@@ -7,7 +7,7 @@ namespace MUnique.OpenMU.Persistence;
 /// <summary>
 /// The base repository provider.
 /// </summary>
-public class BaseRepositoryProvider
+public class BaseRepositoryProvider : IRepositoryProvider
 {
     private bool _isInitialized;
 
@@ -82,7 +82,7 @@ public class BaseRepositoryProvider
             {
                 break;
             }
-            
+
             if (this.Repositories.TryGetValue(currentSearchType, out var repository))
             {
                 return repository as IRepository;

@@ -5,6 +5,7 @@
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Items;
 
 using System.ComponentModel;
+using MUnique.OpenMU.DataModel.Configuration.Items;
 using MUnique.OpenMU.GameLogic.PlugIns;
 using MUnique.OpenMU.GameLogic.Views;
 using MUnique.OpenMU.GameLogic.Views.Inventory;
@@ -79,10 +80,17 @@ public class MoveItemAction
                 break;
         }
 
-        if (movement != Movement.None
+        if (movement is not Movement.None
             && player.GameContext.PlugInManager.GetPlugInPoint<PlugIns.IItemMovedPlugIn>() is { } itemMovedPlugIn)
         {
             await itemMovedPlugIn.ItemMovedAsync(player, item).ConfigureAwait(false);
+        }
+
+        if (movement is not (Movement.None or Movement.Normal)
+            && toItemStorage?.GetItem(toSlot) is { } target
+            && player.GameContext.PlugInManager.GetPlugInPoint<PlugIns.IItemStackedPlugIn>() is { } itemStackedPlugIn)
+        {
+            await itemStackedPlugIn.ItemStackedAsync(player, item, target).ConfigureAwait(false);
         }
     }
 
@@ -234,11 +242,21 @@ public class MoveItemAction
             if (itemDefinition.ItemSlot.ItemSlots.Contains(toSlot) &&
                 player.CompliesRequirements(item))
             {
-                if (itemDefinition.ItemSlot.ItemSlots.Contains(RightHandSlot)
-                    && itemDefinition.ItemSlot.ItemSlots.Contains(LeftHandSlot)
-                    && toSlot == RightHandSlot
-                    && storage.GetItem(LeftHandSlot)?.Definition!.Width >= 2)
+                static bool IsOneHandedOrShield(ItemDefinition definition) =>
+                    (definition.ItemSlot!.ItemSlots.Contains(RightHandSlot) && definition.ItemSlot.ItemSlots.Contains(LeftHandSlot)) || definition.Group == 6;
+
+                var rightHandItemDefinition = storage.GetItem(RightHandSlot)?.Definition!;
+
+                if ((toSlot == LeftHandSlot
+                    && itemDefinition.Width >= 2
+                    && rightHandItemDefinition != null
+                    && !rightHandItemDefinition.IsAmmunition)
+                    || (toSlot == RightHandSlot
+                    && IsOneHandedOrShield(itemDefinition)
+                    && storage.GetItem(LeftHandSlot)?.Definition!.Width >= 2))
                 {
+                    // Attempting to equip a two-handed item to the left hand slot when a shield is in the right hand slot,
+                    // or trying to equip a one-handed weapon or shield to the right hand slot when a two-handed item is in the left hand slot.
                     return Movement.None;
                 }
 
